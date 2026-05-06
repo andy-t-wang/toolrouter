@@ -14,6 +14,7 @@ process.env.TOOLROUTER_DEV_CREDIT_BALANCE_USD = "100";
 
 const { createApiApp } = await import("../../../apps/api/src/app.ts");
 const { MemoryCache } = await import("../../../packages/cache/src/index.ts");
+const { createStore } = await import("../../../packages/db/src/index.ts");
 
 function authHeaders() {
   return {
@@ -32,9 +33,11 @@ function sessionHeaders() {
 describe("router API", () => {
   let app;
   let baseUrl;
+  let store;
 
   before(async () => {
-    app = createApiApp({ logger: false, cache: new MemoryCache() });
+    store = createStore();
+    app = createApiApp({ logger: false, cache: new MemoryCache(), store });
     await app.listen({ port: 0, host: "127.0.0.1" });
     baseUrl = `http://127.0.0.1:${app.server.address().port}`;
   });
@@ -74,6 +77,56 @@ describe("router API", () => {
       (await dashboardResponse.json()).endpoints.map((endpoint) => endpoint.id),
       ["exa.search"],
     );
+  });
+
+  it("exposes public endpoint status from real health rows", async () => {
+    const checkedAt = new Date().toISOString();
+    await store.insertHealthCheck({
+      id: "hc_test_exa_search",
+      endpoint_id: "exa.search",
+      checked_at: checkedAt,
+      status: "healthy",
+      status_code: 200,
+      latency_ms: 123,
+      path: "agentkit",
+      charged: false,
+      estimated_usd: "0.007",
+      amount_usd: "0",
+      currency: "USD",
+      payment_reference: null,
+      payment_network: null,
+      payment_error: null,
+      error: null,
+    });
+    await store.upsertEndpointStatus({
+      endpoint_id: "exa.search",
+      status: "healthy",
+      last_checked_at: checkedAt,
+      status_code: 200,
+      latency_ms: 123,
+      path: "agentkit",
+      charged: false,
+      estimated_usd: "0.007",
+      amount_usd: "0",
+      currency: "USD",
+      payment_reference: null,
+      payment_network: null,
+      payment_error: null,
+      last_error: null,
+    });
+
+    const response = await fetch(`${baseUrl}/v1/status`);
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.equal(body.status, "healthy");
+    assert.equal(body.summary.endpoint_count, 1);
+    assert.equal(body.summary.operational_count, 1);
+    assert.equal(body.endpoints[0].id, "exa.search");
+    assert.equal(body.endpoints[0].status, "healthy");
+    assert.equal(body.endpoints[0].latency_ms, 123);
+    assert.equal(body.endpoints[0].p50_latency_ms, 123);
+    assert.equal(body.endpoints[0].sparkline_30d.length, 30);
+    assert.ok(body.endpoints[0].uptime_30d > 0);
   });
 
   it("creates dashboard-owned API keys without an admin token", async () => {

@@ -655,15 +655,22 @@ code {
 }
 
 .pill {
+  align-items: center;
   background: var(--bone-2);
   border: 1px solid var(--line);
   border-radius: 999px;
   color: var(--mute);
+  display: inline-flex;
   font-size: 11px;
   gap: 6px;
   height: 22px;
   letter-spacing: 0.02em;
   padding: 0 8px;
+}
+
+.row {
+  align-items: center;
+  display: flex;
 }
 
 .dot {
@@ -1016,7 +1023,7 @@ code {
 .mkt-display {
   font-family: "Inter Tight", "Inter", sans-serif;
   font-weight: 400;
-  letter-spacing: -0.025em;
+  letter-spacing: 0;
 }
 
 .mkt-nav {
@@ -1099,7 +1106,7 @@ code {
 
 .mkt-hero {
   overflow: hidden;
-  padding: 80px 0 96px;
+  padding: 48px 0;
   position: relative;
 }
 
@@ -1108,7 +1115,7 @@ code {
   display: flex;
   flex-wrap: wrap;
   gap: 14px;
-  margin-bottom: 36px;
+  margin-bottom: 24px;
 }
 
 .hero-eyebrow .muted {
@@ -1116,17 +1123,17 @@ code {
 }
 
 .hero-h {
-  font-size: 88px;
+  font-size: 72px;
   font-weight: 500;
-  letter-spacing: -0.04em;
-  line-height: 0.96;
-  margin: 0 0 24px;
-  max-width: 18ch;
+  letter-spacing: 0;
+  line-height: 1;
+  margin: 0 0 20px;
+  max-width: 19ch;
 }
 
 .mkt-lede {
   color: var(--mute);
-  font-size: 19px;
+  font-size: 18px;
   line-height: 1.55;
   margin: 0;
   max-width: 60ch;
@@ -1142,7 +1149,7 @@ code {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
-  margin-top: 28px;
+  margin-top: 24px;
 }
 
 .mkt-actions.centered {
@@ -1156,7 +1163,7 @@ code {
 
 .value-section {
   padding-bottom: 48px;
-  padding-top: 24px;
+  padding-top: 0;
 }
 
 .mkt-section h2 {
@@ -1207,7 +1214,7 @@ code {
   font-family: "Inter Tight", "Inter", sans-serif;
   font-size: 19px;
   font-weight: 500;
-  letter-spacing: -0.01em;
+  letter-spacing: 0;
   line-height: 1.25;
   margin: 0 0 8px;
 }
@@ -1309,7 +1316,7 @@ code {
   font-family: "Inter Tight", "Inter", sans-serif;
   font-size: 36px;
   font-weight: 500;
-  letter-spacing: -0.02em;
+  letter-spacing: 0;
   line-height: 1;
 }
 
@@ -1442,6 +1449,12 @@ code {
   height: 6px;
 }
 
+.no-probes {
+  display: inline-flex;
+  font-size: 11px;
+  line-height: 24px;
+}
+
 .uptime-foot {
   align-items: center;
   background: var(--bone-2);
@@ -1459,9 +1472,15 @@ code {
   text-align: center;
 }
 
+.mkt-cta .mkt-container {
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+}
+
 .cta-h {
   font-size: 48px;
-  letter-spacing: -0.03em;
+  letter-spacing: 0;
   margin: 0 auto;
   max-width: 22ch;
 }
@@ -1811,11 +1830,11 @@ code {
   }
 
   .mkt-hero {
-    padding: 52px 0 68px;
+    padding: 36px 0 44px;
   }
 
   .hero-h {
-    font-size: 58px;
+    font-size: 50px;
   }
 
   .mkt-lede {
@@ -1998,11 +2017,11 @@ code {
   }
 
   .hero-h {
-    font-size: 46px;
+    font-size: 40px;
   }
 
   .hero-eyebrow {
-    margin-bottom: 26px;
+    margin-bottom: 20px;
   }
 
   .mkt-actions,

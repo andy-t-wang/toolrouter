@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 const landingPage = readFileSync(new URL("../../../apps/web/app/page.tsx", import.meta.url), "utf8");
+const agentationDev = readFileSync(new URL("../../../apps/web/app/agentation-dev.tsx", import.meta.url), "utf8");
 const dashboardPage = readFileSync(new URL("../../../apps/web/app/dashboard/page.tsx", import.meta.url), "utf8");
 const css = readFileSync(new URL("../../../apps/web/app/globals.css", import.meta.url), "utf8");
 
@@ -10,12 +11,22 @@ describe("web dashboard static wiring", () => {
   it("keeps the public landing page at the root route", () => {
     assert.match(landingPage, /ToolRouter/);
     assert.match(landingPage, /Tools your agent/);
-    assert.match(landingPage, /Get an MCP key/);
+    assert.match(landingPage, /Get an API key/);
     assert.match(landingPage, /View console/);
     assert.match(landingPage, /\/dashboard/);
+    assert.match(landingPage, /\/v1\/status/);
+    assert.match(landingPage, /<AgentationDev \/>/);
+    assert.doesNotMatch(landingPage, /Get an MCP key/);
     assert.doesNotMatch(landingPage, /Docs/);
     assert.doesNotMatch(landingPage, /Pricing/);
     assert.doesNotMatch(landingPage, /Changelog/);
+  });
+
+  it("mounts Agentation on the public landing page in development", () => {
+    assert.match(agentationDev, /"use client"/);
+    assert.match(agentationDev, /import \{ Agentation \} from "agentation"/);
+    assert.match(agentationDev, /process\.env\.NODE_ENV !== "development"/);
+    assert.match(agentationDev, /<Agentation \/>/);
   });
 
   it("keeps the operational dashboard on the dashboard route", () => {

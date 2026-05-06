@@ -20,6 +20,8 @@
     "worker:check": "npm --workspace @toolrouter/worker run check",
     "type-check": "tsc -p tsconfig.json --noEmit",
     "test": "node --import tsx --test \"tests/unit/**/*.test.mjs\" \"tests/integration/**/*.test.mjs\" \"tests/e2e/**/*.test.mjs\"",
+    "crossmint:signer": "node scripts/crossmint-signer-env.mjs",
+    "supabase:auth-email": "node scripts/apply-supabase-auth-email-template.mjs",
     "test:supabase:e2e": "node --env-file-if-exists=.env --import tsx scripts/verify-supabase-e2e.mjs",
     "test:live:endpoints": "node --env-file-if-exists=.env --import tsx --test \"tests/live/**/*.live.test.mjs\""
   },

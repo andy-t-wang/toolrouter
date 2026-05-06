@@ -39,6 +39,123 @@ function publicEndpoint(endpoint: any, statusByEndpoint: Map<string, any>) {
   };
 }
 
+const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+const STATUS_RANK: Record<string, number> = { healthy: 0, degraded: 1, unverified: 2, failing: 3 };
+
+function statusRank(status: string) {
+  return STATUS_RANK[status] ?? STATUS_RANK.unverified;
+}
+
+function dayKey(date: Date) {
+  return date.toISOString().slice(0, 10);
+}
+
+function lastThirtyDayKeys(now = new Date()) {
+  return Array.from({ length: 30 }, (_unused, index) => {
+    const date = new Date(now.getTime() - (29 - index) * 24 * 60 * 60 * 1000);
+    return dayKey(date);
+  });
+}
+
+function checkCountsAsUp(check: any) {
+  return check.status === "healthy" || check.status === "degraded";
+}
+
+function average(values: number[]) {
+  if (!values.length) return null;
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+function median(values: number[]) {
+  if (!values.length) return null;
+  const sorted = [...values].sort((a, b) => a - b);
+  return sorted[Math.floor(sorted.length / 2)];
+}
+
+function latestIso(values: Array<string | null | undefined>) {
+  return values
+    .filter(Boolean)
+    .sort((a: any, b: any) => Date.parse(b) - Date.parse(a))[0] || null;
+}
+
+function healthSummaryForEndpoint(endpoint: any, status: any, checks: any[], now = new Date()) {
+  const latestCheck = checks[0] || null;
+  const daily = new Map<string, any[]>();
+  for (const check of checks) {
+    const key = dayKey(new Date(check.checked_at));
+    daily.set(key, [...(daily.get(key) || []), check]);
+  }
+  const sparkline_30d = lastThirtyDayKeys(now).map((key) => {
+    const rows = daily.get(key) || [];
+    if (!rows.length) return null;
+    const up = rows.filter(checkCountsAsUp).length;
+    return (up / rows.length) * 100;
+  });
+  const uptimeValues = sparkline_30d.filter((value): value is number => value !== null);
+  const latencyValues = checks.map((check) => Number(check.latency_ms)).filter(Number.isFinite);
+  const currentStatus = status?.status || latestCheck?.status || "unverified";
+  return {
+    id: endpoint.id,
+    provider: endpoint.provider,
+    category: endpoint.category,
+    name: endpoint.name,
+    description: endpoint.description,
+    url_host: endpoint.url_host,
+    agentkit: endpoint.agentkit,
+    x402: endpoint.x402,
+    estimated_cost_usd: endpoint.estimated_cost_usd,
+    status: currentStatus,
+    last_checked_at: status?.last_checked_at || latestCheck?.checked_at || null,
+    status_code: status?.status_code ?? latestCheck?.status_code ?? null,
+    latency_ms: status?.latency_ms ?? latestCheck?.latency_ms ?? null,
+    p50_latency_ms: median(latencyValues),
+    uptime_30d: average(uptimeValues),
+    sparkline_30d,
+    health_check_count_30d: checks.length,
+    path: status?.path || latestCheck?.path || null,
+    charged: Boolean(status?.charged ?? latestCheck?.charged ?? false),
+    amount_usd: status?.amount_usd ?? latestCheck?.amount_usd ?? null,
+    last_error: status?.last_error || latestCheck?.error || null,
+  };
+}
+
+async function publicStatusRows(store: any, category?: string) {
+  const since = new Date(Date.now() - THIRTY_DAYS_MS).toISOString();
+  const [statuses, checks] = await Promise.all([
+    store.listEndpointStatus(),
+    typeof store.listHealthChecks === "function" ? store.listHealthChecks({ since, limit: 5000 }) : [],
+  ]);
+  const statusByEndpoint = new Map<string, any>(statuses.map((status: any) => [status.endpoint_id, status]));
+  const checksByEndpoint = new Map<string, any[]>();
+  for (const check of checks) {
+    checksByEndpoint.set(check.endpoint_id, [...(checksByEndpoint.get(check.endpoint_id) || []), check]);
+  }
+  return listEndpoints({ category })
+    .map((endpoint: any) => healthSummaryForEndpoint(endpoint, statusByEndpoint.get(endpoint.id), checksByEndpoint.get(endpoint.id) || []))
+    .sort((a: any, b: any) => {
+      const rank = statusRank(a.status) - statusRank(b.status);
+      if (rank !== 0) return rank;
+      return (b.uptime_30d ?? -1) - (a.uptime_30d ?? -1);
+    });
+}
+
+function publicStatusPayload(endpoints: any[]) {
+  const tracked = endpoints.filter((endpoint) => endpoint.uptime_30d !== null);
+  const worst = endpoints.reduce((current, endpoint) => (
+    statusRank(endpoint.status) > statusRank(current) ? endpoint.status : current
+  ), endpoints.length ? "healthy" : "unverified");
+  return {
+    status: worst,
+    summary: {
+      endpoint_count: endpoints.length,
+      operational_count: endpoints.filter((endpoint) => endpoint.status === "healthy").length,
+      uptime_30d: average(tracked.map((endpoint) => endpoint.uptime_30d)),
+      last_checked_at: latestIso(endpoints.map((endpoint) => endpoint.last_checked_at)),
+    },
+    endpoints,
+  };
+}
+
 function normalizePayment(result: any) {
   return {
     amount_usd: result.amount_usd ?? null,
@@ -183,6 +300,11 @@ export function createApiApp({
     service: "toolrouter-api",
     version: "0.1.0",
   }));
+
+  app.get("/v1/status", async (request: any) => {
+    const endpoints = await publicStatusRows(store, request.query?.category);
+    return publicStatusPayload(endpoints);
+  });
 
   app.get("/v1/endpoints", async (request: any) => {
     await authenticateApiKey(request.headers, store);

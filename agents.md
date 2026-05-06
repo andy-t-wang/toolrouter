@@ -57,10 +57,13 @@ These are durable project decisions for future agents working in this repo.
 ## Dashboard And Local Dev
 
 - The public landing page lives at `/`; the authenticated admin app lives at `/dashboard`.
+- The landing page should follow the provided reference design: "Tools your agent can actually trust." Avoid public links to pages that do not exist yet, such as docs, pricing, changelog, or a full status/catalog page.
+- Landing-page health/status data must come from the public `GET /v1/status` API route, which exposes only safe endpoint metadata plus `endpoint_status` and `health_checks` summaries. Do not hard-code fake provider uptime rows on the public page.
 - Local API and web dev commands must load the repo root `.env`.
 - The Next.js app uses `scripts/with-root-env.mjs` instead of Node's direct `--env-file-if-exists` flag because Turbopack workers reject that flag in worker exec args.
 - Local dashboard API calls should use `NEXT_PUBLIC_TOOLROUTER_API_URL=http://127.0.0.1:9402`.
-- With Supabase env configured, the dashboard must use real Supabase Auth. Local dev session fallback is only allowed when Supabase public env is absent.
+- With Supabase env configured, the dashboard must use real Supabase Auth unless `NEXT_PUBLIC_TOOLROUTER_DEV_AUTH=true` is set for local development.
+- To avoid burning Supabase magic-link email quota during local work, `NEXT_PUBLIC_TOOLROUTER_DEV_AUTH=true` allows `localhost` and `127.0.0.1` to use the server-side `dev_supabase_session` path. Do not enable this for public deployments.
 - Magic-link redirects with `#access_token` and `refresh_token` must be hydrated through `supabase.auth.setSession` before dashboard data refreshes.
 - Dashboard payment-path math treats `agentkit` as free AgentKit, and treats both `x402` and `agentkit_to_x402` as paid x402.
 - Dashboard paid totals prefer `credit_captured_usd` when present, otherwise `amount_usd`.

@@ -160,6 +160,18 @@ export class LocalStore {
     return this.read().endpoint_status;
   }
 
+  async listHealthChecks(filters: any = {}) {
+    const limit = Math.max(1, Math.min(Number(filters.limit || 1000), 5000));
+    return this.read().health_checks
+      .filter((row: any) => {
+        if (filters.endpoint_id && row.endpoint_id !== filters.endpoint_id) return false;
+        if (filters.since && Date.parse(row.checked_at) < Date.parse(filters.since)) return false;
+        return true;
+      })
+      .sort((a: any, b: any) => Date.parse(b.checked_at) - Date.parse(a.checked_at))
+      .slice(0, limit);
+  }
+
   async insertHealthCheck(row: any) {
     const data = this.read();
     data.health_checks.unshift(row);
@@ -351,6 +363,17 @@ export class SupabaseStore {
 
   async listEndpointStatus() {
     return this.request(`/endpoint_status?${qs({ select: "*" })}`);
+  }
+
+  async listHealthChecks(filters: any = {}) {
+    const params: any = {
+      select: "*",
+      order: "checked_at.desc",
+      limit: filters.limit || 5000,
+    };
+    if (filters.endpoint_id) params.endpoint_id = `eq.${filters.endpoint_id}`;
+    if (filters.since) params.checked_at = `gte.${filters.since}`;
+    return this.request(`/health_checks?${qs(params)}`);
   }
 
   async insertHealthCheck(row: any) {

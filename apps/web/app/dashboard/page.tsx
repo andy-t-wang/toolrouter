@@ -9,12 +9,13 @@ import { computeDashboardMetrics, paidAmount } from "../dashboard-metrics.ts";
 const apiBase = process.env.NEXT_PUBLIC_TOOLROUTER_API_URL || "";
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
+const devAuthEnabled = process.env.NEXT_PUBLIC_TOOLROUTER_DEV_AUTH === "true";
 const supabase = supabaseUrl && supabaseAnonKey ? createClient(supabaseUrl, supabaseAnonKey) : null;
 
 function allowLocalDevSession() {
-  if (supabase) return false;
   if (typeof window === "undefined") return false;
-  return window.location.hostname === "127.0.0.1" || window.location.hostname === "localhost";
+  const localHost = window.location.hostname === "127.0.0.1" || window.location.hostname === "localhost";
+  return localHost && (!supabase || devAuthEnabled);
 }
 
 async function sessionFromUrlHash() {
@@ -246,7 +247,11 @@ export default function DashboardPage() {
       await refresh("dev_supabase_session");
       return;
     }
-    const { error } = await supabase.auth.signInWithOtp({ email });
+    const redirectTo = typeof window === "undefined" ? undefined : `${window.location.origin}/dashboard`;
+    const { error } = await supabase.auth.signInWithOtp({
+      email,
+      options: redirectTo ? { emailRedirectTo: redirectTo } : undefined,
+    });
     if (error) throw error;
     setBanner("Check your email for a login link.");
   }
