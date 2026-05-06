@@ -58,6 +58,12 @@ export function validateEndpointConfig(endpoint) {
   if (endpoint.method !== "POST") errors.push("method must be POST for MVP endpoints");
   if (endpoint.agentkit !== true) errors.push("agentkit must be true");
   if (endpoint.x402 !== true) errors.push("x402 must be true");
+  if (!["free_trial", "discount", "access"].includes(endpoint.agentkit_value_type)) {
+    errors.push("agentkit_value_type must be free_trial, discount, or access");
+  }
+  if (typeof endpoint.agentkit_value_label !== "string" || endpoint.agentkit_value_label.length === 0) {
+    errors.push("agentkit_value_label is required");
+  }
   if (!Number.isFinite(endpoint.estimated_cost_usd) || endpoint.estimated_cost_usd <= 0) {
     errors.push("estimated_cost_usd must be a positive number");
   }

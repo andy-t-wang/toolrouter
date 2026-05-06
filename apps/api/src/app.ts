@@ -1,5 +1,5 @@
 import Fastify from "fastify";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 
 import { authenticateApiKey, authenticateSupabaseUser } from "@toolrouter/auth";
 import { createCache, enforceRequestPolicy } from "@toolrouter/cache";
@@ -76,6 +76,72 @@ function latestIso(values: Array<string | null | undefined>) {
   return values
     .filter(Boolean)
     .sort((a: any, b: any) => Date.parse(b) - Date.parse(a))[0] || null;
+}
+
+function isErrorRequest(row: any) {
+  return Boolean(row.error) || row.ok === false || Number(row.status_code) >= 400;
+}
+
+function sumPaid(rows: any[]) {
+  return rows.reduce((sum, row) => {
+    const value = row.credit_captured_usd ?? row.amount_usd ?? 0;
+    const number = Number(value);
+    return sum + (Number.isFinite(number) ? number : 0);
+  }, 0);
+}
+
+async function monitoringPayload(store: any, user_id: string) {
+  const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  const since30d = new Date(Date.now() - THIRTY_DAYS_MS).toISOString();
+  const [requests24h, requests30d, statuses, checks24h] = await Promise.all([
+    store.listRequests({ user_id, since: since24h, limit: 500 }),
+    store.listRequests({ user_id, since: since30d, limit: 500 }),
+    store.listEndpointStatus(),
+    typeof store.listHealthChecks === "function" ? store.listHealthChecks({ since: since24h, limit: 5000 }) : [],
+  ]);
+  const errorRows = requests24h.filter(isErrorRequest);
+  const healthyEndpoints = statuses.filter((row: any) => row.status === "healthy").length;
+  const failingEndpoints = statuses.filter((row: any) => row.status === "failing").length;
+  const degradedEndpoints = statuses.filter((row: any) => row.status === "degraded").length;
+  const lastCheck = latestIso([
+    ...statuses.map((row: any) => row.last_checked_at),
+    ...checks24h.map((row: any) => row.checked_at),
+  ]);
+  return {
+    window: {
+      since_24h: since24h,
+      since_30d: since30d,
+    },
+    requests_24h: {
+      total: requests24h.length,
+      errors: errorRows.length,
+      error_rate: requests24h.length ? errorRows.length / requests24h.length : 0,
+      agentkit: requests24h.filter((row: any) => row.path === "agentkit").length,
+      x402: requests24h.filter((row: any) => row.path === "x402" || row.path === "agentkit_to_x402").length,
+      paid_usd: sumPaid(requests24h),
+      recent_errors: errorRows.slice(0, 5).map((row: any) => ({
+        id: row.id,
+        ts: row.ts,
+        endpoint_id: row.endpoint_id,
+        status_code: row.status_code,
+        error: row.error,
+      })),
+    },
+    requests_30d: {
+      total: requests30d.length,
+      errors: requests30d.filter(isErrorRequest).length,
+      paid_usd: sumPaid(requests30d),
+    },
+    endpoint_health: {
+      total: statuses.length,
+      healthy: healthyEndpoints,
+      degraded: degradedEndpoints,
+      failing: failingEndpoints,
+      unverified: statuses.filter((row: any) => row.status === "unverified").length,
+      checks_24h: checks24h.length,
+      last_checked_at: lastCheck,
+    },
+  };
 }
 
 function healthSummaryForEndpoint(endpoint: any, status: any, checks: any[], now = new Date()) {
@@ -182,6 +248,8 @@ function createRequestRow({ traceId, endpoint, request, auth, result, credit }: 
     path: result.path,
     charged: Boolean(result.charged),
     estimated_usd: result.estimated_usd || request.estimated_usd || request.estimatedUsd || null,
+    agentkit_value_type: endpoint.agentkit_value_type,
+    agentkit_value_label: endpoint.agentkit_value_label,
     ...normalizePayment(result),
     credit_reservation_id: credit?.credit_reservation_id || null,
     credit_reserved_usd: credit?.credit_reserved_usd || null,
@@ -228,6 +296,69 @@ async function ensureWalletAccount(store: any, crossmint: any, user: { user_id: 
   });
 }
 
+function safeAgentKitVerification(wallet: any) {
+  return {
+    verified: Boolean(wallet?.agentkit_verified),
+    verified_at: wallet?.agentkit_verified_at || null,
+    last_checked_at: wallet?.agentkit_last_checked_at || null,
+    error: wallet?.agentkit_verification_error || null,
+  };
+}
+
+function hashHumanId(value: string) {
+  return createHash("sha256").update(value).digest("hex");
+}
+
+async function loadAgentBookVerifier() {
+  const { createAgentBookVerifier } = await import("@worldcoin/agentkit");
+  return createAgentBookVerifier({
+    rpcUrl: process.env.AGENTKIT_WORLDCHAIN_RPC_URL || undefined,
+  });
+}
+
+async function verifyWalletWithAgentBook({ store, crossmint, user, agentBookVerifier }: any) {
+  const wallet = await ensureWalletAccount(store, crossmint, user);
+  const checkedAt = new Date().toISOString();
+  let verified = false;
+  let humanIdHash = null;
+  let error = null;
+
+  if (!wallet.address) {
+    error = "wallet address is missing";
+  } else {
+    try {
+      const verifier = agentBookVerifier || (await loadAgentBookVerifier());
+      const humanId = await verifier.lookupHuman(wallet.address);
+      verified = Boolean(humanId);
+      humanIdHash = humanId ? hashHumanId(humanId) : null;
+      if (!verified) error = "wallet is not registered in AgentBook";
+    } catch (caught) {
+      error = caught instanceof Error ? caught.message : String(caught);
+    }
+  }
+
+  const updated = await store.upsertWalletAccount({
+    id: wallet.id,
+    user_id: user.user_id,
+    provider: wallet.provider || "crossmint",
+    wallet_locator: wallet.wallet_locator,
+    address: wallet.address,
+    chain_id: wallet.chain_id || "eip155:8453",
+    asset: wallet.asset || "USDC",
+    status: wallet.status || "active",
+    metadata: wallet.metadata || {},
+    agentkit_verified: verified,
+    agentkit_human_id_hash: humanIdHash,
+    agentkit_verified_at: verified ? checkedAt : null,
+    agentkit_last_checked_at: checkedAt,
+    agentkit_verification_error: error,
+  });
+  return {
+    wallet_address: updated.address,
+    agentkit_verification: safeAgentKitVerification(updated),
+  };
+}
+
 function shouldUseCrossmintSigner() {
   return process.env.ROUTER_DEV_MODE !== "true" && Boolean(process.env.CROSSMINT_SERVER_SIDE_API_KEY || process.env.CROSSMINT_API_KEY);
 }
@@ -255,6 +386,7 @@ export function createApiApp({
   executor = executeEndpoint,
   cache = createCache(),
   crossmint = createCrossmintClient(),
+  agentBookVerifier = null,
   logger = true,
 }: any = {}) {
   validateRegistry();
@@ -330,6 +462,11 @@ export function createApiApp({
     return { requests: await store.listRequests(filters) };
   });
 
+  app.get("/v1/dashboard/monitoring", async (request: any) => {
+    const user = await authenticateSupabaseUser(request.headers);
+    return { monitoring: await monitoringPayload(store, user.user_id) };
+  });
+
   app.get("/v1/balance", async (request: any) => {
     const user = await authenticateSupabaseUser(request.headers);
     const [account, wallet] = await Promise.all([
@@ -345,8 +482,14 @@ export function createApiApp({
         chain_id: wallet?.chain_id || "eip155:8453",
         asset: wallet?.asset || "USDC",
         wallet_address: wallet?.address || null,
+        agentkit_verification: safeAgentKitVerification(wallet),
       },
     };
+  });
+
+  app.post("/v1/wallet/agentkit-verification", async (request: any) => {
+    const user = await authenticateSupabaseUser(request.headers);
+    return verifyWalletWithAgentBook({ store, crossmint, user, agentBookVerifier });
   });
 
   app.get("/v1/ledger", async (request: any) => {

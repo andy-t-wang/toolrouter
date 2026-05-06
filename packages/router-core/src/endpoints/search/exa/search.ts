@@ -11,6 +11,8 @@ export const exaSearchEndpointDefinition = Object.freeze({
   agentkit: true,
   x402: true,
   estimated_cost_usd: 0.007,
+  agentkit_value_type: "free_trial",
+  agentkit_value_label: "AgentKit-Free Trial",
   default_payment_mode: "agentkit_first",
   ui: {
     badge: "Search",

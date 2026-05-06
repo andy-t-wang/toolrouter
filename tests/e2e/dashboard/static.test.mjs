@@ -13,11 +13,18 @@ describe("web dashboard static wiring", () => {
     assert.match(landingPage, /Tools your agent/);
     assert.match(landingPage, /Get an API key/);
     assert.match(landingPage, /View console/);
+    assert.match(landingPage, /\/setup/);
+    assert.match(landingPage, /\/docs/);
+    assert.match(landingPage, /Hermes/);
+    assert.match(landingPage, /OpenClaw/);
+    assert.match(landingPage, /OpenJarvis/);
+    assert.match(landingPage, /ZeroClaw/);
+    assert.match(landingPage, /Codex/);
+    assert.match(landingPage, /Claude/);
     assert.match(landingPage, /\/dashboard/);
     assert.match(landingPage, /\/v1\/status/);
     assert.match(landingPage, /<AgentationDev \/>/);
     assert.doesNotMatch(landingPage, /Get an MCP key/);
-    assert.doesNotMatch(landingPage, /Docs/);
     assert.doesNotMatch(landingPage, /Pricing/);
     assert.doesNotMatch(landingPage, /Changelog/);
   });
@@ -35,14 +42,18 @@ describe("web dashboard static wiring", () => {
     assert.match(dashboardPage, /% using AgentKit/);
     assert.match(dashboardPage, /AgentKit vs x402/);
     assert.match(dashboardPage, /Recent calls/);
+    assert.match(dashboardPage, /Supabase monitoring/);
+    assert.match(dashboardPage, /AgentKit verification/);
     assert.match(dashboardPage, /Credit balance/);
     assert.doesNotMatch(dashboardPage, /Endpoint operations/);
   });
 
   it("uses dashboard session routes and resource-style router endpoints", () => {
     assert.match(dashboardPage, /\/v1\/dashboard\/requests/);
+    assert.match(dashboardPage, /\/v1\/dashboard\/monitoring/);
     assert.match(dashboardPage, /\/v1\/api-keys/);
     assert.match(dashboardPage, /\/v1\/balance/);
+    assert.match(dashboardPage, /\/v1\/wallet\/agentkit-verification/);
     assert.match(dashboardPage, /\/v1\/top-ups/);
     assert.match(dashboardPage, /\/v1\/requests/);
     assert.doesNotMatch(dashboardPage, /\/call/);

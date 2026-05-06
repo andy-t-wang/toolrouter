@@ -194,7 +194,7 @@ try {
   const dashboardEndpoints = await api("/v1/dashboard/endpoints", { token: sessionToken });
   assert.deepEqual(
     dashboardEndpoints.endpoints.map((endpoint) => endpoint.id),
-    ["exa.search"],
+    ["browserbase.fetch", "browserbase.search", "browserbase.session", "exa.search"],
   );
   assert.ok(dashboardEndpoints.endpoints[0].status, "endpoint status should be present");
 
@@ -220,7 +220,7 @@ try {
   assertNoKeySecrets(listedKey);
 
   const endpointsWithApiKey = await api("/v1/endpoints", { key: apiKey });
-  assert.equal(endpointsWithApiKey.endpoints[0].id, "exa.search");
+  assert.ok(endpointsWithApiKey.endpoints.some((endpoint) => endpoint.id === "exa.search"));
 
   const createdRequest = await api("/v1/requests", {
     method: "POST",
@@ -246,6 +246,7 @@ try {
   assert.equal(detail.request.api_key_id, apiKeyId);
   assert.equal(detail.request.path, "dev_stub");
   assert.equal(detail.request.charged, false);
+  assert.equal(detail.request.agentkit_value_label, "AgentKit-Free Trial");
   assert.ok(Number(detail.request.latency_ms) >= 0);
 
   const fallbackTraceId = `trace_e2e_${runId}`;
@@ -271,6 +272,8 @@ try {
       currency: "USD",
       payment_reference: "e2e_redacted",
       payment_network: "eip155:8453",
+      agentkit_value_type: "free_trial",
+      agentkit_value_label: "AgentKit-Free Trial",
       credit_reserved_usd: "0.01",
       credit_captured_usd: "0.007",
       credit_released_usd: "0.003",
@@ -289,6 +292,10 @@ try {
   assert.equal(metrics.totalRequests, 2);
   assert.equal(metrics.x402Count, 1);
   assert.equal(metrics.totalPaid, 0.007);
+
+  const monitoring = await api("/v1/dashboard/monitoring", { token: sessionToken });
+  assert.ok(monitoring.monitoring.requests_24h.total >= 2, "monitoring should count recent requests");
+  assert.ok("error_rate" in monitoring.monitoring.requests_24h, "monitoring should include error rate");
 
   const apiKeyRequests = await api("/v1/requests?limit=20", { key: apiKey });
   assert.ok(apiKeyRequests.requests.every((request) => request.api_key_id === apiKeyId), "API key request list must be scoped to the key");

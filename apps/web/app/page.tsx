@@ -30,12 +30,51 @@ type LandingStatus = {
 const fallbackStatus: LandingStatus = {
   status: "unverified",
   summary: {
-    endpoint_count: 1,
+    endpoint_count: 4,
     operational_count: 0,
     uptime_30d: null,
     last_checked_at: null,
   },
   endpoints: [
+    {
+      id: "browserbase.fetch",
+      provider: "browserbase",
+      category: "data",
+      name: "Browserbase Fetch",
+      status: "unverified",
+      last_checked_at: null,
+      latency_ms: null,
+      p50_latency_ms: null,
+      uptime_30d: null,
+      sparkline_30d: [],
+      health_check_count_30d: 0,
+    },
+    {
+      id: "browserbase.search",
+      provider: "browserbase",
+      category: "search",
+      name: "Browserbase Search",
+      status: "unverified",
+      last_checked_at: null,
+      latency_ms: null,
+      p50_latency_ms: null,
+      uptime_30d: null,
+      sparkline_30d: [],
+      health_check_count_30d: 0,
+    },
+    {
+      id: "browserbase.session",
+      provider: "browserbase",
+      category: "browser_usage",
+      name: "Browserbase Session",
+      status: "unverified",
+      last_checked_at: null,
+      latency_ms: null,
+      p50_latency_ms: null,
+      uptime_30d: null,
+      sparkline_30d: [],
+      health_check_count_30d: 0,
+    },
     {
       id: "exa.search",
       provider: "exa",
@@ -210,6 +249,8 @@ export default async function LandingPage() {
               <span>ToolRouter</span>
             </a>
             <div className="mkt-nav-actions">
+              <a className="mkt-btn ghost sm" href="/setup">Setup</a>
+              <a className="mkt-btn ghost sm" href="/docs">Docs</a>
               <a className="mkt-btn ghost sm" href="/dashboard">Sign in</a>
               <a className="mkt-btn sm" href="/dashboard">Get an API key</a>
             </div>
@@ -286,6 +327,26 @@ export default async function LandingPage() {
           </div>
         </section>
 
+        <section className="mkt-section compat-section">
+          <div className="mkt-container">
+            <div className="compat-head">
+              <div>
+                <div className="mkt-eyebrow">Agent compatibility</div>
+                <h2 className="mkt-display">One MCP server for every agent.</h2>
+              </div>
+              <p className="mkt-lede compact">
+                Hermes, OpenClaw, OpenJarvis, ZeroClaw, Codex, Claude, and any MCP-capable agent can call the same
+                endpoint names with the same API key controls.
+              </p>
+            </div>
+            <div className="compat-strip" aria-label="Compatible agents">
+              {["Hermes", "OpenClaw", "OpenJarvis", "ZeroClaw", "Codex", "Claude", "Any MCP agent"].map((agent) => (
+                <span key={agent}>{agent}</span>
+              ))}
+            </div>
+          </div>
+        </section>
+
         <section className="mkt-section">
           <div className="mkt-container">
             <div className="uptime-head">
@@ -330,7 +391,7 @@ export default async function LandingPage() {
             <h2 className="mkt-display cta-h">OpenRouter for tool calling.</h2>
             <div className="mkt-actions centered">
               <a className="mkt-btn" href="/dashboard">Get an API key</a>
-              <a className="mkt-btn ghost" href="/dashboard">Open console</a>
+              <a className="mkt-btn ghost" href="/setup">Setup MCP</a>
             </div>
           </div>
         </section>

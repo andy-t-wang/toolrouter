@@ -119,6 +119,32 @@ function pathChip(path: string, charged: boolean) {
   return <span className="chip neutral">{route}</span>;
 }
 
+function valueChip(row: any) {
+  const label = row.agentkit_value_label || (
+    String(row.endpoint_id || "").startsWith("browserbase.")
+      ? "AgentKit-Access"
+      : "AgentKit-Free Trial"
+  );
+  const normalized = String(row.agentkit_value_type || label).toLowerCase();
+  const cls = normalized.includes("access") ? "accent" : normalized.includes("discount") ? "warn" : "free";
+  return <span className={`chip ${cls}`}>{label}</span>;
+}
+
+function humanBadge() {
+  return (
+    <span className="human-badge" aria-label="World ID verified human">
+      <span className="human-mark" aria-hidden="true" />
+      <span>human</span>
+    </span>
+  );
+}
+
+function pct(value: unknown) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return "0.0%";
+  return `${(number * 100).toFixed(1)}%`;
+}
+
 function maskKeyId(value: string) {
   if (!value) return "key_...";
   if (value === "key_dev") return "key_dev";
@@ -153,12 +179,14 @@ export default function DashboardPage() {
   const [banner, setBanner] = useState("");
   const [requests, setRequests] = useState<any[]>([]);
   const [monthRequests, setMonthRequests] = useState<any[]>([]);
+  const [monitoring, setMonitoring] = useState<any>(null);
   const [keys, setKeys] = useState<any[]>([]);
   const [balance, setBalance] = useState<any>(null);
   const [ledger, setLedger] = useState<any[]>([]);
   const [callerId, setCallerId] = useState("hermes-prod");
   const [revealedKey, setRevealedKey] = useState("");
   const [topUpAmount, setTopUpAmount] = useState("25");
+  const [verificationChecking, setVerificationChecking] = useState(false);
 
   useEffect(() => {
     const syncPageFromHash = () => {
@@ -185,15 +213,17 @@ export default function DashboardPage() {
 
   async function refresh(token = sessionToken) {
     if (!token) return;
-    const [requestBody, monthRequestBody, keyBody, balanceBody, ledgerBody] = await Promise.all([
+    const [requestBody, monthRequestBody, monitoringBody, keyBody, balanceBody, ledgerBody] = await Promise.all([
       jsonFetch("/v1/dashboard/requests?limit=100", { token }),
       jsonFetch(`/v1/dashboard/requests?limit=500&since=${encodeURIComponent(monthStartIso())}`, { token }),
+      jsonFetch("/v1/dashboard/monitoring", { token }),
       jsonFetch("/v1/api-keys", { token }),
       jsonFetch("/v1/balance", { token }),
       jsonFetch("/v1/ledger?limit=50", { token }),
     ]);
     setRequests(requestBody.requests || []);
     setMonthRequests(monthRequestBody.requests || []);
+    setMonitoring(monitoringBody.monitoring || null);
     setKeys(keyBody.api_keys || []);
     setBalance(balanceBody.balance || null);
     setLedger(ledgerBody.entries || []);
@@ -283,6 +313,24 @@ export default function DashboardPage() {
     const url = body.top_up?.checkout_url;
     setBanner(url ? `Crossmint checkout created: ${url}` : `Top-up created: ${body.top_up?.provider_reference}`);
     await refresh();
+  }
+
+  async function checkWalletVerification() {
+    setVerificationChecking(true);
+    try {
+      const body = await jsonFetch("/v1/wallet/agentkit-verification", {
+        token: sessionToken,
+        method: "POST",
+        body: JSON.stringify({}),
+      });
+      setBalance((current: any) => ({
+        ...(current || {}),
+        wallet_address: body.wallet_address || current?.wallet_address || null,
+        agentkit_verification: body.agentkit_verification,
+      }));
+    } finally {
+      setVerificationChecking(false);
+    }
   }
 
   if (!sessionToken) {
@@ -390,6 +438,32 @@ export default function DashboardPage() {
                 </section>
               </div>
 
+              <section className="card monitoring-card">
+                <div className="hd"><h2>Supabase monitoring · 24h</h2><span className="muted mono">{formatTime(monitoring?.endpoint_health?.last_checked_at)}</span></div>
+                <div className="monitor-grid">
+                  <div>
+                    <span className="metric-label">Requests</span>
+                    <strong>{Number(monitoring?.requests_24h?.total || 0).toLocaleString()}</strong>
+                    <span>{Number(monitoring?.requests_24h?.agentkit || 0).toLocaleString()} AgentKit · {Number(monitoring?.requests_24h?.x402 || 0).toLocaleString()} x402</span>
+                  </div>
+                  <div>
+                    <span className="metric-label">Errors</span>
+                    <strong className={Number(monitoring?.requests_24h?.errors || 0) ? "bad-text" : ""}>{Number(monitoring?.requests_24h?.errors || 0).toLocaleString()}</strong>
+                    <span>{pct(monitoring?.requests_24h?.error_rate)} error rate</span>
+                  </div>
+                  <div>
+                    <span className="metric-label">Paid</span>
+                    <strong>{money(monitoring?.requests_24h?.paid_usd || 0)}</strong>
+                    <span>Captured from request rows</span>
+                  </div>
+                  <div>
+                    <span className="metric-label">Endpoint health</span>
+                    <strong>{Number(monitoring?.endpoint_health?.healthy || 0).toLocaleString()}/{Number(monitoring?.endpoint_health?.total || 0).toLocaleString()}</strong>
+                    <span>{Number(monitoring?.endpoint_health?.checks_24h || 0).toLocaleString()} checks recorded</span>
+                  </div>
+                </div>
+              </section>
+
               <section className="card">
                 <div className="hd"><h2>AgentKit vs x402 — this month</h2></div>
                 <div className="bd">
@@ -417,18 +491,19 @@ export default function DashboardPage() {
                 <div className="hd"><h2>Recent calls</h2><button className="button ghost compact" type="button">Filters</button></div>
                 <div className="table-scroll">
                   <table className="tbl recent-calls-table">
-                    <thead><tr><th>Time</th><th>Endpoint</th><th>Path</th><th className="num">Status</th><th className="num">Latency</th><th className="num">Charge</th></tr></thead>
+                    <thead><tr><th>Time</th><th>Endpoint</th><th>Path</th><th>Value</th><th className="num">Status</th><th className="num">Latency</th><th className="num">Charge</th></tr></thead>
                     <tbody>
                       {requests.length ? requests.map((row) => (
                         <tr key={row.id}>
                           <td className="mono muted">{formatTime(row.ts)}</td>
                           <td className="mono">{row.endpoint_id}</td>
                           <td>{pathChip(row.path, row.charged)}</td>
+                          <td>{valueChip(row)}</td>
                           <td className={`mono num ${Number(row.status_code) >= 400 ? "bad-text" : ""}`}>{row.status_code || "-"}</td>
                           <td className="mono num muted">{row.latency_ms ?? "-"} ms</td>
                           <td className="mono num">{paidAmount(row) > 0 ? money(paidAmount(row)) : "-"}</td>
                         </tr>
-                      )) : <tr><td colSpan={6}>No requests yet.</td></tr>}
+                      )) : <tr><td colSpan={7}>No requests yet.</td></tr>}
                     </tbody>
                   </table>
                 </div>
@@ -459,7 +534,11 @@ export default function DashboardPage() {
                     <div className="balance-breakdown">
                       <div><span>Pending</span><strong>{money(balance?.pending_usd || 0)}</strong></div>
                       <div><span>Reserved</span><strong>{money(balance?.reserved_usd || 0)}</strong></div>
-                      <div><span>Wallet</span><strong className="mono clip">{balance?.wallet_address || "Not created"}</strong></div>
+                      <div>
+                        <span>Wallet</span>
+                        <strong className="mono clip">{balance?.wallet_address || "Not created"}</strong>
+                        {balance?.agentkit_verification?.verified ? humanBadge() : null}
+                      </div>
                     </div>
                   </div>
                 </section>
@@ -478,6 +557,25 @@ export default function DashboardPage() {
                   </div>
                 </section>
               </div>
+
+              <section className="card verification-card">
+                <div className="hd">
+                  <h2>AgentKit verification</h2>
+                  {balance?.agentkit_verification?.verified ? humanBadge() : <span className="chip neutral">not verified</span>}
+                </div>
+                <div className="bd verification-body">
+                  <div>
+                    <p className="muted">Checks the billing wallet against AgentBook. The dashboard only receives a boolean status and timestamps.</p>
+                    <span className="metric-hint">
+                      Last checked {formatDate(balance?.agentkit_verification?.last_checked_at)}
+                      {balance?.agentkit_verification?.error ? ` · ${balance.agentkit_verification.error}` : ""}
+                    </span>
+                  </div>
+                  <button className="button primary compact" type="button" disabled={verificationChecking} onClick={() => checkWalletVerification().catch((error) => setBanner(error.message))}>
+                    {verificationChecking ? "Checking" : "Check wallet"}
+                  </button>
+                </div>
+              </section>
 
               <section className="card">
                 <div className="hd"><h2>Credit ledger</h2></div>
@@ -566,9 +664,9 @@ export default function DashboardPage() {
 
           {page === "quickstart" ? (
             <section className="dashboard-stack">
-              <div className="page-h"><div><h1 className="display">Quickstart</h1><p className="sub">Create one key, call one endpoint, inspect the trace.</p></div></div>
+              <div className="page-h"><div><h1 className="display">Quickstart</h1><p className="sub">Create one key, connect MCP, inspect the trace.</p></div></div>
               <section className="card quickstart-card">
-                <div className="hd"><h2>Use ToolRouter from an agent</h2></div>
+                <div className="hd"><h2>Use ToolRouter from an agent</h2><a className="link-button" href="/setup">Full setup</a></div>
                 <pre className="code-block"><code>{`const response = await fetch("${apiBase}/v1/requests", {
   method: "POST",
   headers: {
@@ -584,6 +682,15 @@ export default function DashboardPage() {
 
 const trace = await response.json();
 console.log(trace.path);`}</code></pre>
+              </section>
+              <section className="card quickstart-card">
+                <div className="hd"><h2>MCP first query</h2></div>
+                <pre className="code-block"><code>{`Use ToolRouter to search for the top sushi places in SF.
+Call exa_search with:
+{
+  "query": "top sushi places in San Francisco",
+  "maxUsd": "0.01"
+}`}</code></pre>
               </section>
             </section>
           ) : null}

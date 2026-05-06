@@ -63,6 +63,7 @@ Dashboard routes use Supabase session bearer tokens:
 ```text
 GET    /v1/dashboard/endpoints
 GET    /v1/dashboard/requests
+GET    /v1/dashboard/monitoring
 GET    /v1/balance
 GET    /v1/ledger
 POST   /v1/top-ups
@@ -74,6 +75,14 @@ POST   /webhooks/crossmint
 
 `POST /v1/requests` reserves ToolRouter credits before execution, captures the actual paid amount from the AgentKit/x402 receipt, and releases unused reserve. In local dev mode, the store seeds a configurable test balance with `TOOLROUTER_DEV_CREDIT_BALANCE_USD`.
 
+Run the MCP server for Hermes, Codex, Claude, and other MCP-capable agents:
+
+```sh
+TOOLROUTER_API_URL=http://127.0.0.1:9402 TOOLROUTER_API_KEY=tr_... npm run start:mcp
+```
+
+The MCP server exposes `exa_search`, Browserbase tools, a generic endpoint call tool, endpoint listing, and trace lookup. It calls ToolRouter through `POST /v1/requests`; it does not load wallet secrets.
+
 ## Deployment
 
 Recommended public MVP hosting:
@@ -82,6 +91,7 @@ Recommended public MVP hosting:
 - DigitalOcean Managed Valkey for Redis-compatible rate limits and spend counters.
 - Supabase Auth/Postgres for login, API keys, request traces, credits, wallet metadata, endpoint status, and RLS.
 - Crossmint embedded wallets and checkout for production Base USDC-backed credits.
+- AgentBook wallet verification for a badge-safe AgentKit human status in Billing.
 
 Deployment assets:
 
@@ -95,6 +105,7 @@ deploy/digitalocean-app.yaml
 `deploy/digitalocean-app.yaml` is a template. Fill in the GitHub repo, Supabase secrets, Valkey URL, Crossmint secrets, and public origin before creating the App Platform app. `AGENT_WALLET_PRIVATE_KEY` is only for local/manual smoke testing; production request execution should use Crossmint hosted-wallet signing.
 
 See `docs/deployment-hosting.md` for the operational hosting plan and scale path.
+See `docs/wallet-auth-rotation.md` for the API-key compromise and wallet isolation model.
 
 ## Verification
 

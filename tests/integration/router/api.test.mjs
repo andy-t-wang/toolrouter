@@ -37,7 +37,12 @@ describe("router API", () => {
 
   before(async () => {
     store = createStore();
-    app = createApiApp({ logger: false, cache: new MemoryCache(), store });
+    app = createApiApp({
+      logger: false,
+      cache: new MemoryCache(),
+      store,
+      agentBookVerifier: { lookupHuman: async () => "human_dev" },
+    });
     await app.listen({ port: 0, host: "127.0.0.1" });
     baseUrl = `http://127.0.0.1:${app.server.address().port}`;
   });
@@ -67,7 +72,7 @@ describe("router API", () => {
     const body = await response.json();
     assert.deepEqual(
       body.endpoints.map((endpoint) => endpoint.id),
-      ["exa.search"],
+      ["browserbase.search", "exa.search"],
     );
     assert.ok(body.endpoints.every((endpoint) => endpoint.status));
 
@@ -75,7 +80,7 @@ describe("router API", () => {
     assert.equal(dashboardResponse.status, 200);
     assert.deepEqual(
       (await dashboardResponse.json()).endpoints.map((endpoint) => endpoint.id),
-      ["exa.search"],
+      ["browserbase.fetch", "browserbase.search", "browserbase.session", "exa.search"],
     );
   });
 
@@ -118,15 +123,15 @@ describe("router API", () => {
     const response = await fetch(`${baseUrl}/v1/status`);
     assert.equal(response.status, 200);
     const body = await response.json();
-    assert.equal(body.status, "healthy");
-    assert.equal(body.summary.endpoint_count, 1);
+    assert.equal(body.status, "unverified");
+    assert.equal(body.summary.endpoint_count, 4);
     assert.equal(body.summary.operational_count, 1);
-    assert.equal(body.endpoints[0].id, "exa.search");
-    assert.equal(body.endpoints[0].status, "healthy");
-    assert.equal(body.endpoints[0].latency_ms, 123);
-    assert.equal(body.endpoints[0].p50_latency_ms, 123);
-    assert.equal(body.endpoints[0].sparkline_30d.length, 30);
-    assert.ok(body.endpoints[0].uptime_30d > 0);
+    const exa = body.endpoints.find((endpoint) => endpoint.id === "exa.search");
+    assert.equal(exa.status, "healthy");
+    assert.equal(exa.latency_ms, 123);
+    assert.equal(exa.p50_latency_ms, 123);
+    assert.equal(exa.sparkline_30d.length, 30);
+    assert.ok(exa.uptime_30d > 0);
   });
 
   it("creates dashboard-owned API keys without an admin token", async () => {
@@ -190,6 +195,23 @@ describe("router API", () => {
     assert.ok(ledger.entries.some((entry) => entry.type === "top_up_settled"));
   });
 
+  it("verifies the billing wallet with AgentKit and returns badge-safe state", async () => {
+    const response = await fetch(`${baseUrl}/v1/wallet/agentkit-verification`, {
+      method: "POST",
+      headers: sessionHeaders(),
+      body: JSON.stringify({}),
+    });
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.equal(body.agentkit_verification.verified, true);
+    assert.equal(body.agentkit_human_id_hash, undefined);
+
+    const balanceResponse = await fetch(`${baseUrl}/v1/balance`, { headers: sessionHeaders() });
+    const balance = await balanceResponse.json();
+    assert.equal(balance.balance.agentkit_verification.verified, true);
+    assert.equal(balance.balance.agentkit_verification.error, null);
+  });
+
   it("creates and reads request traces", async () => {
     const createResponse = await fetch(`${baseUrl}/v1/requests`, {
       method: "POST",
@@ -213,11 +235,22 @@ describe("router API", () => {
     assert.equal(listed.requests[0].id, created.id);
     assert.equal(listed.requests[0].payment_reference, null);
     assert.equal(listed.requests[0].credit_reservation_id.startsWith("crr_"), true);
+    assert.equal(listed.requests[0].agentkit_value_label, "AgentKit-Free Trial");
 
     const getResponse = await fetch(`${baseUrl}/v1/requests/${created.id}`, { headers: authHeaders() });
     const detail = await getResponse.json();
     assert.equal(detail.request.id, created.id);
     assert.equal(detail.request.endpoint_id, "exa.search");
+  });
+
+  it("summarizes Supabase-backed monitoring data for dashboard health", async () => {
+    const response = await fetch(`${baseUrl}/v1/dashboard/monitoring`, { headers: sessionHeaders() });
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.ok(body.monitoring.requests_24h.total >= 1);
+    assert.equal(body.monitoring.requests_24h.errors, 0);
+    assert.ok(body.monitoring.endpoint_health.total >= 1);
+    assert.ok("error_rate" in body.monitoring.requests_24h);
   });
 
   it("rejects requests before provider execution when maxUsd is too low", async () => {

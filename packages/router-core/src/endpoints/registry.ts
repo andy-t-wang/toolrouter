@@ -1,7 +1,13 @@
 import { isEndpointCategory } from "./categories.ts";
+import { browserbaseSessionEndpointDefinition } from "./browser_usage/browserbase/session.ts";
+import { browserbaseFetchEndpointDefinition } from "./data/browserbase/fetch.ts";
+import { browserbaseSearchEndpointDefinition } from "./search/browserbase/search.ts";
 import { exaSearchEndpointDefinition } from "./search/exa/search.ts";
 
 const ENDPOINT_DEFINITIONS = Object.freeze([
+  browserbaseFetchEndpointDefinition,
+  browserbaseSearchEndpointDefinition,
+  browserbaseSessionEndpointDefinition,
   exaSearchEndpointDefinition,
 ]);
 
@@ -28,6 +34,9 @@ export function validateEndpoint(endpoint) {
   if (endpoint.method !== "POST") throw new RangeError(`endpoint ${endpoint.id} must use POST for MVP`);
   if (!endpoint.agentkit || !endpoint.x402) {
     throw new Error(`endpoint ${endpoint.id} must support AgentKit and x402`);
+  }
+  if (!["free_trial", "discount", "access"].includes(endpoint.agentkit_value_type)) {
+    throw new Error(`endpoint ${endpoint.id} must define agentkit_value_type`);
   }
   if (!endpoint.fixture_input) throw new Error(`endpoint ${endpoint.id} missing fixture_input`);
   if (!endpoint.health_probe) throw new Error(`endpoint ${endpoint.id} missing health_probe`);
@@ -85,6 +94,8 @@ export function endpointToJSON(endpoint) {
     agentkit: endpoint.agentkit,
     x402: endpoint.x402,
     estimated_cost_usd: endpoint.estimated_cost_usd,
+    agentkit_value_type: endpoint.agentkit_value_type,
+    agentkit_value_label: endpoint.agentkit_value_label,
     ui: endpoint.ui,
     fixture_input: endpoint.fixtureInput,
     health_probe: endpoint.healthProbe,

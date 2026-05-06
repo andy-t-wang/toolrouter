@@ -7,4 +7,5 @@ Get ready for launch my finishing these tasks
 - Setup page should have instructions for setting up for any agent, probably involves using the MCP. Should have an example query it can do like search for the top sushi places in SF so they can immediately try the MCP
 - Set up AgentKit verification for the wallet in the Billing page. Here's the docs: https://docs.world.org/agents/agent-kit/integrate. Show the human badge if verified: https://docs.world.org/world-id/id/design-guidelines#verified-human-badge. 
 - Make sure the api calls are trying to use agentkit first and the smoke test ensures the agentkit path works, you are not paying. The Calls history should also indicate this if it's a free trial use of agentkit. 
-- Integrate the browserbase agentkit endpoint as well. Note this isn't a free trial but verified browserbase so it will cost money. So we need to differentiate the types of value in the table so users know Its AgentKit-Free Trial. AgentKit-Discount. AgentKit-Access. Browserbase would be access. 
+- Integrate the browserbase agentkit endpoint as well. Note this isn't a free trial but verified browserbase so it will cost money. So we need to differentiate the types of value in the table so users know Its AgentKit-Free Trial. AgentKit-Discount. AgentKit-Access. Browserbase would be access.
+- Update Agents.md with new knowledge of decisions

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 const migration = readFileSync(new URL("../../../supabase/migrations/0002_enable_rls.sql", import.meta.url), "utf8");
+const monitoringMigration = readFileSync(new URL("../../../supabase/migrations/0006_monitoring_agentkit_wallet.sql", import.meta.url), "utf8");
 
 describe("Supabase RLS migration", () => {
   it("enables RLS on every durable router table", () => {
@@ -37,5 +38,12 @@ describe("Supabase RLS migration", () => {
     assert.match(migration, /credit_ledger_entries_select_own/);
     assert.match(migration, /wallet_transactions_select_own/);
     assert.match(migration, /using \(user_id = auth\.uid\(\)\);/);
+  });
+
+  it("keeps AgentKit human id hashes out of browser-readable wallet grants", () => {
+    const walletGrant = monitoringMigration.match(/grant select \([\s\S]*?\) on table wallet_accounts to authenticated;/)?.[0] || "";
+    assert.match(walletGrant, /agentkit_verified/);
+    assert.doesNotMatch(walletGrant, /agentkit_human_id_hash/);
+    assert.match(monitoringMigration, /security_invoker = true/);
   });
 });

@@ -1,5 +1,5 @@
 {
-  "name": "@toolrouter/api",
+  "name": "@toolrouter/mcp",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -9,13 +9,7 @@
     "check": "tsc -p ../../tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@crossmint/wallets-sdk": "^1.1.0",
-    "@worldcoin/agentkit": "^0.2.0",
-    "@toolrouter/auth": "file:../../packages/auth",
-    "@toolrouter/cache": "file:../../packages/cache",
-    "@toolrouter/db": "file:../../packages/db",
     "@toolrouter/router-core": "file:../../packages/router-core",
-    "fastify": "^5.8.5",
     "tsx": "^4.21.0"
   }
 }

@@ -720,7 +720,7 @@ code {
 }
 
 .recent-calls-table {
-  min-width: 648px;
+  min-width: 760px;
   table-layout: fixed;
 }
 
@@ -759,21 +759,26 @@ code {
 
 .recent-calls-table th:nth-child(3),
 .recent-calls-table td:nth-child(3) {
-  width: 150px;
+  width: 132px;
 }
 
 .recent-calls-table th:nth-child(4),
 .recent-calls-table td:nth-child(4) {
-  width: 76px;
+  width: 132px;
 }
 
 .recent-calls-table th:nth-child(5),
 .recent-calls-table td:nth-child(5) {
-  width: 88px;
+  width: 76px;
 }
 
 .recent-calls-table th:nth-child(6),
 .recent-calls-table td:nth-child(6) {
+  width: 88px;
+}
+
+.recent-calls-table th:nth-child(7),
+.recent-calls-table td:nth-child(7) {
   width: 80px;
 }
 
@@ -879,6 +884,89 @@ code {
   background: var(--bone-2);
   border: 1px solid var(--line);
   color: var(--mute);
+}
+
+.monitoring-card {
+  overflow: hidden;
+}
+
+.monitor-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.monitor-grid > div {
+  border-right: 1px solid var(--line);
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  padding: 18px var(--pad);
+}
+
+.monitor-grid > div:last-child {
+  border-right: 0;
+}
+
+.monitor-grid strong {
+  font-family: "Inter Tight", "Inter", sans-serif;
+  font-size: 28px;
+  font-weight: 500;
+  line-height: 1;
+}
+
+.monitor-grid span:last-child {
+  color: var(--mute);
+  font-size: 12px;
+}
+
+.human-badge {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  color: var(--ink);
+  display: inline-flex;
+  font-size: 11px;
+  font-weight: 600;
+  gap: 6px;
+  height: 22px;
+  line-height: 1;
+  padding: 0 8px 0 6px;
+  width: fit-content;
+}
+
+.human-mark {
+  border: 1.5px solid var(--ink);
+  border-radius: 999px;
+  display: inline-block;
+  height: 12px;
+  position: relative;
+  width: 12px;
+}
+
+.human-mark::after {
+  border: 1.5px solid var(--ink);
+  border-left-color: transparent;
+  border-radius: 999px;
+  content: "";
+  inset: 2px;
+  position: absolute;
+  transform: rotate(28deg);
+}
+
+.verification-card {
+  overflow: hidden;
+}
+
+.verification-body {
+  align-items: center;
+  display: flex;
+  gap: 18px;
+  justify-content: space-between;
+}
+
+.verification-body p {
+  margin: 0;
 }
 
 .key-status {
@@ -1159,6 +1247,41 @@ code {
 
 .mkt-section {
   padding: 72px 0;
+}
+
+.compat-section {
+  border-top: 1px solid var(--line);
+  padding-bottom: 56px;
+  padding-top: 56px;
+}
+
+.compat-head {
+  align-items: end;
+  display: grid;
+  gap: 24px;
+  grid-template-columns: minmax(0, 0.9fr) minmax(320px, 0.8fr);
+  margin-bottom: 24px;
+}
+
+.compat-strip {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+
+.compat-strip span {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--ink-2);
+  display: grid;
+  font-size: 13px;
+  min-height: 46px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  padding: 8px;
+  place-items: center;
+  text-align: center;
 }
 
 .value-section {
@@ -1490,6 +1613,84 @@ code {
   color: var(--mute);
   font-size: 12.5px;
   padding: 44px 0;
+}
+
+.docs-page {
+  min-height: 100vh;
+}
+
+.doc-hero {
+  border-bottom: 1px solid var(--line);
+  padding: 72px 0 56px;
+}
+
+.doc-hero h1 {
+  font-size: 64px;
+  font-weight: 500;
+  line-height: 1;
+  margin: 0 0 18px;
+  max-width: 14ch;
+}
+
+.doc-section {
+  border-bottom: 1px solid var(--line);
+  padding: 54px 0;
+}
+
+.doc-section h2 {
+  font-size: 36px;
+  font-weight: 500;
+  line-height: 1.05;
+  margin: 0 0 12px;
+}
+
+.doc-section p {
+  color: var(--mute);
+  margin: 0;
+  max-width: 60ch;
+}
+
+.doc-grid,
+.doc-code-grid {
+  display: grid;
+  gap: 36px;
+  grid-template-columns: minmax(0, 0.72fr) minmax(0, 1fr);
+}
+
+.doc-list {
+  border-top: 1px solid var(--line);
+}
+
+.doc-list div,
+.doc-table div {
+  border-bottom: 1px solid var(--line);
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(120px, 0.35fr) minmax(0, 1fr);
+  min-height: 58px;
+  padding: 14px 0;
+}
+
+.doc-list strong,
+.doc-table span {
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.doc-list span,
+.doc-table strong {
+  color: var(--mute);
+  font-size: 14px;
+  font-weight: 400;
+}
+
+.tool-list div {
+  grid-template-columns: minmax(180px, 0.45fr) minmax(0, 1fr);
+}
+
+.doc-final {
+  border-bottom: 0;
 }
 
 .landing {
@@ -1933,36 +2134,42 @@ code {
 
   .recent-calls-table th:nth-child(1),
   .recent-calls-table td:nth-child(1) {
-    width: 20%;
+    width: 18%;
   }
 
   .recent-calls-table th:nth-child(2),
   .recent-calls-table td:nth-child(2) {
-    width: 23%;
+    width: 22%;
   }
 
   .recent-calls-table th:nth-child(3),
   .recent-calls-table td:nth-child(3) {
-    width: 18%;
+    width: 15%;
   }
 
   .recent-calls-table th:nth-child(4),
   .recent-calls-table td:nth-child(4) {
-    width: 13%;
+    width: 17%;
   }
 
   .recent-calls-table th:nth-child(5),
   .recent-calls-table td:nth-child(5) {
-    width: 15%;
+    width: 10%;
   }
 
   .recent-calls-table th:nth-child(6),
   .recent-calls-table td:nth-child(6) {
-    width: 11%;
+    width: 10%;
+  }
+
+  .recent-calls-table th:nth-child(7),
+  .recent-calls-table td:nth-child(7) {
+    width: 8%;
   }
 
   .billing-grid,
-  .balance-breakdown {
+  .balance-breakdown,
+  .monitor-grid {
     grid-template-columns: 1fr;
   }
 
@@ -1970,6 +2177,16 @@ code {
   .quickstart-band {
     grid-template-columns: 1fr;
     min-height: auto;
+  }
+
+  .compat-head,
+  .doc-grid,
+  .doc-code-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .compat-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .landing-hero {
@@ -2009,6 +2226,20 @@ code {
   .balance-breakdown div:last-child {
     border-bottom: 0;
   }
+
+  .monitor-grid > div {
+    border-bottom: 1px solid var(--line);
+    border-right: 0;
+  }
+
+  .monitor-grid > div:last-child {
+    border-bottom: 0;
+  }
+
+  .verification-body {
+    align-items: stretch;
+    flex-direction: column;
+  }
 }
 
 @media (max-width: 560px) {
@@ -2041,6 +2272,20 @@ code {
   .mkt-section h2,
   .cta-h {
     font-size: 34px;
+  }
+
+  .doc-hero h1 {
+    font-size: 42px;
+  }
+
+  .doc-list div,
+  .doc-table div,
+  .tool-list div {
+    grid-template-columns: 1fr;
+  }
+
+  .compat-strip {
+    grid-template-columns: 1fr;
   }
 
   .mkt-uptime-grid {

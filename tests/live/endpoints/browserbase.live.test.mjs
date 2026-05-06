@@ -10,14 +10,14 @@ const hasCrossmintSigner = Boolean(
     process.env.CROSSMINT_LIVE_WALLET_LOCATOR &&
     process.env.CROSSMINT_LIVE_WALLET_ADDRESS,
 );
-const runLive = process.env.RUN_LIVE_EXA_TESTS === "true" && (Boolean(process.env.AGENT_WALLET_PRIVATE_KEY) || hasCrossmintSigner);
-const runPaid = runLive && process.env.RUN_LIVE_EXA_PAID_SMOKE === "true";
+const runLive = process.env.RUN_LIVE_BROWSERBASE_TESTS === "true" && (Boolean(process.env.AGENT_WALLET_PRIVATE_KEY) || hasCrossmintSigner);
+const runPaid = runLive && process.env.RUN_LIVE_BROWSERBASE_PAID_SMOKE === "true";
 
 function configureLiveDefaults() {
   process.env.ROUTER_DEV_MODE = "false";
-  process.env.X402_ALLOWED_HOSTS ||= "api.exa.ai";
+  process.env.X402_ALLOWED_HOSTS ||= "api.exa.ai,x402.browserbase.com";
   process.env.X402_ALLOWED_CHAINS ||= "eip155:8453,eip155:480";
-  process.env.X402_MAX_USD_PER_REQUEST ||= "0.01";
+  process.env.X402_MAX_USD_PER_REQUEST ||= "0.02";
   process.env.AGENTKIT_CHAIN_ID ||= "eip155:480";
 }
 
@@ -36,8 +36,9 @@ function livePaymentSigner() {
   };
 }
 
-async function runSmoke({ endpoint, smoke, traceId }) {
+async function runSmoke({ endpointId, smoke, traceId }) {
   configureLiveDefaults();
+  const endpoint = getEndpoint(endpointId);
   const request = endpoint.buildRequest(smoke.input);
   assert.equal(request.headers.authorization, undefined);
   assert.equal(request.headers["x-api-key"], undefined);
@@ -53,28 +54,27 @@ async function runSmoke({ endpoint, smoke, traceId }) {
   });
 }
 
-describe("exa.search live AgentKit/x402 smoke", () => {
-  it("uses the free AgentKit path capped at one cent", { skip: runLive ? false : "live Exa smoke disabled" }, async () => {
-    const endpoint = getEndpoint("exa.search");
+describe("Browserbase live AgentKit/x402 smoke", () => {
+  it("can call Browserbase search with AgentKit access and a strict cap", { skip: runLive ? false : "live Browserbase smoke disabled" }, async () => {
+    const endpoint = getEndpoint("browserbase.search");
     const result = await runSmoke({
-      endpoint,
+      endpointId: "browserbase.search",
       smoke: endpoint.liveSmoke.default_path,
-      traceId: `live_agentkit_${Date.now()}`,
+      traceId: `live_browserbase_agentkit_${Date.now()}`,
     });
 
     assert.equal(result.ok, true);
-    assert.equal(result.path, "agentkit");
-    assert.equal(result.charged, false);
+    assert.ok(["agentkit", "agentkit_to_x402"].includes(result.path));
     assert.equal(result.status_code, 200);
     assert.ok(result.body);
   });
 
-  it("can force a capped x402 payment for wallet plumbing", { skip: runPaid ? false : "paid Exa smoke disabled" }, async () => {
-    const endpoint = getEndpoint("exa.search");
+  it("can force a capped Browserbase x402 payment for wallet plumbing", { skip: runPaid ? false : "paid Browserbase smoke disabled" }, async () => {
+    const endpoint = getEndpoint("browserbase.search");
     const result = await runSmoke({
-      endpoint,
+      endpointId: "browserbase.search",
       smoke: endpoint.liveSmoke.paid_path,
-      traceId: `live_x402_${Date.now()}`,
+      traceId: `live_browserbase_x402_${Date.now()}`,
     });
 
     assert.equal(result.ok, true);
