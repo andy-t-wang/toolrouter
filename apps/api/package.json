@@ -1,0 +1,20 @@
+{
+  "name": "@toolrouter/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node --env-file-if-exists=../../.env --import tsx src/server.ts",
+    "start": "node --env-file-if-exists=../../.env --import tsx src/server.ts",
+    "check": "tsc -p ../../tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@crossmint/wallets-sdk": "^1.1.0",
+    "@toolrouter/auth": "file:../../packages/auth",
+    "@toolrouter/cache": "file:../../packages/cache",
+    "@toolrouter/db": "file:../../packages/db",
+    "@toolrouter/router-core": "file:../../packages/router-core",
+    "fastify": "^5.8.5",
+    "tsx": "^4.21.0"
+  }
+}

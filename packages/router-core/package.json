@@ -1,0 +1,17 @@
+{
+  "name": "@toolrouter/router-core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./testing": "./src/testing/endpointHarness.ts"
+  },
+  "dependencies": {
+    "@worldcoin/agentkit": "^0.2.0",
+    "@x402/core": "^2.11.0",
+    "@x402/evm": "^2.11.0",
+    "@x402/fetch": "^2.11.0",
+    "viem": "^2.48.8"
+  }
+}

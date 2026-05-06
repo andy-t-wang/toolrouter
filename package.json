@@ -1,0 +1,42 @@
+{
+  "name": "toolrouter",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "AgentKit-first x402 tool router for agent endpoints.",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:api": "npm --workspace @toolrouter/api run dev",
+    "dev:web": "npm --workspace @toolrouter/web run dev",
+    "dev:worker": "npm --workspace @toolrouter/worker run dev",
+    "start:api": "npm --workspace @toolrouter/api run start",
+    "start:web": "npm --workspace @toolrouter/web run start",
+    "start:worker": "npm --workspace @toolrouter/worker run start",
+    "api:check": "npm --workspace @toolrouter/api run check",
+    "web:check": "npm --workspace @toolrouter/web run check",
+    "worker:check": "npm --workspace @toolrouter/worker run check",
+    "type-check": "tsc -p tsconfig.json --noEmit",
+    "test": "node --import tsx --test \"tests/unit/**/*.test.mjs\" \"tests/integration/**/*.test.mjs\" \"tests/e2e/**/*.test.mjs\"",
+    "test:supabase:e2e": "node --env-file-if-exists=.env --import tsx scripts/verify-supabase-e2e.mjs",
+    "test:live:endpoints": "node --env-file-if-exists=.env --import tsx --test \"tests/live/**/*.live.test.mjs\""
+  },
+  "devDependencies": {
+    "@types/node": "^25.6.0",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "tsx": "^4.21.0",
+    "typescript": "^6.0.3"
+  },
+  "overrides": {
+    "postcss": "8.5.14"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "agentation": "^3.0.2"
+  }
+}

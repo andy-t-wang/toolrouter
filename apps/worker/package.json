@@ -1,0 +1,16 @@
+{
+  "name": "@toolrouter/worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx src/health-worker.ts --once",
+    "start": "tsx src/health-worker.ts",
+    "check": "tsc -p ../../tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@toolrouter/db": "file:../../packages/db",
+    "@toolrouter/router-core": "file:../../packages/router-core",
+    "tsx": "^4.21.0"
+  }
+}
