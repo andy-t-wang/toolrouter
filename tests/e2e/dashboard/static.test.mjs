@@ -9,10 +9,13 @@ const css = readFileSync(new URL("../../../apps/web/app/globals.css", import.met
 describe("web dashboard static wiring", () => {
   it("keeps the public landing page at the root route", () => {
     assert.match(landingPage, /ToolRouter/);
-    assert.match(landingPage, /AgentKit-first API proxy/);
-    assert.match(landingPage, /Open dashboard/);
+    assert.match(landingPage, /Tools your agent/);
+    assert.match(landingPage, /Get an MCP key/);
+    assert.match(landingPage, /View console/);
     assert.match(landingPage, /\/dashboard/);
-    assert.match(landingPage, /\/v1\/requests/);
+    assert.doesNotMatch(landingPage, /Docs/);
+    assert.doesNotMatch(landingPage, /Pricing/);
+    assert.doesNotMatch(landingPage, /Changelog/);
   });
 
   it("keeps the operational dashboard on the dashboard route", () => {
@@ -38,7 +41,7 @@ describe("web dashboard static wiring", () => {
 
   it("keeps the ToolRouter visual system in the Next app", () => {
     assert.match(css, /--bone/);
-    assert.match(css, /\.landing-hero/);
+    assert.match(css, /\.mkt-hero/);
     assert.match(css, /\.topnav/);
     assert.match(css, /\.recent-calls-table/);
     assert.match(css, /\.billing-grid/);
