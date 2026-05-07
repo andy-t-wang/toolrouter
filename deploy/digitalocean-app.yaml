@@ -16,16 +16,19 @@ ingress:
           prefix: /v1
       component:
         name: api
+        preserve_path_prefix: true
     - match:
         path:
           prefix: /health
       component:
         name: api
+        preserve_path_prefix: true
     - match:
         path:
           prefix: /webhooks
       component:
         name: api
+        preserve_path_prefix: true
     - match:
         path:
           prefix: /
