@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
 
-import { createApiKey, hashApiKey } from "@toolrouter/auth";
+import { DEFAULT_DEV_USER_ID, createApiKey, hashApiKey } from "@toolrouter/auth";
 
 const DEFAULT_PATH = resolve(process.cwd(), ".agentkit-router/local-store.json");
 
@@ -35,6 +35,7 @@ function initialData() {
     wallet_accounts: [],
     credit_accounts: [],
     credit_ledger_entries: [],
+    credit_purchases: [],
     wallet_transactions: [],
   };
 }
@@ -50,18 +51,21 @@ function qs(params: Record<string, any>) {
 function ensureDevKey(data: any) {
   if (process.env.ROUTER_DEV_MODE !== "true") return null;
   const rawKey = process.env.AGENTKIT_ROUTER_DEV_API_KEY || "dev_agentkit_router_key";
+  const userId = process.env.TOOLROUTER_DEV_USER_ID || DEFAULT_DEV_USER_ID;
   const keyHash = hashApiKey(rawKey);
   let record = data.api_keys.find((item: any) => item.key_hash === keyHash);
   if (!record) {
     record = {
       id: "key_dev",
-      user_id: "dev-user",
+      user_id: userId,
       caller_id: "hermes-dev",
       key_hash: keyHash,
       created_at: new Date().toISOString(),
       disabled_at: null,
     };
     data.api_keys.push(record);
+  } else if (record.user_id === "dev-user") {
+    record.user_id = userId;
   }
   return { rawKey, record };
 }
@@ -92,6 +96,7 @@ export class LocalStore {
     data.wallet_accounts ||= [];
     data.credit_accounts ||= [];
     data.credit_ledger_entries ||= [];
+    data.credit_purchases ||= [];
     data.wallet_transactions ||= [];
     ensureDevKey(data);
     writeJson(this.path, data);
@@ -229,6 +234,52 @@ export class LocalStore {
     return this.read().credit_ledger_entries
       .filter((row: any) => row.user_id === user_id)
       .slice(0, Math.max(1, Math.min(Number(limit || 100), 500)));
+  }
+
+  async insertCreditPurchase(row: any) {
+    const data = this.read();
+    data.credit_purchases.unshift({ created_at: new Date().toISOString(), updated_at: new Date().toISOString(), ...row });
+    this.write(data);
+    return data.credit_purchases.find((item: any) => item.id === row.id) || row;
+  }
+
+  async updateCreditPurchase(row: any) {
+    const data = this.read();
+    const index = data.credit_purchases.findIndex((item: any) => item.id === row.id);
+    const next = { ...row, updated_at: new Date().toISOString() };
+    if (index >= 0) data.credit_purchases[index] = { ...data.credit_purchases[index], ...next };
+    else data.credit_purchases.unshift(next);
+    this.write(data);
+    return data.credit_purchases.find((item: any) => item.id === row.id) || next;
+  }
+
+  async getCreditPurchase(id: string) {
+    return this.read().credit_purchases.find((row: any) => row.id === id) || null;
+  }
+
+  async findCreditPurchaseByProviderSession(provider_checkout_session_id: string) {
+    return this.read().credit_purchases.find((row: any) => row.provider_checkout_session_id === provider_checkout_session_id) || null;
+  }
+
+  async listCreditPurchases({ status, limit = 100 }: { status?: string; limit?: number } = {}) {
+    return this.read().credit_purchases
+      .filter((row: any) => !status || row.status === status)
+      .slice(0, Math.max(1, Math.min(Number(limit || 100), 500)));
+  }
+
+  async claimCreditPurchaseForFunding({ id, provider_checkout_session_id }: { id?: string; provider_checkout_session_id?: string }) {
+    const data = this.read();
+    const purchase = data.credit_purchases.find(
+      (row: any) =>
+        (row.status === "checkout_pending" || row.status === "funding_failed") &&
+        (!id || row.id === id) &&
+        (!provider_checkout_session_id || row.provider_checkout_session_id === provider_checkout_session_id),
+    );
+    if (!purchase) return null;
+    purchase.status = "funding_pending";
+    purchase.updated_at = new Date().toISOString();
+    this.write(data);
+    return purchase;
   }
 
   async insertWalletTransaction(row: any) {
@@ -433,6 +484,71 @@ export class SupabaseStore {
         limit,
       })}`,
     );
+  }
+
+  async insertCreditPurchase(row: any) {
+    return (await this.request("/credit_purchases", {
+      method: "POST",
+      body: row,
+      prefer: "return=representation",
+    }))?.[0] || row;
+  }
+
+  async updateCreditPurchase(row: any) {
+    return (await this.request(`/credit_purchases?${qs({ id: `eq.${row.id}`, select: "*" })}`, {
+      method: "PATCH",
+      body: row,
+      prefer: "return=representation",
+    }))?.[0] || row;
+  }
+
+  async getCreditPurchase(id: string) {
+    return (await this.request(`/credit_purchases?${qs({ id: `eq.${id}`, select: "*", limit: 1 })}`))?.[0] || null;
+  }
+
+  async findCreditPurchaseByProviderSession(provider_checkout_session_id: string) {
+    return (
+      (await this.request(
+        `/credit_purchases?${qs({
+          provider_checkout_session_id: `eq.${provider_checkout_session_id}`,
+          select: "*",
+          limit: 1,
+        })}`,
+      ))?.[0] || null
+    );
+  }
+
+  async claimCreditPurchaseForFunding({
+    id,
+    provider_checkout_session_id,
+  }: {
+    id?: string;
+    provider_checkout_session_id?: string;
+  }) {
+    const params: any = {
+      status: "in.(checkout_pending,funding_failed)",
+      select: "*",
+    };
+    if (id) params.id = `eq.${id}`;
+    if (provider_checkout_session_id) params.provider_checkout_session_id = `eq.${provider_checkout_session_id}`;
+    return (await this.request(`/credit_purchases?${qs(params)}`, {
+      method: "PATCH",
+      body: {
+        status: "funding_pending",
+        updated_at: new Date().toISOString(),
+      },
+      prefer: "return=representation",
+    }))?.[0] || null;
+  }
+
+  async listCreditPurchases({ status, limit = 100 }: { status?: string; limit?: number } = {}) {
+    const params: any = {
+      select: "*",
+      order: "created_at.asc",
+      limit,
+    };
+    if (status) params.status = `eq.${status}`;
+    return this.request(`/credit_purchases?${qs(params)}`);
   }
 
   async insertWalletTransaction(row: any) {

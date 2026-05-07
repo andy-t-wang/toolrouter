@@ -13,8 +13,8 @@ const mcpConfig = `{
   }
 }`;
 
-const testPrompt = `Use ToolRouter to search for the top sushi places in SF.
-Prefer exa_search first with maxUsd 0.01 and summarize the best 5 options.`;
+const testPrompt = `Use ToolRouter's search category to research the top sushi places in SF.
+Call the recommended endpoint with maxUsd 0.01 and summarize the best 5 options.`;
 
 export default function SetupPage() {
   return (
@@ -60,18 +60,18 @@ export default function SetupPage() {
         <section className="doc-section">
           <div className="mkt-container doc-grid">
             <div>
-              <h2 className="mkt-display">Available tools</h2>
+              <h2 className="mkt-display">Tool categories</h2>
               <p>
-                Endpoint-specific tools are thin wrappers around POST /v1/requests, so traces, AgentKit path, x402
-                fallback, and spend caps are visible in the dashboard.
+                Agents should think in generic categories first. ToolRouter recommends a concrete endpoint for each
+                category, then records the actual provider, AgentKit path, x402 fallback, and spend cap in the trace.
               </p>
             </div>
             <div className="doc-list tool-list">
-              <div><strong>exa_search</strong><span>AgentKit free-trial search with x402 fallback.</span></div>
-              <div><strong>browserbase_search</strong><span>Verified Browserbase web search.</span></div>
-              <div><strong>browserbase_fetch</strong><span>Fetch page content and metadata.</span></div>
-              <div><strong>browserbase_session_create</strong><span>Create a paid browser session.</span></div>
-              <div><strong>toolrouter_call_endpoint</strong><span>Call any listed endpoint by endpoint_id.</span></div>
+              <div><strong>search</strong><span>Recommended: Exa Search. Also includes Browserbase Search for rendered web results.</span></div>
+              <div><strong>browser use</strong><span>Recommended: Browserbase Session for interactive browser workflows.</span></div>
+              <div><strong>data fetch</strong><span>Recommended: Browserbase Fetch for page content and metadata.</span></div>
+              <div><strong>toolrouter_list_categories</strong><span>Ask ToolRouter which categories and recommended endpoints are available.</span></div>
+              <div><strong>toolrouter_call_endpoint</strong><span>Call the selected endpoint explicitly when you already know the endpoint_id.</span></div>
             </div>
           </div>
         </section>
@@ -81,7 +81,7 @@ export default function SetupPage() {
             <div>
               <h2 className="mkt-display">First query</h2>
               <p>
-                This query uses a one-cent cap and should create a trace showing the AgentKit path if the wallet is
+                This query uses a one-cent cap and should create a trace showing the AgentKit path if the account is
                 registered, with paid fallback only when required.
               </p>
             </div>

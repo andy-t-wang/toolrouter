@@ -24,7 +24,10 @@
     "type-check": "tsc -p tsconfig.json --noEmit",
     "test": "node --import tsx --test \"tests/unit/**/*.test.mjs\" \"tests/integration/**/*.test.mjs\" \"tests/e2e/**/*.test.mjs\"",
     "crossmint:signer": "node scripts/crossmint-signer-env.mjs",
+    "crossmint:check": "node --env-file-if-exists=.env --import tsx scripts/crossmint-production-check.mjs",
+    "billing:retry-funding": "node --env-file-if-exists=.env --import tsx scripts/retry-failed-funding.mjs",
     "supabase:auth-email": "node scripts/apply-supabase-auth-email-template.mjs",
+    "stripe:local-e2e": "node --env-file-if-exists=.env --import tsx scripts/stripe-local-e2e.mjs",
     "test:supabase:e2e": "node --env-file-if-exists=.env --import tsx scripts/verify-supabase-e2e.mjs",
     "test:live:endpoints": "node --env-file-if-exists=.env --import tsx --test \"tests/live/**/*.live.test.mjs\""
   },

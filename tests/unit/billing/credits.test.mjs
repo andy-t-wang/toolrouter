@@ -5,11 +5,15 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import {
+  assertTopUpAmount,
+  attachCheckoutToCreditPurchase,
+  claimCreditPurchaseForFunding,
+  createCreditPurchase,
   ensureCreditAccount,
   finalizeCreditReservation,
-  markTopUpPending,
+  markCreditPurchaseFailed,
   reserveCredits,
-  settleTopUp,
+  settleFundedCreditPurchase,
 } from "../../../apps/api/src/billing.ts";
 import { LocalStore } from "../../../packages/db/src/index.ts";
 
@@ -73,24 +77,103 @@ describe("credit ledger", () => {
     );
   });
 
-  it("settles top-up webhooks idempotently", async () => {
+  it("caps Stripe top-ups at 5 USD by default", () => {
+    const previous = process.env.TOOLROUTER_MAX_TOP_UP_USD;
+    delete process.env.TOOLROUTER_MAX_TOP_UP_USD;
+    try {
+      assert.equal(assertTopUpAmount("5"), "5");
+      assert.throws(() => assertTopUpAmount("5.01"), /top-up cap of 5/);
+    } finally {
+      if (previous === undefined) delete process.env.TOOLROUTER_MAX_TOP_UP_USD;
+      else process.env.TOOLROUTER_MAX_TOP_UP_USD = previous;
+    }
+  });
+
+  it("settles Stripe-funded credit purchases idempotently", async () => {
     const db = store();
-    await markTopUpPending({
+    await db.upsertCreditAccount({
+      user_id: "user_3",
+      available_usd: "0",
+      pending_usd: "0",
+      reserved_usd: "0",
+      currency: "USD",
+    });
+    const purchase = await createCreditPurchase({
       store: db,
       user_id: "user_3",
-      wallet_account_id: "wa_1",
-      provider_reference: "cm_order_1",
       amountUsd: "10",
     });
-    assert.equal((await db.getCreditAccount({ user_id: "user_3" })).pending_usd, "10");
+    const checkout = await attachCheckoutToCreditPurchase({
+      store: db,
+      purchase,
+      checkout: {
+        provider_reference: "cs_test_1",
+        checkout_url: "https://checkout.stripe.test/cs_test_1",
+      },
+    });
+    assert.equal((await db.getCreditAccount({ user_id: "user_3" })).available_usd, "0");
 
-    const first = await settleTopUp({ store: db, provider_reference: "cm_order_1", status: "success" });
-    const second = await settleTopUp({ store: db, provider_reference: "cm_order_1", status: "success" });
+    const claim = await claimCreditPurchaseForFunding({
+      store: db,
+      purchaseId: checkout.id,
+      providerSessionId: "cs_test_1",
+    });
+    assert.equal(claim.claimed, true);
+
+    const first = await settleFundedCreditPurchase({
+      store: db,
+      purchase: claim.purchase,
+      wallet_account_id: "wa_1",
+      fundingReference: "cm_fund_1",
+    });
+    const second = await settleFundedCreditPurchase({
+      store: db,
+      purchase: first.purchase,
+      wallet_account_id: "wa_1",
+      fundingReference: "cm_fund_1",
+    });
 
     assert.equal(first.duplicate, false);
     assert.equal(second.duplicate, true);
     const account = await db.getCreditAccount({ user_id: "user_3" });
     assert.equal(account.available_usd, "10");
     assert.equal(account.pending_usd, "0");
+  });
+
+  it("can reclaim failed funding purchases for retry", async () => {
+    const db = store();
+    const purchase = await createCreditPurchase({
+      store: db,
+      user_id: "user_retry",
+      amountUsd: "5",
+    });
+    const checkout = await attachCheckoutToCreditPurchase({
+      store: db,
+      purchase,
+      checkout: {
+        provider_reference: "cs_retry_1",
+      },
+    });
+    const firstClaim = await claimCreditPurchaseForFunding({
+      store: db,
+      purchaseId: checkout.id,
+      providerSessionId: "cs_retry_1",
+    });
+    assert.equal(firstClaim.claimed, true);
+
+    const failed = await markCreditPurchaseFailed({
+      store: db,
+      purchase: firstClaim.purchase,
+      reason: "treasury empty",
+    });
+    assert.equal(failed.purchase.status, "funding_failed");
+
+    const retryClaim = await claimCreditPurchaseForFunding({
+      store: db,
+      purchaseId: checkout.id,
+      providerSessionId: "cs_retry_1",
+    });
+    assert.equal(retryClaim.claimed, true);
+    assert.equal(retryClaim.purchase.status, "funding_pending");
   });
 });

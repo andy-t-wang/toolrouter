@@ -53,6 +53,22 @@ export function tools(): McpTool[] {
       }),
     },
     {
+      name: "toolrouter_list_categories",
+      title: "List ToolRouter categories",
+      description: "List generic tool categories, recommended endpoints, and available provider tools.",
+      inputSchema: jsonSchema({
+        include_empty: { type: "boolean", description: "Include categories that do not have a listed endpoint yet." },
+      }),
+    },
+    {
+      name: "toolrouter_recommend_endpoint",
+      title: "Recommend endpoint",
+      description: "Pick the recommended concrete endpoint for a generic category such as search or browser_usage.",
+      inputSchema: jsonSchema({
+        category: { type: "string", description: "Tool category, such as search, data, or browser_usage." },
+      }, ["category"]),
+    },
+    {
       name: "toolrouter_call_endpoint",
       title: "Call ToolRouter endpoint",
       description: "Call any named ToolRouter endpoint through POST /v1/requests.",
@@ -61,6 +77,27 @@ export function tools(): McpTool[] {
         input: { type: "object", description: "Endpoint-specific input object." },
         maxUsd: { type: "string", description: "Optional caller spend cap in USD decimal form." },
       }, ["endpoint_id", "input"]),
+    },
+    {
+      name: "toolrouter_search",
+      title: "Search",
+      description: "Run a search through ToolRouter's recommended search endpoint. Launch recommendation: exa.search.",
+      inputSchema: jsonSchema({
+        query: { type: "string" },
+        search_type: { type: "string", enum: ["fast", "auto", "instant", "deep-lite", "deep", "deep-reasoning", "deep-max"] },
+        num_results: { type: "integer", minimum: 1, maximum: 10 },
+        include_summary: { type: "boolean" },
+        maxUsd: { type: "string" },
+      }, ["query"]),
+    },
+    {
+      name: "toolrouter_browser_use",
+      title: "Browser use",
+      description: "Start a browser session through ToolRouter's recommended browser-use endpoint.",
+      inputSchema: jsonSchema({
+        estimated_minutes: { type: "integer", minimum: 1, maximum: 120 },
+        maxUsd: { type: "string" },
+      }),
     },
     {
       name: "toolrouter_get_request",
@@ -121,7 +158,7 @@ function textResult(text: string, structuredContent?: any, isError = false) {
 }
 
 function endpointPayload(name: string, args: any) {
-  if (name === "exa_search") {
+  if (name === "toolrouter_search" || name === "exa_search") {
     return {
       endpoint_id: "exa.search",
       input: {
@@ -147,7 +184,7 @@ function endpointPayload(name: string, args: any) {
       maxUsd: args.maxUsd || "0.02",
     };
   }
-  if (name === "browserbase_session_create") {
+  if (name === "toolrouter_browser_use" || name === "browserbase_session_create") {
     const minutes = args.estimated_minutes || args.estimatedMinutes || 1;
     return {
       endpoint_id: "browserbase.session",
@@ -188,6 +225,25 @@ export async function callTool(name: string, args: any = {}, options: any = {}) 
       const category = args.category ? `?category=${encodeURIComponent(args.category)}` : "";
       const data = await routerFetch(`/v1/endpoints${category}`, { env, fetchImpl });
       return textResult(JSON.stringify(data, null, 2), data);
+    }
+    if (name === "toolrouter_list_categories") {
+      const includeEmpty = args.include_empty || args.includeEmpty ? "?include_empty=true" : "";
+      const data = await routerFetch(`/v1/categories${includeEmpty}`, { env, fetchImpl });
+      return textResult(JSON.stringify(data, null, 2), data);
+    }
+    if (name === "toolrouter_recommend_endpoint") {
+      const data = await routerFetch("/v1/categories?include_empty=true", { env, fetchImpl });
+      const category = data.categories.find((candidate: any) => candidate.id === args.category);
+      if (!category) throw new Error(`unknown category: ${args.category}`);
+      if (!category.recommended_endpoint) throw new Error(`category has no recommended endpoint yet: ${args.category}`);
+      return textResult(JSON.stringify(category.recommended_endpoint, null, 2), {
+        category: {
+          id: category.id,
+          name: category.name,
+          description: category.description,
+        },
+        recommended_endpoint: category.recommended_endpoint,
+      });
     }
     if (name === "toolrouter_get_request") {
       const data = await routerFetch(`/v1/requests/${encodeURIComponent(args.id)}`, { env, fetchImpl });

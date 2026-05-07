@@ -23,6 +23,9 @@ describe("ToolRouter MCP server", () => {
 
     const listed = await handleJsonRpcMessage({ jsonrpc: "2.0", id: 2, method: "tools/list" });
     assert.ok(listed.result.tools.some((tool) => tool.name === "exa_search"));
+    assert.ok(listed.result.tools.some((tool) => tool.name === "toolrouter_search"));
+    assert.ok(listed.result.tools.some((tool) => tool.name === "toolrouter_list_categories"));
+    assert.ok(listed.result.tools.some((tool) => tool.name === "toolrouter_recommend_endpoint"));
     assert.ok(tools().some((tool) => tool.name === "browserbase_session_create"));
   });
 
@@ -43,6 +46,64 @@ describe("ToolRouter MCP server", () => {
       endpoint_id: "exa.search",
       input: {
         query: "top sushi places in San Francisco",
+        search_type: "fast",
+        num_results: 5,
+        include_summary: false,
+      },
+      maxUsd: "0.01",
+    });
+  });
+
+  it("lists categories and recommends concrete endpoints", async () => {
+    const calls = [];
+    const categories = {
+      categories: [
+        {
+          id: "search",
+          name: "Search",
+          description: "Find fresh web results.",
+          recommended_endpoint: { id: "exa.search", name: "Exa Search" },
+        },
+      ],
+    };
+
+    const listResult = await callTool("toolrouter_list_categories", {}, {
+      env: { TOOLROUTER_API_URL: "http://router.test", TOOLROUTER_API_KEY: "tr_test" },
+      fetchImpl: async (url, init) => {
+        calls.push({ url, init });
+        return response(categories);
+      },
+    });
+    assert.equal(listResult.isError, false);
+    assert.equal(calls[0].url, "http://router.test/v1/categories");
+
+    const recommendResult = await callTool("toolrouter_recommend_endpoint", { category: "search" }, {
+      env: { TOOLROUTER_API_URL: "http://router.test", TOOLROUTER_API_KEY: "tr_test" },
+      fetchImpl: async (url, init) => {
+        calls.push({ url, init });
+        return response(categories);
+      },
+    });
+    assert.equal(recommendResult.isError, false);
+    assert.equal(recommendResult.structuredContent.recommended_endpoint.id, "exa.search");
+    assert.equal(calls[1].url, "http://router.test/v1/categories?include_empty=true");
+  });
+
+  it("calls category-level convenience tools through recommended endpoint payloads", async () => {
+    const calls = [];
+    const result = await callTool("toolrouter_search", { query: "agent payment routers" }, {
+      env: { TOOLROUTER_API_URL: "http://router.test", TOOLROUTER_API_KEY: "tr_test" },
+      fetchImpl: async (url, init) => {
+        calls.push({ url, init });
+        return response({ id: "req_2", endpoint_id: "exa.search", path: "agentkit", charged: false });
+      },
+    });
+
+    assert.equal(result.isError, false);
+    assert.deepEqual(JSON.parse(calls[0].init.body), {
+      endpoint_id: "exa.search",
+      input: {
+        query: "agent payment routers",
         search_type: "fast",
         num_results: 5,
         include_summary: false,

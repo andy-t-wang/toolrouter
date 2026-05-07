@@ -1,5 +1,5 @@
 # DigitalOcean App Platform template for the public ToolRouter MVP.
-# Replace github.repo and every SET_IN_APP_PLATFORM value before deployment.
+# Replace every SET_IN_APP_PLATFORM value before deployment.
 # Route /v1 and /health to the API; keep the dashboard on /.
 
 name: toolrouter
@@ -35,7 +35,7 @@ ingress:
 services:
   - name: api
     github:
-      repo: YOUR_GITHUB_ORG/toolrouter
+      repo: andy-t-wang/toolrouter
       branch: main
       deploy_on_push: true
     source_dir: /
@@ -104,38 +104,46 @@ services:
       - key: TOOLROUTER_DAILY_USD_BUDGET
         value: "2.00"
       - key: TOOLROUTER_MAX_TOP_UP_USD
-        value: "500"
+        value: "5"
+      - key: STRIPE_SECRET_KEY
+        value: SET_IN_APP_PLATFORM
+        type: SECRET
+      - key: STRIPE_WEBHOOK_SECRET
+        value: SET_IN_APP_PLATFORM
+        type: SECRET
+      - key: RESEND_API_KEY
+        value: SET_IN_APP_PLATFORM
+        type: SECRET
+      - key: TOOLROUTER_ALERT_EMAIL
+        value: andy.wang@toolsforhumanity.com
+      - key: TOOLROUTER_ALERT_FROM
+        value: ToolRouter <alerts@toolrouter.world>
+      - key: TOOLROUTER_CHECKOUT_SUCCESS_URL
+        value: https://toolrouter.world/dashboard#billing
+      - key: TOOLROUTER_CHECKOUT_CANCEL_URL
+        value: https://toolrouter.world/dashboard#billing
       - key: CROSSMINT_ENV
         value: production
       - key: CROSSMINT_SERVER_SIDE_API_KEY
         value: SET_IN_APP_PLATFORM
         type: SECRET
-      - key: CROSSMINT_CLIENT_SIDE_API_KEY
-        value: SET_IN_APP_PLATFORM
-        type: SECRET
-      - key: CROSSMINT_WEBHOOK_SECRET
-        value: SET_IN_APP_PLATFORM
-        type: SECRET
-      - key: CROSSMINT_USDC_TOKEN_LOCATOR
-        value: base:usdc
       - key: CROSSMINT_CHAIN
         value: base
-      - key: CROSSMINT_SERVER_SIGNER_ADDRESS
-        value: SET_IN_APP_PLATFORM
-        type: SECRET
       - key: CROSSMINT_SIGNER_SECRET
         value: SET_IN_APP_PLATFORM
         type: SECRET
+      - key: CROSSMINT_TREASURY_WALLET_LOCATOR
+        value: evm:alias:toolrouter-treasury-base
       - key: TOOLROUTER_RATE_LIMIT_PER_MINUTE
         value: "60"
       - key: TOOLROUTER_IP_RATE_LIMIT_PER_MINUTE
         value: "120"
       - key: TOOLROUTER_CORS_ORIGIN
-        value: SET_TO_PUBLIC_APP_ORIGIN
+        value: https://toolrouter.world
 
   - name: web
     github:
-      repo: YOUR_GITHUB_ORG/toolrouter
+      repo: andy-t-wang/toolrouter
       branch: main
       deploy_on_push: true
     source_dir: /
@@ -176,7 +184,7 @@ services:
 workers:
   - name: health-worker
     github:
-      repo: YOUR_GITHUB_ORG/toolrouter
+      repo: andy-t-wang/toolrouter
       branch: main
       deploy_on_push: true
     source_dir: /

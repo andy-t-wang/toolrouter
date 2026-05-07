@@ -1,4 +1,4 @@
-import { isEndpointCategory } from "./categories.ts";
+import { ENDPOINT_CATEGORY_DEFINITIONS, isEndpointCategory } from "./categories.ts";
 import { browserbaseSessionEndpointDefinition } from "./browser_usage/browserbase/session.ts";
 import { browserbaseFetchEndpointDefinition } from "./data/browserbase/fetch.ts";
 import { browserbaseSearchEndpointDefinition } from "./search/browserbase/search.ts";
@@ -113,6 +113,32 @@ export function listEndpoints({ category }: any = {}) {
 
 export function listEndpointMetadata(options = {}) {
   return listEndpoints(options);
+}
+
+export function listCategories({ includeEmpty = false }: any = {}) {
+  return ENDPOINT_CATEGORY_DEFINITIONS
+    .map((category) => {
+      const endpoints = endpointRegistry.filter((endpoint) => endpoint.category === category.id);
+      const recommended = endpoints.find((endpoint) => endpoint.id === category.recommended_endpoint_id) || endpoints[0] || null;
+      return {
+        id: category.id,
+        name: category.name,
+        description: category.description,
+        use_cases: category.use_cases,
+        recommended_endpoint_id: recommended?.id || null,
+        recommended_endpoint: recommended ? endpointToJSON(recommended) : null,
+        endpoint_count: endpoints.length,
+        endpoints: endpoints.map(endpointToJSON),
+      };
+    })
+    .filter((category) => includeEmpty || category.endpoint_count > 0);
+}
+
+export function recommendEndpoint(categoryId) {
+  const category = listCategories({ includeEmpty: true }).find((candidate) => candidate.id === categoryId);
+  if (!category) throw new Error(`unknown category: ${categoryId}`);
+  if (!category.recommended_endpoint_id) throw new Error(`category has no recommended endpoint yet: ${categoryId}`);
+  return category.recommended_endpoint;
 }
 
 export function getEndpoint(endpointId) {

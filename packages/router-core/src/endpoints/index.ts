@@ -1,6 +1,8 @@
 export {
   ENDPOINT_CATEGORIES,
+  ENDPOINT_CATEGORY_DEFINITIONS,
   ENDPOINT_CATEGORY_SET,
+  getEndpointCategoryDefinition,
   isEndpointCategory,
 } from "./categories.ts";
 export {
@@ -18,8 +20,10 @@ export {
   endpointRegistry,
   endpointToJSON,
   getEndpoint,
+  listCategories,
   listEndpointMetadata,
   listEndpoints,
+  recommendEndpoint,
   validateEndpoint,
   validateRegistry,
 } from "./registry.ts";

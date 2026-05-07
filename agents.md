@@ -7,6 +7,8 @@ These are durable project decisions for future agents working in this repo.
 - ToolRouter is an AgentKit-first x402 endpoint router.
 - The API proxy is the core product. The dashboard is an admin surface.
 - Agents call named endpoints explicitly through `POST /v1/requests`; do not add intent routing until the product has enough real endpoint volume to justify it.
+- Categories are the agent-facing discovery layer, not hidden intent routing. Agents can ask for generic categories like `search`, `browser_usage`, or `data`, inspect the recommended endpoint, then call the selected endpoint explicitly so traces and billing stay concrete.
+- Category discovery is exposed through `GET /v1/categories` and MCP tools like `toolrouter_list_categories` and `toolrouter_recommend_endpoint`.
 - The launch registry should stay small and reliable. As of this note, public endpoints are `exa.search`, `browserbase.search`, `browserbase.fetch`, and `browserbase.session`.
 
 ## Endpoint Template
@@ -41,14 +43,15 @@ These are durable project decisions for future agents working in this repo.
 - Live Exa AgentKit smoke should prove the free-trial path by requiring `path === "agentkit"` and `charged === false`.
 - Product-level spend caps are intentionally not active yet. `maxUsd` is optional caller protection, and `X402_MAX_USD_PER_REQUEST` remains only as an emergency wallet ceiling in the x402 signer path.
 - Keep wallet/private key material inside the server process. Never expose wallet secrets, Supabase service role keys, API key hashes, or payment signatures to the browser.
-- AgentKit wallet verification belongs behind authenticated server routes. Store only badge-safe status in browser responses; raw AgentBook human IDs must never be exposed, and any stored human identifier must be hashed.
+- AgentKit account verification belongs behind authenticated server routes. Store only badge-safe status in browser responses; raw AgentBook human IDs must never be exposed, and any stored human identifier must be hashed.
 - API keys are user-scoped and revocable. A compromised key should be disabled and replaced from the dashboard without rotating server wallet secrets or affecting other users.
 
 ## MCP Server
 
 - The ToolRouter MCP server lives in `apps/mcp` and runs with `npm run start:mcp`.
 - It reads `TOOLROUTER_API_URL` and `TOOLROUTER_API_KEY` from its environment and calls ToolRouter through `POST /v1/requests`.
-- MCP tools should remain thin wrappers over named endpoints plus generic endpoint/list/trace tools. The MCP process must not load wallet private keys, Crossmint signer secrets, Supabase service role keys, or provider API keys.
+- MCP tools should remain thin wrappers over named endpoints plus generic category/list/trace tools. The MCP process must not load wallet private keys, Crossmint signer secrets, Supabase service role keys, or provider API keys.
+- Generic MCP tools such as `toolrouter_search` and `toolrouter_browser_use` are convenience wrappers over the current recommended endpoint for that category. They should still submit a concrete `endpoint_id` to the API.
 - The setup page at `/setup` should stay agent-agnostic and include a first test query for top sushi places in SF.
 
 ## Testing
@@ -85,8 +88,18 @@ These are durable project decisions for future agents working in this repo.
 - Local dashboard API calls should use `NEXT_PUBLIC_TOOLROUTER_API_URL=http://127.0.0.1:9402`.
 - With Supabase env configured, the dashboard must use real Supabase Auth unless `NEXT_PUBLIC_TOOLROUTER_DEV_AUTH=true` is set for local development.
 - To avoid burning Supabase magic-link email quota during local work, `NEXT_PUBLIC_TOOLROUTER_DEV_AUTH=true` allows `localhost` and `127.0.0.1` to use the server-side `dev_supabase_session` path. Do not enable this for public deployments.
+- When the API is backed by Supabase, `dev_supabase_session` must resolve to a real Supabase Auth user UUID. Never pass placeholder IDs like `dev-user` into Supabase tables because user-owned columns are typed as UUIDs and reference `auth.users(id)`.
 - Magic-link redirects with `#access_token` and `refresh_token` must be hydrated through `supabase.auth.setSession` before dashboard data refreshes.
 - Dashboard payment-path math treats `agentkit` as free AgentKit, and treats both `x402` and `agentkit_to_x402` as paid x402.
 - Dashboard paid totals prefer `credit_captured_usd` when present, otherwise `amount_usd`.
 - Dashboard monitoring comes from `GET /v1/dashboard/monitoring`.
-- Billing should show the World ID-style `human` badge only when server-side AgentKit wallet verification has succeeded.
+- Billing should show the World ID-style `human` badge only when server-side AgentKit account verification has succeeded. Do not show a `not verified` badge, payment address, pending/reserved credit breakdown, or crypto-specific copy. Keep user-facing copy account-oriented rather than wallet-oriented.
+- AgentKit account verification should use `POST /v1/agentkit/account-verification` from the dashboard. The legacy `/v1/wallet/agentkit-verification` route exists only as a compatibility alias.
+- Add Credits uses Stripe Checkout for USD credits. Crossmint Orders/onramp is no longer part of the credit purchase flow.
+- Stripe top-ups are capped at `TOOLROUTER_MAX_TOP_UP_USD`, which defaults to `5` for MVP testing. Local E2E must use an `sk_test_` Stripe key. The API refuses live Checkout Sessions while `ROUTER_DEV_MODE=true` unless `STRIPE_ALLOW_LIVE_CHECKOUT=true` is set intentionally.
+- If Stripe checkout succeeds but treasury funding fails, the webhook must return a non-2xx response so Stripe retries. The purchase remains unavailable in `funding_failed`, an operator alert should be sent to `TOOLROUTER_ALERT_EMAIL`, and `npm run billing:retry-funding` can settle failed purchases after the treasury is refilled.
+- Credits become available only after the Stripe success webhook funds the account's ToolRouter-controlled agent wallet from the Crossmint treasury wallet. If funding fails, keep the purchase unavailable and record the operational error.
+- Crossmint remains wallet infrastructure only: server-signer agent wallets, treasury wallet funding, and AgentKit/x402 message signing. Do not expose wallet addresses, signer secrets, treasury details, payment signatures, withdrawals, or crypto-specific copy in the browser.
+- Each account should use a stable Crossmint agent-wallet alias `tr-agent-<sha256(user_id)[0:27]>`; Crossmint aliases must stay at or below 36 characters. The treasury defaults to `CROSSMINT_TREASURY_WALLET_LOCATOR=evm:alias:toolrouter-treasury-base` and must be funded manually with USDC for MVP.
+- Before deployment, `npm run crossmint:check` must pass. The Crossmint API key needs `wallets.create`, `wallets.read`, `wallets:balance.read`, `wallets:messages.sign`, `wallets:signatures.create`, `wallets:signatures.read`, `wallets:transactions.create`, `wallets:transactions.sign`, and `wallets:transactions.read`.
+- AgentKit account status is implemented the same way as `npx @worldcoin/agentkit-cli status <agent-address>`: read AgentBook `lookupHuman(agentAddress)` on World Chain. Registration is a separate human action equivalent to `npx @worldcoin/agentkit-cli register <agent-address>`.

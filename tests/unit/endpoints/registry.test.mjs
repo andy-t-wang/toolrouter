@@ -5,7 +5,9 @@ import {
   buildEndpointHealthProbeRequest,
   buildEndpointRequest,
   endpointRegistry,
+  listCategories,
   listEndpoints,
+  recommendEndpoint,
   validateRegistry,
 } from "../../../packages/router-core/src/endpoints/index.ts";
 import {
@@ -26,6 +28,22 @@ describe("endpoint registry", () => {
       assertEndpointFixtureBuilds(endpoint);
       assertEndpointHealthProbeBuilds(endpoint);
     }
+  });
+
+  it("groups endpoints into generic categories with recommendations", () => {
+    const categories = listCategories();
+    assert.deepEqual(
+      categories.map((category) => category.id),
+      ["search", "data", "browser_usage"],
+    );
+
+    const search = categories.find((category) => category.id === "search");
+    assert.equal(search.name, "Search");
+    assert.equal(search.recommended_endpoint_id, "exa.search");
+    assert.deepEqual(search.endpoints.map((endpoint) => endpoint.id), ["browserbase.search", "exa.search"]);
+
+    const browserUse = recommendEndpoint("browser_usage");
+    assert.equal(browserUse.id, "browserbase.session");
   });
 
   it("builds Exa search requests from typed input", () => {

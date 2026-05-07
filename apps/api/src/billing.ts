@@ -84,7 +84,13 @@ export function assertTopUpAmount(amountUsd: unknown) {
       code: "invalid_amount",
     });
   }
-  const max = parseUsd(process.env.TOOLROUTER_MAX_TOP_UP_USD || "500", "TOOLROUTER_MAX_TOP_UP_USD");
+  if (amount % 10_000n !== 0n) {
+    throw Object.assign(new Error("amountUsd must be in whole cents"), {
+      statusCode: 400,
+      code: "invalid_amount",
+    });
+  }
+  const max = parseUsd(process.env.TOOLROUTER_MAX_TOP_UP_USD || "5", "TOOLROUTER_MAX_TOP_UP_USD");
   if (amount > max) {
     throw Object.assign(new Error(`amountUsd exceeds configured top-up cap of ${formatUsd(max)}`), {
       statusCode: 400,
@@ -249,111 +255,182 @@ export async function releaseCreditReservation({
   });
 }
 
-export async function markTopUpPending({
+export async function createCreditPurchase({
   store,
   user_id,
-  wallet_account_id,
-  provider_reference,
   amountUsd,
   metadata,
 }: {
   store: any;
   user_id: string;
-  wallet_account_id?: string | null;
-  provider_reference: string;
   amountUsd: string;
   metadata?: Record<string, unknown>;
 }) {
   const amount = parseUsd(amountUsd, "amountUsd");
-  const account = await ensureCreditAccount(store, user_id);
-  const balances = accountBigints(account);
-  const transaction = await store.insertWalletTransaction({
-    id: `wtx_${randomUUID()}`,
-    ts: nowIso(),
+  return store.insertCreditPurchase({
+    id: `cp_${randomUUID()}`,
     user_id,
-    wallet_account_id: wallet_account_id || null,
-    provider: "crossmint",
-    provider_reference,
-    kind: "top_up",
-    status: "pending",
     amount_usd: formatUsd(amount),
     currency: "USD",
-    chain_id: "eip155:8453",
-    asset: "USDC",
+    provider: "stripe",
+    status: "checkout_pending",
     metadata: metadata || {},
   });
-
-  await store.upsertCreditAccount({
-    ...account,
-    pending_usd: formatUsd(balances.pending + amount),
-    updated_at: nowIso(),
-  });
-  await store.insertCreditLedgerEntry(
-    ledgerBase({
-      user_id,
-      type: "top_up_pending",
-      amount_usd: formatUsd(amount),
-      source: "crossmint",
-      reference_id: provider_reference,
-      metadata: metadata || {},
-    }),
-  );
-
-  return transaction;
 }
 
-export async function settleTopUp({
+export async function attachCheckoutToCreditPurchase({
   store,
-  provider_reference,
-  status,
-  metadata,
+  purchase,
+  checkout,
 }: {
   store: any;
-  provider_reference: string;
-  status: "success" | "failed";
-  metadata?: Record<string, unknown>;
+  purchase: any;
+  checkout: {
+    provider_reference: string;
+    checkout_url?: string | null;
+    payment_intent?: string | null;
+    raw?: unknown;
+  };
 }) {
-  const transaction = await store.findWalletTransactionByProviderReference(provider_reference);
-  if (!transaction) {
-    throw Object.assign(new Error("wallet transaction not found"), {
+  return store.updateCreditPurchase({
+    ...purchase,
+    provider_checkout_session_id: checkout.provider_reference,
+    provider_payment_intent_id: checkout.payment_intent || purchase.provider_payment_intent_id || null,
+    checkout_url: checkout.checkout_url || null,
+    metadata: {
+      ...(purchase.metadata || {}),
+      checkout_created: true,
+      raw_present: Boolean(checkout.raw),
+    },
+    updated_at: nowIso(),
+  });
+}
+
+export async function claimCreditPurchaseForFunding({
+  store,
+  purchaseId,
+  providerSessionId,
+}: {
+  store: any;
+  purchaseId?: string | null;
+  providerSessionId?: string | null;
+}) {
+  if (!purchaseId && !providerSessionId) {
+    throw Object.assign(new Error("Stripe checkout session is missing purchase reference"), {
+      statusCode: 400,
+      code: "invalid_webhook",
+    });
+  }
+  const claimed = await store.claimCreditPurchaseForFunding({
+    id: purchaseId || undefined,
+    provider_checkout_session_id: providerSessionId || undefined,
+  });
+  if (claimed) return { purchase: claimed, claimed: true, duplicate: false };
+
+  const purchase =
+    (purchaseId ? await store.getCreditPurchase(purchaseId) : null) ||
+    (providerSessionId ? await store.findCreditPurchaseByProviderSession(providerSessionId) : null);
+  if (!purchase) {
+    throw Object.assign(new Error("credit purchase not found"), {
       statusCode: 404,
       code: "not_found",
     });
   }
-  if (transaction.status === "success" || transaction.status === "failed") {
-    return { transaction, duplicate: true };
-  }
+  return { purchase, claimed: false, duplicate: true };
+}
 
-  const amount = parseUsd(transaction.amount_usd, "top-up amount");
-  const account = await ensureCreditAccount(store, transaction.user_id);
+export async function settleFundedCreditPurchase({
+  store,
+  purchase,
+  wallet_account_id,
+  fundingReference,
+  fundingTransactionId,
+  metadata,
+}: {
+  store: any;
+  purchase: any;
+  wallet_account_id?: string | null;
+  fundingReference?: string | null;
+  fundingTransactionId?: string | null;
+  metadata?: Record<string, unknown>;
+}) {
+  if (purchase.status === "funded") return { purchase, duplicate: true };
+
+  const amount = parseUsd(purchase.amount_usd, "top-up amount");
+  const account = await ensureCreditAccount(store, purchase.user_id);
   const balances = accountBigints(account);
-  const nextPending = balances.pending > amount ? balances.pending - amount : 0n;
-  const nextAvailable = status === "success" ? balances.available + amount : balances.available;
 
-  const updated = await store.updateWalletTransaction({
-    ...transaction,
-    status,
-    metadata: {
-      ...(transaction.metadata || {}),
-      ...(metadata || {}),
-    },
-  });
   await store.upsertCreditAccount({
     ...account,
-    available_usd: formatUsd(nextAvailable),
-    pending_usd: formatUsd(nextPending),
+    available_usd: formatUsd(balances.available + amount),
+    updated_at: nowIso(),
+  });
+  const updated = await store.updateCreditPurchase({
+    ...purchase,
+    status: "funded",
+    wallet_account_id: wallet_account_id || purchase.wallet_account_id || null,
+    funding_transaction_id: fundingTransactionId || purchase.funding_transaction_id || null,
+    funding_provider_reference: fundingReference || purchase.funding_provider_reference || null,
+    error: null,
+    metadata: {
+      ...(purchase.metadata || {}),
+      ...(metadata || {}),
+    },
     updated_at: nowIso(),
   });
   await store.insertCreditLedgerEntry(
     ledgerBase({
-      user_id: transaction.user_id,
-      type: status === "success" ? "top_up_settled" : "top_up_failed",
-      amount_usd: transaction.amount_usd,
-      source: "crossmint",
-      reference_id: provider_reference,
+      user_id: purchase.user_id,
+      type: "top_up_settled",
+      amount_usd: purchase.amount_usd,
+      source: "stripe",
+      reference_id: purchase.provider_checkout_session_id || purchase.id,
       metadata: metadata || {},
     }),
   );
 
-  return { transaction: updated, duplicate: false };
+  return { purchase: updated, duplicate: false };
+}
+
+export async function markCreditPurchaseFailed({
+  store,
+  purchase,
+  status = "funding_failed",
+  reason,
+  metadata,
+}: {
+  store: any;
+  purchase: any;
+  status?: "funding_failed" | "checkout_failed";
+  reason?: string;
+  metadata?: Record<string, unknown>;
+}) {
+  if (purchase.status === "funded") return { purchase, duplicate: true };
+  if (purchase.status === "funding_failed" || purchase.status === "checkout_failed") {
+    return { purchase, duplicate: true };
+  }
+  const updated = await store.updateCreditPurchase({
+    ...purchase,
+    status,
+    error: reason || null,
+    metadata: {
+      ...(purchase.metadata || {}),
+      ...(metadata || {}),
+    },
+    updated_at: nowIso(),
+  });
+  await store.insertCreditLedgerEntry(
+    ledgerBase({
+      user_id: purchase.user_id,
+      type: "top_up_failed",
+      amount_usd: purchase.amount_usd,
+      source: "stripe",
+      reference_id: purchase.provider_checkout_session_id || purchase.id,
+      metadata: {
+        ...(metadata || {}),
+        reason: reason || null,
+      },
+    }),
+  );
+  return { purchase: updated, duplicate: false };
 }

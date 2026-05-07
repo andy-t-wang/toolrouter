@@ -389,6 +389,27 @@ code {
   grid-template-columns: minmax(0, 1.35fr) minmax(280px, 0.65fr);
 }
 
+.billing-notice {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  color: var(--ink-2);
+  padding: 14px var(--pad);
+}
+
+.billing-notice strong {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.billing-notice p {
+  color: var(--mute);
+  font-size: 13px;
+  line-height: 1.5;
+  margin: 4px 0 0;
+}
+
 .card {
   background: var(--card);
   border: 1px solid var(--line);
@@ -560,6 +581,16 @@ code {
 
 .button.ghost:hover {
   background: var(--bone-2);
+}
+
+.button.copy-key-button {
+  min-width: 88px;
+}
+
+.button.copy-key-button.copied {
+  background: #f0f7f2;
+  border-color: #b9d8c1;
+  color: #287044;
 }
 
 .button.compact {
@@ -830,6 +861,21 @@ code {
 
 .tbl .num {
   text-align: right;
+}
+
+.endpoint-cell {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.endpoint-cell strong {
+  color: var(--ink);
+  font-weight: 500;
+}
+
+.endpoint-cell span {
+  display: block;
 }
 
 .clip {
