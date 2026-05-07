@@ -34,9 +34,10 @@ ingress:
 
 services:
   - name: api
-    git:
-      repo_clone_url: https://github.com/andy-t-wang/toolrouter.git
+    github:
+      repo: andy-t-wang/toolrouter
       branch: main
+      deploy_on_push: true
     source_dir: /
     dockerfile_path: deploy/Dockerfile.api
     http_port: 8080
@@ -141,9 +142,10 @@ services:
         value: https://toolrouter.world
 
   - name: web
-    git:
-      repo_clone_url: https://github.com/andy-t-wang/toolrouter.git
+    github:
+      repo: andy-t-wang/toolrouter
       branch: main
+      deploy_on_push: true
     source_dir: /
     dockerfile_path: deploy/Dockerfile.web
     http_port: 8080
@@ -181,9 +183,10 @@ services:
 
 workers:
   - name: health-worker
-    git:
-      repo_clone_url: https://github.com/andy-t-wang/toolrouter.git
+    github:
+      repo: andy-t-wang/toolrouter
       branch: main
+      deploy_on_push: true
     source_dir: /
     dockerfile_path: deploy/Dockerfile.worker
     instance_count: 1
