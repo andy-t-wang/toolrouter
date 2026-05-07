@@ -432,10 +432,8 @@ export default function DashboardPage() {
               <span className="brand-mark" aria-hidden="true" />
               <span>ToolRouter</span>
             </div>
-            <h1 className="display">Sign in</h1>
-            <p className="sub">
-              Use Supabase Auth to manage API keys and inspect request traces.
-            </p>
+            <h1 className="display">Sign in or Create Account</h1>
+
             <input
               className="input"
               value={email}
@@ -753,9 +751,14 @@ export default function DashboardPage() {
 
                 <section className="billing-notice">
                   <div>
-                    <strong>Credits usually appear within 30-90 seconds after checkout.</strong>
+                    <strong>
+                      Credits usually appear within 30-90 seconds after
+                      checkout.
+                    </strong>
                     <p>
-                      If account funding is delayed, the payment stays recorded and ToolRouter retries settlement. Credits are only made available after settlement succeeds.
+                      If account funding is delayed, the payment stays recorded
+                      and ToolRouter retries settlement. Credits are only made
+                      available after settlement succeeds.
                     </p>
                   </div>
                 </section>
