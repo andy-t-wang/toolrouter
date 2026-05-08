@@ -471,6 +471,21 @@ async function getVisibleAccount(store: any, user: { user_id: string; email?: st
   return store.getWalletAccount({ user_id: user.user_id });
 }
 
+async function getOrBootstrapVisibleAccount(
+  store: any,
+  crossmint: any,
+  user: { user_id: string; email?: string | null },
+) {
+  const existing = await getVisibleAccount(store, user);
+  if (existing?.address && existing?.wallet_locator) return existing;
+  if (!shouldUseCrossmintSigner()) return existing;
+  try {
+    return await ensureAgentWalletAccount(store, crossmint, user);
+  } catch {
+    return existing;
+  }
+}
+
 function safeAgentKitVerification(wallet: any) {
   return {
     verified: Boolean(wallet?.agentkit_verified),
@@ -868,7 +883,7 @@ export function createApiApp({
     const user = await authenticateSupabaseUser(request.headers);
     const [account, wallet] = await Promise.all([
       getCreditBalance(store, user.user_id),
-      getVisibleAccount(store, user),
+      getOrBootstrapVisibleAccount(store, crossmint, user),
     ]);
     return {
       balance: {
