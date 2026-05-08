@@ -66,6 +66,8 @@ describe("web dashboard static wiring", () => {
     assert.match(dashboardPage, /copy-key-button/);
     assert.match(dashboardPage, /Copied/);
     assert.doesNotMatch(dashboardPage, /Payment address/);
+    assert.doesNotMatch(dashboardPage, /Checkout created:/);
+    assert.doesNotMatch(dashboardPage, /checkout_url\}`/);
     assert.doesNotMatch(dashboardPage, /Base USDC/);
     assert.doesNotMatch(dashboardPage, /Pending/);
     assert.doesNotMatch(dashboardPage, /Reserved/);

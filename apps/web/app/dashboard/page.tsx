@@ -398,8 +398,8 @@ export default function DashboardPage() {
     const url = body.top_up?.checkout_url;
     setBanner(
       url
-        ? `Checkout created: ${url}`
-        : `Top-up created: ${body.top_up?.provider_reference}`,
+        ? "Opening secure checkout..."
+        : "Credit top-up created. Refresh shortly to see the latest status.",
     );
     if (url && typeof window !== "undefined") {
       window.location.assign(url);
