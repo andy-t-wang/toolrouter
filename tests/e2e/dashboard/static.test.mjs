@@ -6,6 +6,8 @@ const landingPage = readFileSync(new URL("../../../apps/web/app/page.tsx", impor
 const agentationDev = readFileSync(new URL("../../../apps/web/app/agentation-dev.tsx", import.meta.url), "utf8");
 const setupPage = readFileSync(new URL("../../../apps/web/app/setup/page.tsx", import.meta.url), "utf8");
 const dashboardPage = readFileSync(new URL("../../../apps/web/app/dashboard/page.tsx", import.meta.url), "utf8");
+const authConfirmRoute = readFileSync(new URL("../../../apps/web/app/auth/confirm/route.ts", import.meta.url), "utf8");
+const confirmationTemplate = readFileSync(new URL("../../../supabase/email-templates/confirmation.html", import.meta.url), "utf8");
 const css = readFileSync(new URL("../../../apps/web/app/globals.css", import.meta.url), "utf8");
 
 describe("web dashboard static wiring", () => {
@@ -86,6 +88,15 @@ describe("web dashboard static wiring", () => {
     assert.doesNotMatch(dashboardPage, /\/call/);
     assert.doesNotMatch(dashboardPage, /\/fetch/);
     assert.doesNotMatch(dashboardPage, /\/usage/);
+  });
+
+  it("keeps auth confirmation links on the ToolRouter domain", () => {
+    assert.match(confirmationTemplate, /\/auth\/confirm\?token_hash=\{\{ \.TokenHash \}\}/);
+    assert.match(confirmationTemplate, /type=signup/);
+    assert.match(authConfirmRoute, /verifyOtp/);
+    assert.match(authConfirmRoute, /token_hash/);
+    assert.match(authConfirmRoute, /access_token/);
+    assert.doesNotMatch(confirmationTemplate, /\.ConfirmationURL/);
   });
 
   it("keeps the ToolRouter visual system in the Next app", () => {

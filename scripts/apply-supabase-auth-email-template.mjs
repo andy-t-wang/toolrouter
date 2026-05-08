@@ -15,7 +15,13 @@ if (args.help) {
 const templatePath = join(repoRoot, "supabase", "email-templates", "confirmation.html");
 const content = readFileSync(templatePath, "utf8");
 const subject = pick(args.subject, "Confirm your ToolRouter account");
-const accessToken = pick(args.accessToken, process.env.SUPABASE_ACCESS_TOKEN, env.SUPABASE_ACCESS_TOKEN);
+const accessToken = pick(
+  args.accessToken,
+  process.env.SUPABASE_ACCESS_TOKEN,
+  env.SUPABASE_ACCESS_TOKEN,
+  process.env.SUPABASE_ACCESS_KEY,
+  env.SUPABASE_ACCESS_KEY,
+);
 const projectRef = pick(
   args.projectRef,
   process.env.SUPABASE_PROJECT_REF,
@@ -124,6 +130,7 @@ Usage:
 
 Required:
   SUPABASE_ACCESS_TOKEN from https://supabase.com/dashboard/account/tokens
+    SUPABASE_ACCESS_KEY is accepted as a compatibility alias.
   SUPABASE_PROJECT_REF, or SUPABASE_URL so the project ref can be inferred
 `);
   process.exit(exitCode);
