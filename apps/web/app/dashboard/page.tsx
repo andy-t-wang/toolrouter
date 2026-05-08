@@ -7,6 +7,7 @@ import { useEffect, useMemo, useState } from "react";
 import { computeDashboardMetrics, paidAmount } from "../dashboard-metrics.ts";
 
 const apiBase = process.env.NEXT_PUBLIC_TOOLROUTER_API_URL || "";
+const appBase = (process.env.NEXT_PUBLIC_TOOLROUTER_APP_URL || "").replace(/\/$/u, "");
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
 const devAuthEnabled = process.env.NEXT_PUBLIC_TOOLROUTER_DEV_AUTH === "true";
@@ -352,10 +353,10 @@ export default function DashboardPage() {
       await refresh("dev_supabase_session");
       return;
     }
-    const redirectTo =
-      typeof window === "undefined"
-        ? undefined
-        : `${window.location.origin}/dashboard`;
+    const origin =
+      appBase ||
+      (typeof window === "undefined" ? "" : window.location.origin);
+    const redirectTo = origin ? `${origin}/dashboard` : undefined;
     const { error } = await supabase.auth.signInWithOtp({
       email,
       options: redirectTo ? { emailRedirectTo: redirectTo } : undefined,

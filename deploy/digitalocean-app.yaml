@@ -177,6 +177,9 @@ services:
       - key: NEXT_PUBLIC_TOOLROUTER_API_URL
         value: ""
         scope: BUILD_TIME
+      - key: NEXT_PUBLIC_TOOLROUTER_APP_URL
+        value: https://toolrouter.world
+        scope: BUILD_TIME
       - key: NEXT_PUBLIC_SUPABASE_URL
         value: SET_IN_APP_PLATFORM
         scope: BUILD_TIME

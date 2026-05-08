@@ -58,7 +58,7 @@ describe("web dashboard static wiring", () => {
     assert.match(dashboardPage, /Check the account against AgentKit/);
     assert.match(dashboardPage, /Check Status/);
     assert.match(dashboardPage, /Credit balance/);
-    assert.match(dashboardPage, /Credits usually appear within 30-90 seconds after checkout/);
+    assert.match(dashboardPage, /Credits usually appear within 30-90 seconds after\s+checkout/);
     assert.match(dashboardPage, /ToolRouter retries settlement/);
     assert.match(dashboardPage, /copy-key-button/);
     assert.match(dashboardPage, /Copied/);
@@ -74,6 +74,8 @@ describe("web dashboard static wiring", () => {
   });
 
   it("uses dashboard session routes and resource-style router endpoints", () => {
+    assert.match(dashboardPage, /NEXT_PUBLIC_TOOLROUTER_APP_URL/);
+    assert.match(dashboardPage, /emailRedirectTo/);
     assert.match(dashboardPage, /\/v1\/dashboard\/requests/);
     assert.doesNotMatch(dashboardPage, /\/v1\/dashboard\/endpoints/);
     assert.match(dashboardPage, /\/v1\/api-keys/);
