@@ -119,6 +119,36 @@ function formatDate(value: string | null | undefined) {
   });
 }
 
+function ledgerTypeLabel(type: unknown) {
+  const labels: Record<string, string> = {
+    top_up_settled: "Credits added",
+    top_up_failed: "Top-up failed",
+    reserve: "Usage started",
+    capture: "Usage charged",
+    release: "Credits returned",
+  };
+  const normalized = String(type || "").trim();
+  if (!normalized) return "-";
+  if (labels[normalized]) return labels[normalized];
+  return normalized
+    .replace(/[_-]+/gu, " ")
+    .replace(/\b\w/gu, (letter) => letter.toUpperCase());
+}
+
+function sourceLabel(source: unknown) {
+  const labels: Record<string, string> = {
+    stripe: "Stripe",
+    toolrouter: "ToolRouter",
+    router: "ToolRouter",
+    x402: "x402",
+    agentkit: "AgentKit",
+  };
+  const normalized = String(source || "").trim();
+  if (!normalized) return "-";
+  const key = normalized.toLowerCase();
+  return labels[key] || normalized;
+}
+
 function formatTime(value: string | null | undefined) {
   if (!value) return "-";
   const date = new Date(value);
@@ -820,8 +850,8 @@ export default function DashboardPage() {
                               <td className="mono muted">
                                 {formatTime(entry.ts)}
                               </td>
-                              <td className="mono">{entry.type}</td>
-                              <td>{entry.source}</td>
+                              <td>{ledgerTypeLabel(entry.type)}</td>
+                              <td>{sourceLabel(entry.source)}</td>
                               <td className="mono muted clip">
                                 {entry.reference_id || "-"}
                               </td>

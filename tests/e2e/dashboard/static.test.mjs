@@ -63,6 +63,8 @@ describe("web dashboard static wiring", () => {
     assert.match(dashboardPage, /Credit balance/);
     assert.match(dashboardPage, /Credits usually appear within 30-90 seconds after\s+checkout/);
     assert.match(dashboardPage, /ToolRouter retries settlement/);
+    assert.match(dashboardPage, /top_up_settled: "Credits added"/);
+    assert.match(dashboardPage, /ledgerTypeLabel\(entry\.type\)/);
     assert.match(dashboardPage, /copy-key-button/);
     assert.match(dashboardPage, /Copied/);
     assert.doesNotMatch(dashboardPage, /Payment address/);
