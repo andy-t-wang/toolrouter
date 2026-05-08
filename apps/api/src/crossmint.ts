@@ -63,6 +63,14 @@ function aliasFromLocator(locator: string) {
   return locator.startsWith("evm:alias:") ? locator.slice("evm:alias:".length) : null;
 }
 
+function ownerFromEmail(email?: string | null) {
+  const normalized = String(email || "")
+    .trim()
+    .toLowerCase();
+  if (!normalized || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/u.test(normalized)) return null;
+  return `email:${normalized}`;
+}
+
 function normalizeWallet(wallet: any, walletLocator: string, chain: string, alias?: string | null) {
   return {
     provider: "crossmint",
@@ -150,7 +158,7 @@ export class CrossmintClient {
     return wallet;
   }
 
-  async createServerWallet(alias: string) {
+  async createServerWallet(alias: string, owner?: string | null) {
     const signerSecret = requireSignerSecret(this.config);
     const { wallets } = await this.wallets();
     const wallet = await wallets.createWallet({
@@ -160,17 +168,18 @@ export class CrossmintClient {
         secret: signerSecret,
       },
       alias,
+      ...(owner ? { owner } : {}),
     });
     await wallet.useSigner({ type: "server", secret: signerSecret });
     return wallet;
   }
 
-  async ensureServerWallet(walletLocator: string, alias: string | null) {
+  async ensureServerWallet(walletLocator: string, alias: string | null, owner?: string | null) {
     try {
       return await this.getSignedWallet(walletLocator);
     } catch (error) {
       if (!alias) throw error;
-      return this.createServerWallet(alias);
+      return this.createServerWallet(alias, owner);
     }
   }
 
@@ -188,7 +197,7 @@ export class CrossmintClient {
 
     const locator = agentWalletLocator(user.user_id);
     const alias = agentAlias(user.user_id);
-    const wallet = await this.ensureServerWallet(locator, alias);
+    const wallet = await this.ensureServerWallet(locator, alias, ownerFromEmail(user.email));
     return normalizeWallet(wallet, locator, this.config.chain || "base", alias);
   }
 

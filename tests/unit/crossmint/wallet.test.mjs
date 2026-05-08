@@ -54,10 +54,38 @@ describe("Crossmint agent wallets", () => {
     assert.match(wallet.wallet_locator, /^evm:alias:tr-agent-[a-f0-9]{27}$/u);
     assert.equal(wallet.wallet_locator.length, "evm:alias:".length + 36);
     assert.equal(created[0].alias, wallet.wallet_locator.slice("evm:alias:".length));
+    assert.equal(created[0].owner, "email:agent@example.com");
     assert.deepEqual(created[0].recovery, {
       type: "server",
       secret: "signer_secret",
     });
+  });
+
+  it("does not attach an owner to treasury wallets", async () => {
+    const created = [];
+    const client = new CrossmintClient({
+      apiKey: "cm_test",
+      signerSecret: "signer_secret",
+      chain: "base",
+      treasuryWalletLocator: "evm:alias:toolrouter-treasury-base",
+      walletDeps: fakeDeps({
+        getWallet: async () => {
+          throw new Error("not found");
+        },
+        createWallet: async (args) => {
+          created.push(args);
+          return {
+            address: "0x00000000000000000000000000000000000000aa",
+            useSigner: async () => undefined,
+          };
+        },
+      }),
+    });
+
+    await client.ensureTreasuryWallet();
+
+    assert.equal(created[0].alias, "toolrouter-treasury-base");
+    assert.equal(created[0].owner, undefined);
   });
 
   it("funds an agent wallet from the Crossmint treasury wallet with USDC", async () => {
