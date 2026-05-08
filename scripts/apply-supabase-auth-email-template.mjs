@@ -12,9 +12,12 @@ if (args.help) {
   usage(0);
 }
 
-const templatePath = join(repoRoot, "supabase", "email-templates", "confirmation.html");
-const content = readFileSync(templatePath, "utf8");
-const subject = pick(args.subject, "Confirm your ToolRouter account");
+const confirmationTemplatePath = join(repoRoot, "supabase", "email-templates", "confirmation.html");
+const magicLinkTemplatePath = join(repoRoot, "supabase", "email-templates", "magic-link.html");
+const confirmationContent = readFileSync(confirmationTemplatePath, "utf8");
+const magicLinkContent = readFileSync(magicLinkTemplatePath, "utf8");
+const confirmationSubject = pick(args.confirmationSubject, args.subject, "Confirm your ToolRouter account");
+const magicLinkSubject = pick(args.magicLinkSubject, "Sign in to ToolRouter");
 const accessToken = pick(
   args.accessToken,
   process.env.SUPABASE_ACCESS_TOKEN,
@@ -30,7 +33,25 @@ const projectRef = pick(
 );
 
 if (args.dryRun) {
-  console.log(JSON.stringify({ projectRef, subject, templatePath, contentBytes: Buffer.byteLength(content) }, null, 2));
+  console.log(
+    JSON.stringify(
+      {
+        projectRef,
+        confirmation: {
+          subject: confirmationSubject,
+          templatePath: confirmationTemplatePath,
+          contentBytes: Buffer.byteLength(confirmationContent),
+        },
+        magic_link: {
+          subject: magicLinkSubject,
+          templatePath: magicLinkTemplatePath,
+          contentBytes: Buffer.byteLength(magicLinkContent),
+        },
+      },
+      null,
+      2,
+    ),
+  );
   process.exit(0);
 }
 
@@ -51,8 +72,10 @@ const response = await fetch(`https://api.supabase.com/v1/projects/${projectRef}
     "content-type": "application/json",
   },
   body: JSON.stringify({
-    mailer_subjects_confirmation: subject,
-    mailer_templates_confirmation_content: content,
+    mailer_subjects_confirmation: confirmationSubject,
+    mailer_templates_confirmation_content: confirmationContent,
+    mailer_subjects_magic_link: magicLinkSubject,
+    mailer_templates_magic_link_content: magicLinkContent,
   }),
 });
 
@@ -61,7 +84,7 @@ if (!response.ok) {
   throw new Error(`Supabase auth template update failed: ${response.status} ${body}`);
 }
 
-console.log(`Updated Supabase Confirm signup email template for project ${projectRef}.`);
+console.log(`Updated Supabase confirmation and magic-link email templates for project ${projectRef}.`);
 
 function parseArgs(argv) {
   const parsed = {};
@@ -127,6 +150,7 @@ Usage:
   npm run supabase:auth-email
   npm run supabase:auth-email -- --dry-run
   npm run supabase:auth-email -- --project-ref <ref> --access-token <token>
+  npm run supabase:auth-email -- --confirmation-subject "Confirm your ToolRouter account" --magic-link-subject "Sign in to ToolRouter"
 
 Required:
   SUPABASE_ACCESS_TOKEN from https://supabase.com/dashboard/account/tokens

@@ -45,7 +45,7 @@ If the Resend domain is not verified yet, apply only the production Site URL and
 npm run supabase:auth-config -- --url-only
 ```
 
-The confirmation email should link to `https://toolrouter.world/auth/confirm?...`, not directly to the Supabase project URL. That route exchanges Supabase's `token_hash` with `verifyOtp` and redirects into `/dashboard` with the session fragment expected by the dashboard.
+The confirmation and magic-link emails should link to `https://toolrouter.world/auth/confirm?...`, not directly to the Supabase project URL. That route exchanges Supabase's `token_hash` with `verifyOtp` and redirects into `/dashboard` with the session fragment expected by the dashboard.
 
 After applying the config, run a production smoke test by requesting a magic link from `https://toolrouter.world/dashboard`. The received email link must be on `toolrouter.world`, and the embedded redirect must resolve to `https://toolrouter.world/dashboard`, not `localhost`.
 
