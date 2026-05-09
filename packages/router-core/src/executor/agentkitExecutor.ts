@@ -1,3 +1,5 @@
+import { randomBytes } from "node:crypto";
+
 function decimalUsdToAtomic(value) {
   const normalized = String(value || "0").trim();
   if (!/^\d+(\.\d+)?$/.test(normalized)) throw new Error(`invalid USD amount: ${value}`);
@@ -30,12 +32,14 @@ function allowedHosts() {
 
 function allowedChains() {
   const chains = new Set(
-    (process.env.X402_ALLOWED_CHAINS || "eip155:8453,eip155:480")
+    (process.env.X402_ALLOWED_CHAINS || "eip155:8453,eip155:480,base")
       .split(",")
       .map((chain) => chain.trim())
       .filter(Boolean),
   );
   chains.add(process.env.X402_DEFAULT_CHAIN_ID || "eip155:8453");
+  if (chains.has("eip155:8453")) chains.add("base");
+  if (chains.has("base")) chains.add("eip155:8453");
   return chains;
 }
 
@@ -54,6 +58,41 @@ function buildInit(request) {
     return { method: request.method || "POST", headers, body: JSON.stringify(request.json) };
   }
   return { method: request.method || "GET", headers, body: request.body };
+}
+
+function usesAgentKitProofHeader(endpoint) {
+  return endpoint?.agentkit_proof_header === true;
+}
+
+async function buildAgentKitProofHeader({ deps, account, request }) {
+  if (typeof deps.formatSIWEMessage !== "function") {
+    throw new Error("AgentKit SIWE formatter is unavailable");
+  }
+  const parsed = new URL(request.url);
+  const now = new Date();
+  const expiry = new Date(now.getTime() + 5 * 60 * 1000);
+  const info = {
+    domain: parsed.host,
+    uri: request.url,
+    version: "1",
+    nonce: randomBytes(16).toString("hex"),
+    issuedAt: now.toISOString(),
+    expirationTime: expiry.toISOString(),
+    chainId: process.env.AGENTKIT_CHAIN_ID || "eip155:480",
+    type: "eip191",
+    statement: "Verify your agent is backed by a real human",
+  };
+  const message = deps.formatSIWEMessage(info, account.address);
+  const signature = await account.signMessage({ message });
+  return Buffer.from(JSON.stringify({ ...info, address: account.address, signature })).toString("base64");
+}
+
+async function buildPaymentInit({ endpoint, deps, account, request }) {
+  const init = buildInit(request);
+  if (!usesAgentKitProofHeader(endpoint)) return init;
+  const headers = new Headers(init.headers);
+  headers.set("agentkit", await buildAgentKitProofHeader({ deps, account, request }));
+  return { ...init, headers };
 }
 
 async function readResponseBody(response) {
@@ -117,7 +156,7 @@ function chargedFrom({ path, receipt, events }) {
 
 async function loadPaymentDeps() {
   try {
-    const [{ createAgentkitClient }, { x402Client }, { ExactEvmScheme }, { wrapFetchWithPayment }, { privateKeyToAccount }] =
+    const [{ createAgentkitClient, formatSIWEMessage }, { x402Client }, { ExactEvmScheme, registerExactEvmScheme }, { wrapFetchWithPayment }, { privateKeyToAccount }] =
       await Promise.all([
         import("@worldcoin/agentkit"),
         import("@x402/core/client"),
@@ -125,7 +164,7 @@ async function loadPaymentDeps() {
         import("@x402/fetch"),
         import("viem/accounts"),
       ]);
-    return { createAgentkitClient, x402Client, ExactEvmScheme, wrapFetchWithPayment, privateKeyToAccount };
+    return { createAgentkitClient, formatSIWEMessage, x402Client, ExactEvmScheme, registerExactEvmScheme, wrapFetchWithPayment, privateKeyToAccount };
   } catch (error) {
     throw Object.assign(
       new Error(
@@ -171,20 +210,32 @@ function createAccount(deps, paymentSigner) {
   return deps.privateKeyToAccount(walletPrivateKey() as `0x${string}`);
 }
 
-function createPaymentFetch({ x402Client, ExactEvmScheme, wrapFetchWithPayment, account, maxUsd, events, baseFetch = fetch }) {
+function requirementAtomicAmount(requirement) {
+  return requirement.amount ?? requirement.maxAmountRequired ?? "0";
+}
+
+function registerPaymentSchemes({ client, deps, account }) {
+  if (typeof deps.registerExactEvmScheme === "function") {
+    deps.registerExactEvmScheme(client, { signer: account });
+    return;
+  }
+  client.register("eip155:*", new deps.ExactEvmScheme(account));
+}
+
+function createPaymentFetch({ x402Client, ExactEvmScheme, registerExactEvmScheme, wrapFetchWithPayment, account, maxUsd, events, baseFetch = fetch }) {
   const client = new x402Client();
-  client.register("eip155:*", new ExactEvmScheme(account));
+  registerPaymentSchemes({ client, deps: { ExactEvmScheme, registerExactEvmScheme }, account });
   client.registerPolicy((version, requirements) =>
     requirements.filter((requirement) => allowedChains().has(requirement.network)),
   );
   client.registerPolicy((version, requirements) =>
-    requirements.filter((requirement) => BigInt(requirement.amount) <= decimalUsdToAtomic(maxUsd)),
+    requirements.filter((requirement) => BigInt(requirementAtomicAmount(requirement)) <= decimalUsdToAtomic(maxUsd)),
   );
   client.onBeforePaymentCreation((context) => {
     events.push({
       type: "x402_payment_selected",
       network: context.selectedRequirements.network,
-      amount_usd: atomicToUsdString(context.selectedRequirements.amount),
+      amount_usd: atomicToUsdString(requirementAtomicAmount(context.selectedRequirements)),
       scheme: context.selectedRequirements.scheme,
     });
     return null;
@@ -230,7 +281,7 @@ export async function executeEndpoint({ endpoint, request, maxUsd, traceId, paym
   let response;
   let path;
 
-  if (selectedPaymentMode === "x402_only") {
+  if (selectedPaymentMode === "x402_only" || usesAgentKitProofHeader(endpoint)) {
     const fetchWithPayment = createPaymentFetch({
       ...deps,
       account,
@@ -238,8 +289,8 @@ export async function executeEndpoint({ endpoint, request, maxUsd, traceId, paym
       events,
       baseFetch: fetchImpl || fetch,
     });
-    response = await fetchWithPayment(request.url, init);
-    path = "x402";
+    response = await fetchWithPayment(request.url, await buildPaymentInit({ endpoint, deps, account, request }));
+    path = usesAgentKitProofHeader(endpoint) ? "agentkit_to_x402" : "x402";
   } else {
     const agentkit = deps.createAgentkitClient({
       signer: {

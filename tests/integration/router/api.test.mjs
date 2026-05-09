@@ -172,12 +172,20 @@ describe("router API", () => {
     assert.equal(body.status, "unverified");
     assert.equal(body.summary.endpoint_count, 4);
     assert.equal(body.summary.operational_count, 1);
+    assert.deepEqual(
+      body.endpoints.map((endpoint) => endpoint.id).sort(),
+      ["browserbase.fetch", "browserbase.search", "browserbase.session", "exa.search"].sort(),
+    );
     const exa = body.endpoints.find((endpoint) => endpoint.id === "exa.search");
     assert.equal(exa.status, "healthy");
     assert.equal(exa.latency_ms, 123);
     assert.equal(exa.p50_latency_ms, 123);
     assert.equal(exa.sparkline_30d.length, 30);
     assert.ok(exa.uptime_30d > 0);
+    assert.equal(exa.agentkit_value_label, "AgentKit-Free Trial");
+    assert.equal(exa.agentkit_status, "healthy");
+    assert.equal(exa.agentkit_operational, true);
+    assert.equal(exa.agentkit_path, "agentkit");
   });
 
   it("creates dashboard-owned API keys without an admin token", async () => {
@@ -304,7 +312,7 @@ describe("router API", () => {
     assert.equal(topUpResponse.status, 400);
     const body = await topUpResponse.json();
     assert.equal(body.error.code, "invalid_amount");
-    assert.match(body.error.message, /top-up cap of 5/);
+    assert.match(body.error.message, /Top-ups are capped at \$5 for now\. Enter \$5 or less\./);
   });
 
   it("alerts and retries Stripe settlement when funding fails", async () => {
@@ -476,12 +484,178 @@ describe("router API", () => {
     assert.equal(listed.requests[0].id, created.id);
     assert.equal(listed.requests[0].payment_reference, null);
     assert.equal(listed.requests[0].credit_reservation_id.startsWith("crr_"), true);
-    assert.equal(listed.requests[0].agentkit_value_label, "AgentKit-Free Trial");
+    assert.equal(listed.requests[0].agentkit_value_label, null);
 
     const getResponse = await fetch(`${baseUrl}/v1/requests/${created.id}`, { headers: authHeaders() });
     const detail = await getResponse.json();
     assert.equal(detail.request.id, created.id);
     assert.equal(detail.request.endpoint_id, "exa.search");
+  });
+
+  it("stores AgentKit value only when the request actually realized it", async () => {
+    const isolatedStore = new LocalStore({
+      path: join(mkdtempSync(join(tmpdir(), "toolrouter-agentkit-value-")), "store.json"),
+    });
+    const isolatedApp = createApiApp({
+      logger: false,
+      cache: new MemoryCache(),
+      store: isolatedStore,
+      executor: async (payload) => ({
+        trace_id: payload.traceId,
+        endpoint_id: payload.endpoint.id,
+        status_code: 200,
+        ok: true,
+        path: "agentkit_to_x402",
+        charged: true,
+        estimated_usd: payload.request.estimatedUsd,
+        amount_usd: "0.007",
+        currency: "USD",
+        payment_reference: "pay_paid_fallback",
+        payment_network: "eip155:8453",
+        payment_error: null,
+        latency_ms: 1,
+        body: { ok: true },
+      }),
+    });
+    await isolatedApp.listen({ port: 0, host: "127.0.0.1" });
+    const isolatedBaseUrl = `http://127.0.0.1:${isolatedApp.server.address().port}`;
+    try {
+      const response = await fetch(`${isolatedBaseUrl}/v1/requests`, {
+        method: "POST",
+        headers: authHeaders(),
+        body: JSON.stringify({
+          endpoint_id: "exa.search",
+          input: { query: "AgentKit", search_type: "fast", num_results: 1 },
+          maxUsd: "0.02",
+        }),
+      });
+      assert.equal(response.status, 200);
+
+      const listResponse = await fetch(`${isolatedBaseUrl}/v1/requests`, { headers: authHeaders() });
+      const listed = await listResponse.json();
+      assert.equal(listed.requests[0].path, "agentkit_to_x402");
+      assert.equal(listed.requests[0].charged, true);
+      assert.equal(listed.requests[0].agentkit_value_type, null);
+      assert.equal(listed.requests[0].agentkit_value_label, null);
+    } finally {
+      await isolatedApp.close();
+    }
+  });
+
+  it("keeps realized AgentKit value categories on request rows", async () => {
+    const isolatedStore = new LocalStore({
+      path: join(mkdtempSync(join(tmpdir(), "toolrouter-agentkit-realized-")), "store.json"),
+    });
+    const isolatedApp = createApiApp({
+      logger: false,
+      cache: new MemoryCache(),
+      store: isolatedStore,
+      executor: async (payload) => {
+        const isBrowserbase = payload.endpoint.id === "browserbase.search";
+        return {
+          trace_id: payload.traceId,
+          endpoint_id: payload.endpoint.id,
+          status_code: 200,
+          ok: true,
+          path: isBrowserbase ? "agentkit_to_x402" : "agentkit",
+          charged: isBrowserbase,
+          estimated_usd: payload.request.estimatedUsd,
+          amount_usd: isBrowserbase ? "0.01" : "0",
+          currency: isBrowserbase ? "USD" : null,
+          payment_reference: isBrowserbase ? "pay_agentkit_access" : null,
+          payment_network: isBrowserbase ? "eip155:8453" : null,
+          payment_error: null,
+          latency_ms: 1,
+          body: { ok: true },
+        };
+      },
+    });
+    await isolatedApp.listen({ port: 0, host: "127.0.0.1" });
+    const isolatedBaseUrl = `http://127.0.0.1:${isolatedApp.server.address().port}`;
+    try {
+      const exaResponse = await fetch(`${isolatedBaseUrl}/v1/requests`, {
+        method: "POST",
+        headers: authHeaders(),
+        body: JSON.stringify({
+          endpoint_id: "exa.search",
+          input: { query: "AgentKit", search_type: "fast", num_results: 1 },
+          maxUsd: "0.02",
+        }),
+      });
+      assert.equal(exaResponse.status, 200);
+
+      const browserbaseResponse = await fetch(`${isolatedBaseUrl}/v1/requests`, {
+        method: "POST",
+        headers: authHeaders(),
+        body: JSON.stringify({
+          endpoint_id: "browserbase.search",
+          input: { query: "AgentKit" },
+          maxUsd: "0.02",
+        }),
+      });
+      assert.equal(browserbaseResponse.status, 200);
+
+      const listResponse = await fetch(`${isolatedBaseUrl}/v1/requests`, { headers: authHeaders() });
+      const listed = await listResponse.json();
+      const exa = listed.requests.find((row) => row.endpoint_id === "exa.search");
+      const browserbase = listed.requests.find((row) => row.endpoint_id === "browserbase.search");
+      assert.equal(exa.agentkit_value_type, "free_trial");
+      assert.equal(exa.agentkit_value_label, "AgentKit-Free Trial");
+      assert.equal(browserbase.agentkit_value_type, "access");
+      assert.equal(browserbase.agentkit_value_label, "AgentKit-Access");
+    } finally {
+      await isolatedApp.close();
+    }
+  });
+
+  it("passes explicit payment mode overrides to the request executor", async () => {
+    const executorCalls = [];
+    const isolatedStore = new LocalStore({
+      path: join(mkdtempSync(join(tmpdir(), "toolrouter-payment-mode-")), "store.json"),
+    });
+    const isolatedApp = createApiApp({
+      logger: false,
+      cache: new MemoryCache(),
+      store: isolatedStore,
+      executor: async (payload) => {
+        executorCalls.push(payload);
+        return {
+          trace_id: payload.traceId,
+          endpoint_id: payload.endpoint.id,
+          status_code: 200,
+          ok: true,
+          path: "x402",
+          charged: true,
+          estimated_usd: payload.request.estimatedUsd,
+          amount_usd: "0.001",
+          currency: "USD",
+          payment_reference: "pay_test",
+          payment_network: "eip155:8453",
+          payment_error: null,
+          latency_ms: 1,
+          body: { ok: true },
+        };
+      },
+    });
+    await isolatedApp.listen({ port: 0, host: "127.0.0.1" });
+    const isolatedBaseUrl = `http://127.0.0.1:${isolatedApp.server.address().port}`;
+    try {
+      const response = await fetch(`${isolatedBaseUrl}/v1/requests`, {
+        method: "POST",
+        headers: authHeaders(),
+        body: JSON.stringify({
+          endpoint_id: "exa.search",
+          input: { query: "AgentKit", search_type: "fast", num_results: 1 },
+          maxUsd: "0.02",
+          payment_mode: "x402_only",
+        }),
+      });
+      assert.equal(response.status, 200);
+      assert.equal((await response.json()).path, "x402");
+      assert.equal(executorCalls[0].paymentMode, "x402_only");
+    } finally {
+      await isolatedApp.close();
+    }
   });
 
   it("summarizes Supabase-backed monitoring data for dashboard health", async () => {

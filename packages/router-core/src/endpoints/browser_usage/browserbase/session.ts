@@ -10,6 +10,7 @@ export const browserbaseSessionEndpointDefinition = Object.freeze({
   method: "POST",
   agentkit: true,
   x402: true,
+  agentkit_proof_header: true,
   estimated_cost_usd: 0.002,
   agentkit_value_type: "access",
   agentkit_value_label: "AgentKit-Access",

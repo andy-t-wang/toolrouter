@@ -176,14 +176,16 @@ code {
   font-weight: 600;
   gap: 10px;
   letter-spacing: -0.02em;
+  line-height: 1;
   min-width: 174px;
 }
 
 .brand-mark {
   display: block;
   flex: none;
-  height: 26px;
-  width: 32px;
+  height: 22px;
+  transform: translateY(-1px);
+  width: 28px;
 }
 
 .workspace-path {
@@ -733,6 +735,18 @@ code {
   min-width: 720px;
 }
 
+.ledger-amount.positive {
+  color: var(--good);
+}
+
+.ledger-amount.negative {
+  color: var(--bad);
+}
+
+.ledger-amount.neutral {
+  color: var(--mute);
+}
+
 .recent-calls-table th,
 .recent-calls-table td {
   overflow: hidden;
@@ -796,8 +810,29 @@ code {
   width: fit-content;
 }
 
+.endpoint-cell {
+  align-items: center;
+  display: inline-flex;
+  gap: 10px;
+  min-width: 0;
+}
+
+.endpoint-logo {
+  border-radius: 5px;
+  display: block;
+  flex: 0 0 auto;
+  height: 24px;
+  object-fit: contain;
+  width: 24px;
+}
+
 .path-chip {
   align-items: center;
+}
+
+.value-chip {
+  align-items: center;
+  gap: 6px;
 }
 
 .agentkit-logo {
@@ -1264,7 +1299,6 @@ code {
   font-size: 14px;
   line-height: 1.55;
   margin: 0;
-  min-height: 170px;
   overflow: auto;
   padding: 22px 24px 26px;
   white-space: pre-wrap;
@@ -1294,7 +1328,6 @@ code {
 
 .mcp-connect.compact .mcp-code {
   font-size: 12.5px;
-  min-height: 150px;
   padding: 18px;
 }
 
@@ -1349,6 +1382,7 @@ code {
   font-weight: 600;
   gap: 10px;
   letter-spacing: -0.02em;
+  line-height: 1;
 }
 
 .mkt-brand.small {
@@ -1575,6 +1609,17 @@ code {
   width: 32px;
 }
 
+.vp-cluster .lg.logo-lg {
+  padding: 6px;
+}
+
+.vp-cluster .lg.logo-lg img {
+  display: block;
+  height: 100%;
+  object-fit: contain;
+  width: 100%;
+}
+
 .vp-fallback svg {
   height: 120px;
   width: 120px;
@@ -1706,6 +1751,14 @@ code {
   display: block;
 }
 
+.provider-meta {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-height: 20px;
+}
+
 .provider-name {
   font-weight: 500;
 }
@@ -1732,6 +1785,29 @@ code {
   height: 28px;
   place-items: center;
   width: 28px;
+}
+
+.prov-mark.prov-logo {
+  background: #ffffff;
+  padding: 5px;
+}
+
+.prov-mark.prov-logo img {
+  display: block;
+  height: 100%;
+  object-fit: contain;
+  width: 100%;
+}
+
+.status-human-badge {
+  font-size: 10px;
+  height: 18px;
+  padding: 0 6px 0 5px;
+}
+
+.status-human-badge .agentkit-logo {
+  height: 12px;
+  width: 12px;
 }
 
 .mkt-uptime-bars {
@@ -2402,7 +2478,6 @@ code {
 
   .mcp-code {
     font-size: 13px;
-    min-height: 170px;
     padding: 20px;
   }
 

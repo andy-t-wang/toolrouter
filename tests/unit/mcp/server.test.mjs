@@ -112,6 +112,29 @@ describe("ToolRouter MCP server", () => {
     });
   });
 
+  it("passes explicit payment mode overrides for smoke tests", async () => {
+    const calls = [];
+    const result = await callTool("browserbase_fetch", {
+      url: "https://example.com",
+      maxUsd: "0.02",
+      payment_mode: "x402_only",
+    }, {
+      env: { TOOLROUTER_API_URL: "http://router.test", TOOLROUTER_API_KEY: "tr_test" },
+      fetchImpl: async (url, init) => {
+        calls.push({ url, init });
+        return response({ id: "req_3", endpoint_id: "browserbase.fetch", path: "x402", charged: true });
+      },
+    });
+
+    assert.equal(result.isError, false);
+    assert.deepEqual(JSON.parse(calls[0].init.body), {
+      endpoint_id: "browserbase.fetch",
+      input: { url: "https://example.com" },
+      maxUsd: "0.02",
+      payment_mode: "x402_only",
+    });
+  });
+
   it("reports missing API key as an MCP tool error", async () => {
     const result = await callTool("toolrouter_list_endpoints", {}, {
       env: { TOOLROUTER_API_URL: "http://router.test" },

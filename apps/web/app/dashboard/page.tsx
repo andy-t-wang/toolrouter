@@ -5,6 +5,12 @@ import { createClient } from "@supabase/supabase-js";
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
+import {
+  compactLedgerEntries,
+  ledgerAmountPolarity,
+  ledgerAmountSign,
+  ledgerTypeLabel,
+} from "../dashboard-ledger.ts";
 import { computeDashboardMetrics, paidAmount } from "../dashboard-metrics.ts";
 import { McpClientTabs } from "../mcp-client-tabs.tsx";
 import { firstQueryPrompt } from "../mcp-content.ts";
@@ -120,6 +126,13 @@ function money(value: unknown) {
   return `$${number.toFixed(4).replace(/0+$/u, "").replace(/\.$/u, "")}`;
 }
 
+function ledgerMoney(entry: any) {
+  const value = Number(entry?.amount_usd);
+  const formatted = money(Number.isFinite(value) ? Math.abs(value) : entry?.amount_usd);
+  if (formatted === "-") return formatted;
+  return `${ledgerAmountSign(entry)}${formatted}`;
+}
+
 function formatDate(value: string | null | undefined) {
   if (!value) return "-";
   const date = new Date(value);
@@ -130,22 +143,6 @@ function formatDate(value: string | null | undefined) {
     hour: "2-digit",
     minute: "2-digit",
   });
-}
-
-function ledgerTypeLabel(type: unknown) {
-  const labels: Record<string, string> = {
-    top_up_settled: "Credits added",
-    top_up_failed: "Top-up failed",
-    reserve: "Usage started",
-    capture: "Usage charged",
-    release: "Credits returned",
-  };
-  const normalized = String(type || "").trim();
-  if (!normalized) return "-";
-  if (labels[normalized]) return labels[normalized];
-  return normalized
-    .replace(/[_-]+/gu, " ")
-    .replace(/\b\w/gu, (letter) => letter.toUpperCase());
 }
 
 function sourceLabel(source: unknown) {
@@ -179,6 +176,40 @@ function monthStartIso() {
   return new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
 }
 
+function titleCase(value: string) {
+  return value ? `${value.slice(0, 1).toUpperCase()}${value.slice(1)}` : value;
+}
+
+function endpointMeta(endpointId: unknown) {
+  const [provider = "", rawName = ""] = String(endpointId || "").split(".");
+  const logos: Record<string, string> = {
+    browserbase: "/browserbase-logomark.svg",
+    exa: "/exa-logomark.svg",
+  };
+  return {
+    logo: logos[provider] || "",
+    name: titleCase(rawName || provider || "Endpoint"),
+    provider,
+  };
+}
+
+function endpointCell(endpointId: unknown) {
+  const meta = endpointMeta(endpointId);
+  return (
+    <span className="endpoint-cell">
+      {meta.logo ? (
+        <img
+          className="endpoint-logo"
+          src={meta.logo}
+          alt=""
+          aria-hidden="true"
+        />
+      ) : null}
+      <span>{meta.name}</span>
+    </span>
+  );
+}
+
 function keyStatus(active: boolean) {
   return (
     <span className={`key-status ${active ? "active" : "disabled"}`}>
@@ -191,37 +222,40 @@ function keyStatus(active: boolean) {
 function pathChip(path: string, charged: boolean) {
   const route = String(path || "unknown").toLowerCase();
   if (route === "agentkit")
-    return (
-      <span className="chip free path-chip agentkit-path" title="request sent with agentkit">
-        <img className="agentkit-logo" src="/human.svg" alt="" aria-hidden="true" />
-        agentkit · free
-      </span>
-    );
+    return <span className="chip free path-chip">agentkit</span>;
   if (route === "x402")
     return <span className="chip accent">x402{charged ? " · paid" : ""}</span>;
   if (route === "agentkit_to_x402")
-    return (
-      <span className="chip accent path-chip agentkit-path" title="request sent with agentkit">
-        <img className="agentkit-logo" src="/human.svg" alt="" aria-hidden="true" />
-        agentkit to x402 · paid
-      </span>
-    );
+    return <span className="chip accent">x402{charged ? " · paid" : ""}</span>;
   return <span className="chip neutral">{route}</span>;
 }
 
 function valueChip(row: any) {
+  const path = String(row.path || "").toLowerCase();
+  if (path !== "agentkit" && path !== "agentkit_to_x402") {
+    return <span className="muted">-</span>;
+  }
+  if (!row.agentkit_value_type && !row.agentkit_value_label) {
+    return <span className="muted">-</span>;
+  }
+  const normalized = String(row.agentkit_value_type || row.agentkit_value_label).toLowerCase();
   const label =
-    row.agentkit_value_label ||
-    (String(row.endpoint_id || "").startsWith("browserbase.")
-      ? "AgentKit-Access"
-      : "AgentKit-Free Trial");
-  const normalized = String(row.agentkit_value_type || label).toLowerCase();
+    normalized.includes("access")
+      ? "Access"
+      : normalized.includes("discount")
+        ? "Discount"
+        : "Free";
   const cls = normalized.includes("access")
     ? "accent"
     : normalized.includes("discount")
       ? "warn"
       : "free";
-  return <span className={`chip ${cls}`}>{label}</span>;
+  return (
+    <span className={`chip ${cls} value-chip`} title={`AgentKit ${label}`}>
+      <img className="agentkit-logo" src="/human.svg" alt="" aria-hidden="true" />
+      {label}
+    </span>
+  );
 }
 
 function humanBadge() {
@@ -340,6 +374,7 @@ export default function DashboardPage() {
     const rows = monthRequests.length ? monthRequests : requests;
     return computeDashboardMetrics(rows);
   }, [monthRequests, requests]);
+  const ledgerRows = useMemo(() => compactLedgerEntries(ledger), [ledger]);
   const agentKitVerified = Boolean(balance?.agentkit_verification?.verified);
   const agentKitCheckMeta = [
     balance?.agentkit_verification?.last_checked_at
@@ -795,7 +830,7 @@ export default function DashboardPage() {
                               <td className="mono muted">
                                 {formatTime(row.ts)}
                               </td>
-                              <td className="mono">{row.endpoint_id}</td>
+                              <td>{endpointCell(row.endpoint_id)}</td>
                               <td>{pathChip(row.path, row.charged)}</td>
                               <td>{valueChip(row)}</td>
                               <td
@@ -1002,8 +1037,8 @@ export default function DashboardPage() {
                         </tr>
                       </thead>
                       <tbody>
-                        {ledger.length ? (
-                          ledger.map((entry) => (
+                        {ledgerRows.length ? (
+                          ledgerRows.map((entry) => (
                             <tr key={entry.id}>
                               <td className="mono muted">
                                 {formatTime(entry.ts)}
@@ -1013,8 +1048,10 @@ export default function DashboardPage() {
                               <td className="mono muted clip">
                                 {entry.reference_id || "-"}
                               </td>
-                              <td className="mono num">
-                                {money(entry.amount_usd)}
+                              <td
+                                className={`mono num ledger-amount ${ledgerAmountPolarity(entry)}`}
+                              >
+                                {ledgerMoney(entry)}
                               </td>
                             </tr>
                           ))

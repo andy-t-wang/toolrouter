@@ -33,6 +33,14 @@ function livePaymentSigner() {
         message,
       });
     },
+    signTypedData: async (payload) =>
+      crossmint.signTypedData({
+        walletLocator: process.env.CROSSMINT_LIVE_WALLET_LOCATOR,
+        domain: payload.domain,
+        types: payload.types,
+        primaryType: payload.primaryType,
+        message: payload.message,
+      }),
   };
 }
 
@@ -69,18 +77,20 @@ describe("Browserbase live AgentKit/x402 smoke", () => {
     assert.ok(result.body);
   });
 
-  it("can force a capped Browserbase x402 payment for wallet plumbing", { skip: runPaid ? false : "paid Browserbase smoke disabled" }, async () => {
-    const endpoint = getEndpoint("browserbase.search");
-    const result = await runSmoke({
-      endpointId: "browserbase.search",
-      smoke: endpoint.liveSmoke.paid_path,
-      traceId: `live_browserbase_x402_${Date.now()}`,
-    });
+  it("can force capped Browserbase x402 payments for each paid access endpoint", { skip: runPaid ? false : "paid Browserbase smoke disabled" }, async () => {
+    for (const endpointId of ["browserbase.search", "browserbase.fetch", "browserbase.session"]) {
+      const endpoint = getEndpoint(endpointId);
+      const result = await runSmoke({
+        endpointId,
+        smoke: endpoint.liveSmoke.paid_path,
+        traceId: `live_${endpointId.replace(/\W/gu, "_")}_x402_${Date.now()}`,
+      });
 
-    assert.equal(result.ok, true);
-    assert.equal(result.path, "x402");
-    assert.equal(result.charged, true);
-    assert.equal(result.status_code, 200);
-    assert.ok(result.body);
+      assert.equal(result.ok, true, endpointId);
+      assert.ok(["x402", "agentkit_to_x402"].includes(result.path), endpointId);
+      assert.equal(result.charged, true, endpointId);
+      assert.equal(result.status_code, 200, endpointId);
+      assert.ok(result.body, endpointId);
+    }
   });
 });

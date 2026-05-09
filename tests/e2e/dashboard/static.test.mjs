@@ -8,6 +8,7 @@ const setupPage = readFileSync(new URL("../../../apps/web/app/setup/page.tsx", i
 const mcpClientTabs = readFileSync(new URL("../../../apps/web/app/mcp-client-tabs.tsx", import.meta.url), "utf8");
 const mcpContent = readFileSync(new URL("../../../apps/web/app/mcp-content.ts", import.meta.url), "utf8");
 const dashboardPage = readFileSync(new URL("../../../apps/web/app/dashboard/page.tsx", import.meta.url), "utf8");
+const dashboardLedger = readFileSync(new URL("../../../apps/web/app/dashboard-ledger.ts", import.meta.url), "utf8");
 const authConfirmRoute = readFileSync(new URL("../../../apps/web/app/auth/confirm/route.ts", import.meta.url), "utf8");
 const confirmationTemplate = readFileSync(new URL("../../../supabase/email-templates/confirmation.html", import.meta.url), "utf8");
 const magicLinkTemplate = readFileSync(new URL("../../../supabase/email-templates/magic-link.html", import.meta.url), "utf8");
@@ -90,7 +91,11 @@ describe("web dashboard static wiring", () => {
     assert.match(dashboardPage, /\/v1\/agentkit\/registration/);
     assert.match(dashboardPage, /\/v1\/agentkit\/registration\/complete/);
     assert.match(dashboardPage, /\/human\.svg/);
-    assert.match(dashboardPage, /request sent with agentkit/);
+    assert.match(dashboardPage, /endpointCell\(row\.endpoint_id\)/);
+    assert.match(dashboardPage, /\/exa-logomark\.svg/);
+    assert.match(dashboardPage, /\/browserbase-logomark\.svg/);
+    assert.match(dashboardPage, /value-chip/);
+    assert.match(dashboardPage, /path !== "agentkit" && path !== "agentkit_to_x402"/);
     assert.match(dashboardPage, /Credit balance/);
     assert.match(dashboardPage, /\/v1\/top-ups\?limit=10/);
     assert.match(dashboardPage, /activeTopUps\.length \? \(/);
@@ -98,8 +103,11 @@ describe("web dashboard static wiring", () => {
     assert.doesNotMatch(dashboardPage, /funding_failed[\s\S]*billing-notice/);
     assert.match(dashboardPage, /Credits usually appear within 30-90 seconds after\s+checkout/);
     assert.match(dashboardPage, /ToolRouter retries settlement/);
-    assert.match(dashboardPage, /top_up_settled: "Credits added"/);
+    assert.match(dashboardLedger, /top_up_settled: "Credits added"/);
+    assert.match(dashboardLedger, /request_charge: "Usage charged"/);
+    assert.match(dashboardPage, /compactLedgerEntries\(ledger\)/);
     assert.match(dashboardPage, /ledgerTypeLabel\(entry\.type\)/);
+    assert.match(dashboardPage, /ledgerAmountPolarity\(entry\)/);
     assert.match(dashboardPage, /copy-key-button/);
     assert.match(dashboardPage, /Copied/);
     assert.doesNotMatch(dashboardPage, /Payment address/);

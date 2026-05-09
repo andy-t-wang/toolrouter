@@ -95,6 +95,10 @@ function checkCountsAsUp(check: any) {
   return check.status === "healthy" || check.status === "degraded";
 }
 
+function checkCountsAsAgentKit(check: any) {
+  return check?.path === "agentkit" || check?.path === "agentkit_to_x402";
+}
+
 function average(values: number[]) {
   if (!values.length) return null;
   return values.reduce((sum, value) => sum + value, 0) / values.length;
@@ -104,6 +108,19 @@ function median(values: number[]) {
   if (!values.length) return null;
   const sorted = [...values].sort((a, b) => a - b);
   return sorted[Math.floor(sorted.length / 2)];
+}
+
+function checkedAt(row: any) {
+  return row?.checked_at || row?.last_checked_at || null;
+}
+
+function latestByCheckedAt(rows: any[]) {
+  return (
+    rows
+      .filter((row) => checkedAt(row))
+      .sort((a, b) => Date.parse(checkedAt(b)) - Date.parse(checkedAt(a)))[0] ||
+    null
+  );
 }
 
 const CONSTRAINT_ERROR_MESSAGES: Record<
@@ -283,6 +300,10 @@ function healthSummaryForEndpoint(
     .map((check) => Number(check.latency_ms))
     .filter(Number.isFinite);
   const currentStatus = status?.status || latestCheck?.status || "unverified";
+  const latestAgentKitEvidence = latestByCheckedAt([
+    ...(status && checkCountsAsAgentKit(status) ? [status] : []),
+    ...checks.filter(checkCountsAsAgentKit),
+  ]);
   return {
     id: endpoint.id,
     provider: endpoint.provider,
@@ -293,6 +314,8 @@ function healthSummaryForEndpoint(
     agentkit: endpoint.agentkit,
     x402: endpoint.x402,
     estimated_cost_usd: endpoint.estimated_cost_usd,
+    agentkit_value_type: endpoint.agentkit_value_type,
+    agentkit_value_label: endpoint.agentkit_value_label,
     status: currentStatus,
     last_checked_at: status?.last_checked_at || latestCheck?.checked_at || null,
     status_code: status?.status_code ?? latestCheck?.status_code ?? null,
@@ -304,6 +327,13 @@ function healthSummaryForEndpoint(
     path: status?.path || latestCheck?.path || null,
     charged: Boolean(status?.charged ?? latestCheck?.charged ?? false),
     amount_usd: status?.amount_usd ?? latestCheck?.amount_usd ?? null,
+    agentkit_status: latestAgentKitEvidence?.status || "unverified",
+    agentkit_operational: latestAgentKitEvidence
+      ? checkCountsAsUp(latestAgentKitEvidence)
+      : false,
+    agentkit_last_checked_at: checkedAt(latestAgentKitEvidence),
+    agentkit_path: latestAgentKitEvidence?.path || null,
+    agentkit_charged: Boolean(latestAgentKitEvidence?.charged || false),
     last_error: status?.last_error || latestCheck?.error || null,
   };
 }
@@ -376,6 +406,28 @@ function normalizePayment(result: any) {
   };
 }
 
+function agentKitValueForRequest(endpoint: any, result: any) {
+  const path = String(result?.path || "").toLowerCase();
+  const type = endpoint?.agentkit_value_type || null;
+  const label = endpoint?.agentkit_value_label || null;
+  if (!type || !label) {
+    return { agentkit_value_type: null, agentkit_value_label: null };
+  }
+
+  const isFreeAgentKit = path === "agentkit" && !result?.charged;
+  const isAgentKitAccessOrDiscount =
+    path === "agentkit_to_x402" && type !== "free_trial";
+
+  if (!isFreeAgentKit && !isAgentKitAccessOrDiscount) {
+    return { agentkit_value_type: null, agentkit_value_label: null };
+  }
+
+  return {
+    agentkit_value_type: type,
+    agentkit_value_label: label,
+  };
+}
+
 function createRequestRow({
   traceId,
   endpoint,
@@ -384,6 +436,7 @@ function createRequestRow({
   result,
   credit,
 }: any) {
+  const agentKitValue = agentKitValueForRequest(endpoint, result);
   return {
     id: `req_${randomUUID()}`,
     ts: new Date().toISOString(),
@@ -403,8 +456,8 @@ function createRequestRow({
       request.estimated_usd ||
       request.estimatedUsd ||
       null,
-    agentkit_value_type: endpoint.agentkit_value_type,
-    agentkit_value_label: endpoint.agentkit_value_label,
+    agentkit_value_type: agentKitValue.agentkit_value_type,
+    agentkit_value_label: agentKitValue.agentkit_value_label,
     ...normalizePayment(result),
     credit_reservation_id: credit?.credit_reservation_id || null,
     credit_reserved_usd: credit?.credit_reserved_usd || null,
@@ -1117,6 +1170,7 @@ export function createApiApp({
       const endpoint = getEndpoint(endpointId);
       const providerRequest = endpoint.buildRequest(body.input || {});
       const maxUsd = body.maxUsd || body.max_usd;
+      const paymentMode = body.paymentMode || body.payment_mode;
       await enforceRequestPolicy({
         cache,
         auth,
@@ -1141,6 +1195,7 @@ export function createApiApp({
         endpoint,
         request: providerRequest,
         maxUsd,
+        paymentMode,
         traceId,
         paymentSigner: await paymentSignerForRequest(store, crossmint, auth),
       });

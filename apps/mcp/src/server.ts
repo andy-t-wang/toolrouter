@@ -76,6 +76,7 @@ export function tools(): McpTool[] {
         endpoint_id: { type: "string", description: "Endpoint id, such as exa.search or browserbase.search." },
         input: { type: "object", description: "Endpoint-specific input object." },
         maxUsd: { type: "string", description: "Optional caller spend cap in USD decimal form." },
+        payment_mode: { type: "string", enum: ["agentkit_first", "x402_only"], description: "Optional execution path override for explicit smoke tests." },
       }, ["endpoint_id", "input"]),
     },
     {
@@ -88,6 +89,7 @@ export function tools(): McpTool[] {
         num_results: { type: "integer", minimum: 1, maximum: 10 },
         include_summary: { type: "boolean" },
         maxUsd: { type: "string" },
+        payment_mode: { type: "string", enum: ["agentkit_first", "x402_only"] },
       }, ["query"]),
     },
     {
@@ -97,6 +99,7 @@ export function tools(): McpTool[] {
       inputSchema: jsonSchema({
         estimated_minutes: { type: "integer", minimum: 1, maximum: 120 },
         maxUsd: { type: "string" },
+        payment_mode: { type: "string", enum: ["agentkit_first", "x402_only"] },
       }),
     },
     {
@@ -117,6 +120,7 @@ export function tools(): McpTool[] {
         num_results: { type: "integer", minimum: 1, maximum: 10 },
         include_summary: { type: "boolean" },
         maxUsd: { type: "string" },
+        payment_mode: { type: "string", enum: ["agentkit_first", "x402_only"] },
       }, ["query"]),
     },
     {
@@ -126,6 +130,7 @@ export function tools(): McpTool[] {
       inputSchema: jsonSchema({
         query: { type: "string" },
         maxUsd: { type: "string" },
+        payment_mode: { type: "string", enum: ["agentkit_first", "x402_only"] },
       }, ["query"]),
     },
     {
@@ -135,6 +140,7 @@ export function tools(): McpTool[] {
       inputSchema: jsonSchema({
         url: { type: "string" },
         maxUsd: { type: "string" },
+        payment_mode: { type: "string", enum: ["agentkit_first", "x402_only"] },
       }, ["url"]),
     },
     {
@@ -144,6 +150,7 @@ export function tools(): McpTool[] {
       inputSchema: jsonSchema({
         estimated_minutes: { type: "integer", minimum: 1, maximum: 120 },
         maxUsd: { type: "string" },
+        payment_mode: { type: "string", enum: ["agentkit_first", "x402_only"] },
       }),
     },
   ];
@@ -158,6 +165,7 @@ function textResult(text: string, structuredContent?: any, isError = false) {
 }
 
 function endpointPayload(name: string, args: any) {
+  const paymentMode = args.payment_mode || args.paymentMode;
   if (name === "toolrouter_search" || name === "exa_search") {
     return {
       endpoint_id: "exa.search",
@@ -168,6 +176,7 @@ function endpointPayload(name: string, args: any) {
         include_summary: Boolean(args.include_summary),
       },
       maxUsd: args.maxUsd || "0.01",
+      ...(paymentMode ? { payment_mode: paymentMode } : {}),
     };
   }
   if (name === "browserbase_search") {
@@ -175,6 +184,7 @@ function endpointPayload(name: string, args: any) {
       endpoint_id: "browserbase.search",
       input: { query: args.query },
       maxUsd: args.maxUsd || "0.02",
+      ...(paymentMode ? { payment_mode: paymentMode } : {}),
     };
   }
   if (name === "browserbase_fetch") {
@@ -182,6 +192,7 @@ function endpointPayload(name: string, args: any) {
       endpoint_id: "browserbase.fetch",
       input: { url: args.url },
       maxUsd: args.maxUsd || "0.02",
+      ...(paymentMode ? { payment_mode: paymentMode } : {}),
     };
   }
   if (name === "toolrouter_browser_use" || name === "browserbase_session_create") {
@@ -190,6 +201,7 @@ function endpointPayload(name: string, args: any) {
       endpoint_id: "browserbase.session",
       input: { estimated_minutes: minutes },
       maxUsd: args.maxUsd || "0.01",
+      ...(paymentMode ? { payment_mode: paymentMode } : {}),
     };
   }
   return null;

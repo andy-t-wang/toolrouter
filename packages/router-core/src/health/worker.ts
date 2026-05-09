@@ -5,6 +5,7 @@ import { endpointRegistry } from "../endpoints/registry.ts";
 export const DEFAULT_HEALTH_CHECK_INTERVAL_MS = 12 * 60 * 60 * 1000;
 
 export const HEALTH_STATUSES = Object.freeze(["healthy", "degraded", "failing", "unverified"]);
+const AGENTKIT_HEALTH_PATHS = new Set(["agentkit", "agentkit_to_x402"]);
 
 function maybeNumber(value) {
   if (value === undefined || value === null) return null;
@@ -50,6 +51,56 @@ function statusFromResult(result) {
   if (result.status_code === null) return "failing";
   if (result.status_code >= 500) return "failing";
   return "degraded";
+}
+
+function isSuccessfulAgentKitRequest(row) {
+  if (!AGENTKIT_HEALTH_PATHS.has(row?.path)) return false;
+  if (row?.error) return false;
+  if (row?.ok === false) return false;
+  const statusCode = maybeNumber(row?.status_code);
+  if (statusCode !== null && (statusCode < 200 || statusCode >= 400)) return false;
+  return true;
+}
+
+async function recentAgentKitRequest({ db, endpoint, since }) {
+  if (!db || typeof db.listRequests !== "function") return null;
+  try {
+    const rows = await db.listRequests({
+      endpoint_id: endpoint.id,
+      since: since.toISOString(),
+      limit: 25,
+    });
+    return (rows || []).find(isSuccessfulAgentKitRequest) || null;
+  } catch {
+    return null;
+  }
+}
+
+function rowFromRequest(endpoint, requestRow, fallbackCheckedAt) {
+  const checkedAt = requestRow.ts || fallbackCheckedAt.toISOString();
+  const normalized = {
+    status_code: maybeNumber(requestRow.status_code),
+    ok: requestRow.ok !== false,
+    latency_ms: maybeNumber(requestRow.latency_ms) ?? 0,
+    payment_error: maybeString(requestRow.payment_error),
+  };
+  return {
+    id: `hc_req_${requestRow.id || randomUUID()}_${randomUUID()}`,
+    endpoint_id: endpoint.id,
+    checked_at: checkedAt,
+    status: statusFromResult(normalized),
+    status_code: normalized.status_code,
+    latency_ms: normalized.latency_ms,
+    path: maybeString(requestRow.path),
+    charged: Boolean(requestRow.charged),
+    estimated_usd: maybeString(requestRow.estimated_usd ?? endpoint.estimated_cost_usd),
+    amount_usd: maybeString(requestRow.amount_usd),
+    currency: maybeString(requestRow.currency),
+    payment_reference: maybeString(requestRow.payment_reference),
+    payment_network: maybeString(requestRow.payment_network),
+    payment_error: normalized.payment_error,
+    error: maybeString(requestRow.error),
+  };
 }
 
 function rowFromError(endpoint, checkedAt, error, latencyMs) {
@@ -135,7 +186,14 @@ async function persistRows(db, healthCheckRow) {
   return statusRow;
 }
 
-export async function runEndpointHealthCheck({ endpoint, executor, db, now = () => new Date() }) {
+export async function runEndpointHealthCheck({
+  endpoint,
+  executor,
+  db,
+  now = () => new Date(),
+  recentRequestWindowMs = DEFAULT_HEALTH_CHECK_INTERVAL_MS,
+  useRecentRequests = true,
+}) {
   if (!endpoint) throw new TypeError("endpoint is required");
   const checkedAt = now();
   const started = Date.now();
@@ -161,36 +219,47 @@ export async function runEndpointHealthCheck({ endpoint, executor, db, now = () 
     };
   } else {
     try {
-      const request = endpoint.buildRequest(endpoint.healthProbe.input);
-      const traceId = `health_${randomUUID()}`;
-      const result = await executeThroughExecutor(executor, {
-        kind: "health_probe",
-        endpoint,
-        endpointId: endpoint.id,
-        input: endpoint.healthProbe.input,
-        request,
-        maxUsd: endpoint.healthProbe.maxUsd,
-        paymentMode: endpoint.healthProbe.paymentMode || endpoint.defaultPaymentMode || "agentkit_first",
-        traceId,
-      });
-      const normalized = normalizeExecutionResult(result, Date.now() - started);
-      healthCheckRow = {
-        id: `hc_${randomUUID()}`,
-        endpoint_id: endpoint.id,
-        checked_at: checkedAt.toISOString(),
-        status: statusFromResult(normalized),
-        status_code: normalized.status_code,
-        latency_ms: normalized.latency_ms,
-        path: normalized.path,
-        charged: normalized.charged,
-        estimated_usd: normalized.estimated_usd ?? request.estimatedUsd,
-        amount_usd: normalized.amount_usd,
-        currency: normalized.currency,
-        payment_reference: normalized.payment_reference,
-        payment_network: normalized.payment_network,
-        payment_error: normalized.payment_error,
-        error: normalized.error,
-      };
+      const recentRequest = useRecentRequests
+        ? await recentAgentKitRequest({
+            db,
+            endpoint,
+            since: new Date(checkedAt.getTime() - recentRequestWindowMs),
+          })
+        : null;
+      if (recentRequest) {
+        healthCheckRow = rowFromRequest(endpoint, recentRequest, checkedAt);
+      } else {
+        const request = endpoint.buildRequest(endpoint.healthProbe.input);
+        const traceId = `health_${randomUUID()}`;
+        const result = await executeThroughExecutor(executor, {
+          kind: "health_probe",
+          endpoint,
+          endpointId: endpoint.id,
+          input: endpoint.healthProbe.input,
+          request,
+          maxUsd: endpoint.healthProbe.maxUsd,
+          paymentMode: endpoint.healthProbe.paymentMode || endpoint.defaultPaymentMode || "agentkit_first",
+          traceId,
+        });
+        const normalized = normalizeExecutionResult(result, Date.now() - started);
+        healthCheckRow = {
+          id: `hc_${randomUUID()}`,
+          endpoint_id: endpoint.id,
+          checked_at: checkedAt.toISOString(),
+          status: statusFromResult(normalized),
+          status_code: normalized.status_code,
+          latency_ms: normalized.latency_ms,
+          path: normalized.path,
+          charged: normalized.charged,
+          estimated_usd: normalized.estimated_usd ?? request.estimatedUsd,
+          amount_usd: normalized.amount_usd,
+          currency: normalized.currency,
+          payment_reference: normalized.payment_reference,
+          payment_network: normalized.payment_network,
+          payment_error: normalized.payment_error,
+          error: normalized.error,
+        };
+      }
     } catch (error) {
       healthCheckRow = rowFromError(endpoint, checkedAt, error, Date.now() - started);
     }
@@ -210,11 +279,20 @@ export async function runEndpointHealthChecks({
   executor,
   db,
   now = () => new Date(),
+  recentRequestWindowMs = DEFAULT_HEALTH_CHECK_INTERVAL_MS,
+  useRecentRequests = true,
   logger,
 }: any = {}) {
   const results = [];
   for (const endpoint of endpoints) {
-    const result = await runEndpointHealthCheck({ endpoint, executor, db, now });
+    const result = await runEndpointHealthCheck({
+      endpoint,
+      executor,
+      db,
+      now,
+      recentRequestWindowMs,
+      useRecentRequests,
+    });
     results.push(result);
     logger?.info?.("endpoint health check completed", {
       endpoint_id: result.endpoint_id,

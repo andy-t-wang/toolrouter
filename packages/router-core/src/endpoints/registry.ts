@@ -93,6 +93,7 @@ export function endpointToJSON(endpoint) {
     method: endpoint.method,
     agentkit: endpoint.agentkit,
     x402: endpoint.x402,
+    agentkit_proof_header: Boolean(endpoint.agentkit_proof_header),
     estimated_cost_usd: endpoint.estimated_cost_usd,
     agentkit_value_type: endpoint.agentkit_value_type,
     agentkit_value_label: endpoint.agentkit_value_label,

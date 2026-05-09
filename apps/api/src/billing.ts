@@ -77,22 +77,22 @@ export async function getCreditBalance(store: any, user_id: string) {
 }
 
 export function assertTopUpAmount(amountUsd: unknown) {
-  const amount = parseUsd(amountUsd, "amountUsd");
+  const amount = parseUsd(amountUsd, "Top-up amount");
   if (amount <= 0n) {
-    throw Object.assign(new Error("amountUsd must be greater than zero"), {
+    throw Object.assign(new Error("Enter a top-up amount greater than $0."), {
       statusCode: 400,
       code: "invalid_amount",
     });
   }
   if (amount % 10_000n !== 0n) {
-    throw Object.assign(new Error("amountUsd must be in whole cents"), {
+    throw Object.assign(new Error("Enter a top-up amount in whole cents."), {
       statusCode: 400,
       code: "invalid_amount",
     });
   }
   const max = parseUsd(process.env.TOOLROUTER_MAX_TOP_UP_USD || "5", "TOOLROUTER_MAX_TOP_UP_USD");
   if (amount > max) {
-    throw Object.assign(new Error(`amountUsd exceeds configured top-up cap of ${formatUsd(max)}`), {
+    throw Object.assign(new Error(`Top-ups are capped at $${formatUsd(max)} for now. Enter $${formatUsd(max)} or less.`), {
       statusCode: 400,
       code: "invalid_amount",
     });

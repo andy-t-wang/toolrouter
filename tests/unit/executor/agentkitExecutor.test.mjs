@@ -60,9 +60,12 @@ function paymentResponse(body = { results: [] }) {
   return jsonResponse(body, { headers: { "payment-response": receipt } });
 }
 
-function fakePaymentDeps({ captures, agentkitResponse, x402Response }) {
+function fakePaymentDeps({ captures, agentkitResponse, x402Response, selectedRequirements }) {
   class FakeX402Client {
     register() {}
+    registerV1(network) {
+      captures.v1Networks.push(network);
+    }
     registerPolicy(policy) {
       captures.policies.push(policy);
     }
@@ -87,13 +90,22 @@ function fakePaymentDeps({ captures, agentkitResponse, x402Response }) {
         },
       };
     },
+    formatSIWEMessage(info, address) {
+      captures.agentkitProofInfo = info;
+      return `siwe:${info.domain}:${info.uri}:${info.chainId}:${address}`;
+    },
     x402Client: FakeX402Client,
     ExactEvmScheme: FakeExactEvmScheme,
+    registerExactEvmScheme(client, config) {
+      captures.schemeAccount = config.signer;
+      client.register("eip155:*", new FakeExactEvmScheme(config.signer));
+      client.registerV1("base", new FakeExactEvmScheme(config.signer));
+    },
     wrapFetchWithPayment(_baseFetch, client) {
       return async (url, init) => {
         captures.x402Calls.push({ url, init });
         client.beforePayment?.({
-          selectedRequirements: {
+          selectedRequirements: selectedRequirements || {
             network: "eip155:8453",
             amount: "7000",
             scheme: "exact",
@@ -117,7 +129,9 @@ function captures() {
     x402Calls: [],
     policies: [],
     agentkitConfig: null,
+    agentkitProofInfo: null,
     schemeAccount: null,
+    v1Networks: [],
   };
 }
 
@@ -182,6 +196,7 @@ describe("AgentKit/x402 executor", () => {
     assert.equal(result.amount_usd, "0.007");
     assert.equal(seen.agentkitCalls.length, 1);
     assert.equal(seen.x402Calls.length, 1);
+    assert.deepEqual(seen.v1Networks, ["base"]);
   });
 
   it("supports x402-only mode for paid live smoke tests", async () => {
@@ -203,6 +218,70 @@ describe("AgentKit/x402 executor", () => {
     assert.equal(result.charged, true);
     assert.equal(seen.agentkitCalls.length, 0);
     assert.equal(seen.x402Calls.length, 1);
+  });
+
+  it("sends Browserbase AgentKit proof headers through the x402 payment rail", async () => {
+    process.env.X402_ALLOWED_HOSTS = "x402.browserbase.com";
+    process.env.X402_ALLOWED_CHAINS = "eip155:8453";
+    const seen = captures();
+    const result = await executeEndpoint({
+      endpoint: {
+        id: "browserbase.session",
+        defaultPaymentMode: "agentkit_first",
+        agentkit_proof_header: true,
+      },
+      request: {
+        method: "POST",
+        url: "https://x402.browserbase.com/browser/session/create",
+        headers: {},
+        json: { estimatedMinutes: 1 },
+        estimatedUsd: "0.002",
+      },
+      maxUsd: "0.01",
+      traceId: "trace_browserbase_agentkit_header",
+      paymentDeps: fakePaymentDeps({
+        captures: seen,
+        agentkitResponse: jsonResponse({ shouldNotBeUsed: true }),
+        x402Response: paymentResponse({ connectUrl: "wss://connect.browserbase.com/session" }),
+        selectedRequirements: {
+          network: "base",
+          maxAmountRequired: "2000",
+          scheme: "exact",
+        },
+      }),
+    });
+
+    assert.equal(result.path, "agentkit_to_x402");
+    assert.equal(result.charged, true);
+    assert.equal(result.amount_usd, "0.007");
+    assert.equal(seen.agentkitCalls.length, 0);
+    assert.equal(seen.x402Calls.length, 1);
+    const encoded = seen.x402Calls[0].init.headers.get("agentkit");
+    assert.ok(encoded);
+    const proof = JSON.parse(Buffer.from(encoded, "base64").toString("utf8"));
+    assert.equal(proof.domain, "x402.browserbase.com");
+    assert.equal(proof.uri, "https://x402.browserbase.com/browser/session/create");
+    assert.equal(proof.chainId, "eip155:480");
+    assert.equal(proof.address, "0x0000000000000000000000000000000000000001");
+    assert.match(proof.signature, /^signed:siwe:x402\.browserbase\.com:/);
+    assert.equal(seen.agentkitProofInfo.statement, "Verify your agent is backed by a real human");
+
+    const networkPolicy = seen.policies[0];
+    assert.deepEqual(
+      networkPolicy(1, [
+        { network: "base", scheme: "exact", maxAmountRequired: "2000" },
+        { network: "eip155:137", scheme: "exact", amount: "2000" },
+      ]).map((requirement) => requirement.network),
+      ["base"],
+    );
+    const amountPolicy = seen.policies[1];
+    assert.deepEqual(
+      amountPolicy(1, [
+        { network: "base", scheme: "exact", maxAmountRequired: "2000" },
+        { network: "base", scheme: "exact", maxAmountRequired: "20000" },
+      ]).map((requirement) => requirement.maxAmountRequired),
+      ["2000"],
+    );
   });
 
   it("can sign AgentKit requests through an injected hosted-wallet signer", async () => {

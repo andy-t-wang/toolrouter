@@ -82,7 +82,10 @@ describe("credit ledger", () => {
     delete process.env.TOOLROUTER_MAX_TOP_UP_USD;
     try {
       assert.equal(assertTopUpAmount("5"), "5");
-      assert.throws(() => assertTopUpAmount("5.01"), /top-up cap of 5/);
+      assert.throws(
+        () => assertTopUpAmount("5.01"),
+        /Top-ups are capped at \$5 for now\. Enter \$5 or less\./,
+      );
     } finally {
       if (previous === undefined) delete process.env.TOOLROUTER_MAX_TOP_UP_USD;
       else process.env.TOOLROUTER_MAX_TOP_UP_USD = previous;

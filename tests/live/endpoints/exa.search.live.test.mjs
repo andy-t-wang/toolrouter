@@ -33,6 +33,14 @@ function livePaymentSigner() {
         message,
       });
     },
+    signTypedData: async (payload) =>
+      crossmint.signTypedData({
+        walletLocator: process.env.CROSSMINT_LIVE_WALLET_LOCATOR,
+        domain: payload.domain,
+        types: payload.types,
+        primaryType: payload.primaryType,
+        message: payload.message,
+      }),
   };
 }
 
