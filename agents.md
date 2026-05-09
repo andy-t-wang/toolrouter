@@ -16,6 +16,26 @@ These are durable project decisions for future agents working in this repo.
 - New endpoints should follow the category/provider/endpoint module pattern.
 - Each endpoint module should define metadata, UI metadata, typed input validation through its builder, fixture input, health probe, live smoke config, and request builder.
 - Keep provider onboarding manual for now. Providers should only need correct AgentKit/x402 support; ToolRouter maps their endpoint into our template.
+- When asked to add a new endpoint to the service, treat this section like a mini-skill: first identify the provider, endpoint id, category, request shape, expected cost, and x402/AgentKit behavior, then implement the endpoint, UI metadata, MCP surface, and tests together.
+- Before coding a new endpoint, ask the user what the AgentKit benefit will be if it is not already explicit in the request or provider docs. Capture whether there is no AgentKit benefit, a free trial, access unlock, or discount before choosing endpoint metadata.
+- Endpoint modules live at `packages/router-core/src/endpoints/<category>/<provider>/<endpoint>.ts`. Add or update the typed request builder in `packages/router-core/src/endpoints/builders.ts`, register the endpoint in `packages/router-core/src/endpoints/registry.ts`, and update `packages/router-core/src/endpoints/categories.ts` only when the endpoint should become the recommended endpoint for a category.
+- Every endpoint must explicitly classify what the user gets from AgentKit/x402 with `agentkit_value_type` and `agentkit_value_label`:
+  - `free_trial` / `AgentKit-Free Trial`: AgentKit succeeds without an x402 charge and provides free provider usage.
+  - `access` / `AgentKit-Access`: x402 still pays, and a valid AgentKit proof unlocks access or a premium capability such as Browserbase Verified browsers.
+  - `discount` / `AgentKit-Discount`: x402 still pays, and AgentKit lowers the price versus the normal paid path.
+- Do not guess the AgentKit value category from branding. Confirm it from the user and/or the provider's x402/AgentKit behavior, then encode the exact category in endpoint metadata.
+- If the provider requires a separate AgentKit proof header in addition to x402 payment, set `agentkit_proof_header: true` and cover it in executor tests.
+- Provider logos are part of endpoint onboarding. Save a small provider logomark in `apps/web/public/<provider>-logomark.svg` from an official source when possible, then wire it into the landing/status and dashboard provider logo maps. Keep endpoint `ui.badge` as a short text fallback, not the primary logo.
+- Do not send provider API keys, `Authorization`, or provider-specific auth headers in endpoint execution when those headers bypass AgentKit/x402. The endpoint builder should emit only the headers needed for x402/AgentKit execution.
+- For each new endpoint, include deterministic tests before live tests:
+  - Registry/unit tests in `tests/unit/endpoints/registry.test.mjs` for endpoint registration, category grouping or recommendation, request building, health probe config, live smoke config, and AgentKit value metadata.
+  - Builder validation tests for required input, aliases, safe defaults, estimated USD, and strict spend caps.
+  - Executor tests when the endpoint uses provider-specific x402 behavior, AgentKit proof headers, protocol-version quirks, chain aliases, or custom payment modes.
+  - API integration tests for `GET /v1/status` and dashboard request rows so public status and AgentKit value metadata remain badge-safe.
+  - Web/static tests when adding logos, dashboard chips, status table rows, or new user-visible labels.
+  - MCP tests when adding named endpoint tools or category wrappers.
+  - Live tests under `tests/live/**` gated by provider-specific env flags, with `RUN_LIVE_<PROVIDER>_TESTS=true` for default smoke and `RUN_LIVE_<PROVIDER>_PAID_SMOKE=true` for forced paid paths.
+- Normal PR tests must stay deterministic and must not spend money. Live smoke tests should be opt-in, use fixture inputs, enforce `maxUsd`, avoid sensitive logs, and assert the expected path and `charged` state for the endpoint's value category.
 
 ## Exa Search Decision
 
