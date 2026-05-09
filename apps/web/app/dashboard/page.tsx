@@ -619,22 +619,6 @@ export default function DashboardPage() {
               <span className="brand-mark" aria-hidden="true" />
               <span>ToolRouter</span>
             </a>
-            <div className="session-actions">
-              <span className="pill">
-                <span className="dot live" />
-                99.4% / 24h
-              </span>
-              <button
-                className="button ghost compact"
-                type="button"
-                onClick={() =>
-                  refresh().catch((error) => setBanner(error.message))
-                }
-              >
-                Refresh
-              </button>
-              <div className="avatar">JS</div>
-            </div>
           </div>
         </header>
 

@@ -88,6 +88,8 @@ describe("web dashboard static wiring", () => {
     assert.doesNotMatch(dashboardPage, /Check account against AgentKit/);
     assert.doesNotMatch(dashboardPage, /billing wallet/);
     assert.doesNotMatch(dashboardPage, /Endpoint operations/);
+    assert.doesNotMatch(dashboardPage, /99\.4% \/ 24h/);
+    assert.doesNotMatch(dashboardPage, /className="avatar"/);
   });
 
   it("uses dashboard session routes and resource-style router endpoints", () => {

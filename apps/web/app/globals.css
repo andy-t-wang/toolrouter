@@ -160,7 +160,6 @@ code {
 .top-brand,
 .workspace-card,
 .workspace-path,
-.session-actions,
 .key-actions,
 .key-token-row,
 .pill,
@@ -212,13 +211,6 @@ code {
   font-weight: 500;
 }
 
-.session-actions {
-  gap: 10px;
-  justify-content: flex-end;
-  min-width: 0;
-}
-
-.avatar,
 .workspace-mark {
   background: var(--ink);
   color: var(--bone);
@@ -226,12 +218,6 @@ code {
   font-size: 11px;
   font-weight: 600;
   place-items: center;
-}
-
-.avatar {
-  border-radius: 99px;
-  height: 28px;
-  width: 28px;
 }
 
 .dash {
@@ -2092,11 +2078,6 @@ code {
     display: none;
   }
 
-  .session-actions {
-    flex: 1;
-    justify-content: flex-end;
-  }
-
   .dash {
     grid-template-columns: 1fr;
     min-height: auto;
@@ -2165,10 +2146,6 @@ code {
     align-items: center;
     flex-direction: row;
     flex-wrap: wrap;
-  }
-
-  .session-actions {
-    gap: 8px;
   }
 
   .page-actions {
