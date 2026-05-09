@@ -1180,33 +1180,33 @@ code {
 }
 
 .mcp-connect-head h2 {
-  font-size: 48px;
+  font-size: 34px;
   font-weight: 500;
   letter-spacing: 0;
-  line-height: 1.02;
-  margin: 0 0 28px;
+  line-height: 1.08;
+  margin: 0 0 14px;
 }
 
 .mcp-connect-head p {
   color: var(--mute);
-  font-size: 22px;
-  line-height: 1.35;
+  font-size: 16px;
+  line-height: 1.45;
   margin: 0;
 }
 
 .mcp-connect-head code {
   background: var(--bone-2);
-  border-radius: 8px;
+  border-radius: 6px;
   color: var(--ink);
-  font-size: 0.88em;
-  padding: 7px 14px;
+  font-size: 0.9em;
+  padding: 4px 9px;
 }
 
 .mcp-tabs {
   border-bottom: 1px solid var(--line);
   display: flex;
-  gap: 40px;
-  margin-top: 48px;
+  gap: 30px;
+  margin-top: 32px;
   overflow-x: auto;
 }
 
@@ -1218,8 +1218,8 @@ code {
   cursor: pointer;
   flex: 0 0 auto;
   font: inherit;
-  font-size: 18px;
-  padding: 0 0 18px;
+  font-size: 15px;
+  padding: 0 0 14px;
 }
 
 .mcp-tab[aria-selected="true"] {
@@ -1230,8 +1230,8 @@ code {
 .mcp-code-panel {
   background: #fff;
   border: 1px solid var(--line);
-  border-radius: 24px;
-  margin-top: 48px;
+  border-radius: 18px;
+  margin-top: 32px;
   overflow: hidden;
 }
 
@@ -1239,11 +1239,11 @@ code {
   align-items: center;
   color: var(--mute);
   display: flex;
-  font-size: 13px;
+  font-size: 12.5px;
   gap: 16px;
   justify-content: space-between;
-  min-height: 48px;
-  padding: 12px 22px 0;
+  min-height: 42px;
+  padding: 10px 18px 0;
 }
 
 .mcp-copy-button {
@@ -1261,12 +1261,12 @@ code {
 
 .mcp-code {
   color: #143a78;
-  font-size: 18px;
-  line-height: 1.6;
+  font-size: 14px;
+  line-height: 1.55;
   margin: 0;
-  min-height: 230px;
+  min-height: 170px;
   overflow: auto;
-  padding: 30px 34px 34px;
+  padding: 22px 24px 26px;
   white-space: pre-wrap;
 }
 
@@ -1275,27 +1275,27 @@ code {
 }
 
 .mcp-connect.compact .mcp-connect-head p {
-  font-size: 16px;
+  font-size: 13.5px;
 }
 
 .mcp-connect.compact .mcp-tabs {
-  gap: 28px;
-  margin-top: 24px;
+  gap: 22px;
+  margin-top: 18px;
 }
 
 .mcp-connect.compact .mcp-tab {
-  font-size: 15px;
+  font-size: 13.5px;
 }
 
 .mcp-connect.compact .mcp-code-panel {
-  border-radius: 18px;
-  margin-top: 24px;
+  border-radius: 14px;
+  margin-top: 18px;
 }
 
 .mcp-connect.compact .mcp-code {
-  font-size: 13px;
-  min-height: 180px;
-  padding: 20px;
+  font-size: 12.5px;
+  min-height: 150px;
+  padding: 18px;
 }
 
 .noscript {
@@ -2383,27 +2383,27 @@ code {
   }
 
   .mcp-connect-head h2 {
-    font-size: 40px;
+    font-size: 30px;
   }
 
   .mcp-connect-head p {
-    font-size: 18px;
+    font-size: 15px;
   }
 
   .mcp-tabs {
-    gap: 28px;
-    margin-top: 34px;
+    gap: 24px;
+    margin-top: 26px;
   }
 
   .mcp-code-panel {
-    border-radius: 18px;
-    margin-top: 34px;
+    border-radius: 16px;
+    margin-top: 26px;
   }
 
   .mcp-code {
-    font-size: 15px;
-    min-height: 220px;
-    padding: 22px;
+    font-size: 13px;
+    min-height: 170px;
+    padding: 20px;
   }
 
   .compat-strip {
@@ -2519,7 +2519,7 @@ code {
   }
 
   .mcp-tab {
-    font-size: 16px;
+    font-size: 14px;
   }
 
   .mcp-panel-actions {
