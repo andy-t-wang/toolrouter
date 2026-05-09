@@ -56,6 +56,20 @@ describe("ToolRouter MCP server", () => {
     });
   });
 
+  it("canonicalizes the stale api.toolrouter.com alias to the current API base", async () => {
+    const calls = [];
+    const result = await callTool("exa_search", { query: "top sushi places in San Francisco" }, {
+      env: { TOOLROUTER_API_URL: "https://api.toolrouter.com/", TOOLROUTER_API_KEY: "tr_test" },
+      fetchImpl: async (url, init) => {
+        calls.push({ url, init });
+        return response({ id: "req_alias", endpoint_id: "exa.search", path: "agentkit", charged: false });
+      },
+    });
+
+    assert.equal(result.isError, false);
+    assert.equal(calls[0].url, "https://toolrouter.world/v1/requests");
+  });
+
   it("lists categories and recommends concrete endpoints", async () => {
     const calls = [];
     const categories = {

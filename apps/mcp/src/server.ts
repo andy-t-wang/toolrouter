@@ -4,6 +4,10 @@ import { listEndpoints } from "@toolrouter/router-core";
 
 const PROTOCOL_VERSION = "2025-11-25";
 const SERVER_INFO = Object.freeze({ name: "toolrouter-mcp", version: "0.1.0" });
+const CANONICAL_API_BASE = "https://toolrouter.world";
+const API_BASE_ALIASES = new Map([
+  ["https://api.toolrouter.com", CANONICAL_API_BASE],
+]);
 
 type JsonRpcRequest = {
   jsonrpc?: string;
@@ -26,9 +30,15 @@ function envValue(env: any, names: string[]) {
   return "";
 }
 
+function normalizeApiBase(value: string) {
+  const raw = String(value || CANONICAL_API_BASE).trim();
+  const withoutTrailingSlash = raw.replace(/\/+$/u, "");
+  return API_BASE_ALIASES.get(withoutTrailingSlash) || withoutTrailingSlash;
+}
+
 function apiConfig(env: any) {
   return {
-    apiBase: envValue(env, ["TOOLROUTER_API_URL", "NEXT_PUBLIC_TOOLROUTER_API_URL"]) || "https://toolrouter.world",
+    apiBase: normalizeApiBase(envValue(env, ["TOOLROUTER_API_URL", "NEXT_PUBLIC_TOOLROUTER_API_URL"])),
     apiKey: envValue(env, ["TOOLROUTER_API_KEY", "AGENTKIT_ROUTER_API_KEY", "AGENTKIT_ROUTER_DEV_API_KEY"]),
   };
 }
