@@ -113,6 +113,19 @@ export class LocalStore {
 
   async createApiKey({ user_id = "local-user", caller_id }: { user_id?: string; caller_id: string }) {
     const data = this.read();
+    const activeDuplicate = data.api_keys.find(
+      (key: any) => key.user_id === user_id && key.caller_id === caller_id && !key.disabled_at,
+    );
+    if (activeDuplicate) {
+      throw Object.assign(
+        new Error('duplicate key value violates unique constraint "api_keys_user_caller_active_key"'),
+        {
+          statusCode: 409,
+          code: "local_store_conflict",
+          details: `Key (user_id, caller_id)=(${user_id}, ${caller_id}) already exists.`,
+        },
+      );
+    }
     const rawKey = createApiKey();
     const record = {
       id: `key_${randomUUID()}`,

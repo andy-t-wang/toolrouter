@@ -6,6 +6,10 @@ const migration = readFileSync(new URL("../../../supabase/migrations/0002_enable
 const monitoringMigration = readFileSync(new URL("../../../supabase/migrations/0006_monitoring_agentkit_wallet.sql", import.meta.url), "utf8");
 const purchasesMigration = readFileSync(new URL("../../../supabase/migrations/0007_stripe_credit_purchases.sql", import.meta.url), "utf8");
 const perfMigration = readFileSync(new URL("../../../supabase/migrations/0008_rls_perf_indexes.sql", import.meta.url), "utf8");
+const apiKeyNamesMigration = readFileSync(
+  new URL("../../../supabase/migrations/0009_api_key_names_per_user.sql", import.meta.url),
+  "utf8",
+);
 
 describe("Supabase RLS migration", () => {
   it("enables RLS on every durable router table", () => {
@@ -55,6 +59,14 @@ describe("Supabase RLS migration", () => {
     assert.match(
       perfMigration,
       /create index if not exists wallet_transactions_wallet_account_id_idx on wallet_transactions\(wallet_account_id\);/,
+    );
+  });
+
+  it("scopes active API key names to one user instead of globally", () => {
+    assert.match(apiKeyNamesMigration, /drop constraint if exists api_keys_caller_id_key;/);
+    assert.match(
+      apiKeyNamesMigration,
+      /create unique index api_keys_user_caller_active_key[\s\S]*on api_keys\(user_id, caller_id\)[\s\S]*where disabled_at is null;/,
     );
   });
 

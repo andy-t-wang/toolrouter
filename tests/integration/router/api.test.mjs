@@ -197,6 +197,34 @@ describe("router API", () => {
     assert.ok(listed.api_keys.every((key) => key.key_hash === undefined));
   });
 
+  it("scopes API key names to active keys owned by one user", async () => {
+    const userId = process.env.TOOLROUTER_DEV_USER_ID;
+    const first = await store.createApiKey({ user_id: userId, caller_id: "scoped-default" });
+    const otherUser = await store.createApiKey({
+      user_id: "00000000-0000-4000-8000-000000000002",
+      caller_id: "scoped-default",
+    });
+
+    assert.equal(first.record.caller_id, "scoped-default");
+    assert.equal(otherUser.record.caller_id, "scoped-default");
+
+    const duplicateResponse = await fetch(`${baseUrl}/v1/api-keys`, {
+      method: "POST",
+      headers: sessionHeaders(),
+      body: JSON.stringify({ caller_id: "scoped-default" }),
+    });
+    assert.equal(duplicateResponse.status, 409);
+    assert.equal((await duplicateResponse.json()).error.code, "api_key_name_conflict");
+
+    await store.disableApiKey({ id: first.record.id, user_id: userId });
+    const replacementResponse = await fetch(`${baseUrl}/v1/api-keys`, {
+      method: "POST",
+      headers: sessionHeaders(),
+      body: JSON.stringify({ caller_id: "scoped-default" }),
+    });
+    assert.equal(replacementResponse.status, 201);
+  });
+
   it("exposes balance, creates Stripe top-ups, and settles funded webhooks idempotently", async () => {
     const balanceResponse = await fetch(`${baseUrl}/v1/balance`, { headers: sessionHeaders() });
     assert.equal(balanceResponse.status, 200);

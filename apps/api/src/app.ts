@@ -115,6 +115,11 @@ const CONSTRAINT_ERROR_MESSAGES: Record<
     message: "An API key with that name already exists. Choose a different name.",
     statusCode: 409,
   },
+  api_keys_user_caller_active_key: {
+    code: "api_key_name_conflict",
+    message: "An API key with that name already exists. Choose a different name.",
+    statusCode: 409,
+  },
   api_keys_key_hash_key: {
     code: "api_key_generation_conflict",
     message: "We could not generate a unique API key. Please try again.",

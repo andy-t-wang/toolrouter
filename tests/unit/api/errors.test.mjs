@@ -5,22 +5,27 @@ const { normalizeApiError } = await import("../../../apps/api/src/app.ts");
 
 describe("API error normalization", () => {
   it("turns duplicate API key names into a human-readable conflict", () => {
-    const raw = Object.assign(
-      new Error('duplicate key value violates unique constraint "api_keys_caller_id_key"'),
-      {
-        statusCode: 409,
-        code: "supabase_error",
-        details: 'Key (caller_id)=(Hermes) already exists.',
-      },
-    );
+    for (const constraint of [
+      "api_keys_caller_id_key",
+      "api_keys_user_caller_active_key",
+    ]) {
+      const raw = Object.assign(
+        new Error(`duplicate key value violates unique constraint "${constraint}"`),
+        {
+          statusCode: 409,
+          code: "supabase_error",
+          details: 'Key (caller_id)=(Hermes) already exists.',
+        },
+      );
 
-    assert.deepEqual(normalizeApiError(raw), {
-      statusCode: 409,
-      code: "api_key_name_conflict",
-      message: "An API key with that name already exists. Choose a different name.",
-      details: undefined,
-      trace_id: null,
-    });
+      assert.deepEqual(normalizeApiError(raw), {
+        statusCode: 409,
+        code: "api_key_name_conflict",
+        message: "An API key with that name already exists. Choose a different name.",
+        details: undefined,
+        trace_id: null,
+      });
+    }
   });
 
   it("keeps unknown errors intact", () => {
