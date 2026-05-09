@@ -14,6 +14,26 @@ const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
 const devAuthEnabled = process.env.NEXT_PUBLIC_TOOLROUTER_DEV_AUTH === "true";
 const unverifiedAgentKitStatus = ["Not", "Verified"].join(" ");
 const recentCheckoutWindowMs = 15 * 60 * 1000;
+const quickstartMcpConfig = `{
+  "mcpServers": {
+    "toolrouter": {
+      "command": "npm",
+      "args": ["--prefix", "/path/to/toolrouter", "run", "start:mcp"],
+      "env": {
+        "TOOLROUTER_API_URL": "https://toolrouter.world",
+        "TOOLROUTER_API_KEY": "tr_..."
+      }
+    }
+  }
+}`;
+const quickstartPrompt = `Use ToolRouter's search category to research the top sushi places in SF.
+Call toolrouter_search with:
+{
+  "query": "top sushi places in San Francisco",
+  "maxUsd": "0.01"
+}
+
+Summarize the best 5 options and include the ToolRouter request id.`;
 const supabase =
   supabaseUrl && supabaseAnonKey
     ? createClient(supabaseUrl, supabaseAnonKey)
@@ -1162,46 +1182,27 @@ export default function DashboardPage() {
                   <div>
                     <h1 className="display">Quickstart</h1>
                     <p className="sub">
-                      Create one key, connect MCP, inspect the trace.
+                      Create one key, connect MCP, run one query.
                     </p>
                   </div>
                 </div>
                 <section className="card quickstart-card">
                   <div className="hd">
-                    <h2>Use ToolRouter from an agent</h2>
+                    <h2>Set up MCP</h2>
                     <a className="link-button" href="/setup">
-                      Full setup
+                      Client setup
                     </a>
                   </div>
                   <pre className="code-block">
-                    <code>{`const response = await fetch("${apiBase}/v1/requests", {
-  method: "POST",
-  headers: {
-    authorization: \`Bearer \${process.env.TOOLROUTER_API_KEY}\`,
-    "content-type": "application/json"
-  },
-  body: JSON.stringify({
-    endpoint_id: "exa.search",
-    input: { query: "AgentKit examples", num_results: 5 },
-    maxUsd: "0.05"
-  })
-});
-
-const trace = await response.json();
-console.log(trace.path);`}</code>
+                    <code>{quickstartMcpConfig}</code>
                   </pre>
                 </section>
                 <section className="card quickstart-card">
                   <div className="hd">
-                    <h2>MCP first query</h2>
+                    <h2>First query</h2>
                   </div>
                   <pre className="code-block">
-                    <code>{`Use ToolRouter to search for the top sushi places in SF.
-Call exa_search with:
-{
-  "query": "top sushi places in San Francisco",
-  "maxUsd": "0.01"
-}`}</code>
+                    <code>{quickstartPrompt}</code>
                   </pre>
                 </section>
               </section>

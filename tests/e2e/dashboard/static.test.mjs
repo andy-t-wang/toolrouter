@@ -42,6 +42,14 @@ describe("web dashboard static wiring", () => {
   });
 
   it("presents setup around generic tool categories before provider-specific endpoints", () => {
+    assert.match(setupPage, /https:\/\/toolrouter\.world/);
+    assert.doesNotMatch(setupPage, /127\.0\.0\.1:9402/);
+    assert.match(setupPage, /Codex/);
+    assert.match(setupPage, /Claude Code/);
+    assert.match(setupPage, /Cursor/);
+    assert.match(setupPage, /Hermes Agent/);
+    assert.match(setupPage, /OpenClaw/);
+    assert.match(setupPage, /start:mcp/);
     assert.match(setupPage, /Tool categories/);
     assert.match(setupPage, /search/);
     assert.match(setupPage, /browser use/);
@@ -106,7 +114,13 @@ describe("web dashboard static wiring", () => {
     assert.match(dashboardPage, /\/v1\/balance/);
     assert.match(dashboardPage, /\/v1\/agentkit\/account-verification/);
     assert.match(dashboardPage, /\/v1\/top-ups/);
-    assert.match(dashboardPage, /\/v1\/requests/);
+    assert.match(dashboardPage, /https:\/\/toolrouter\.world/);
+    assert.match(dashboardPage, /quickstartMcpConfig/);
+    assert.match(dashboardPage, /Set up MCP/);
+    assert.match(dashboardPage, /First query/);
+    assert.match(dashboardPage, /toolrouter_search/);
+    assert.doesNotMatch(dashboardPage, /AgentKit examples/);
+    assert.doesNotMatch(dashboardPage, /endpoint_id: "exa\.search"/);
     assert.doesNotMatch(dashboardPage, /\/call/);
     assert.doesNotMatch(dashboardPage, /\/fetch/);
     assert.doesNotMatch(dashboardPage, /\/usage/);
