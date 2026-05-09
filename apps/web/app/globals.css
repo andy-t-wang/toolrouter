@@ -1171,6 +1171,133 @@ code {
   border-bottom: 1px solid var(--line);
 }
 
+.quickstart-mcp-body {
+  padding: 22px var(--pad) var(--pad);
+}
+
+.mcp-connect {
+  min-width: 0;
+}
+
+.mcp-connect-head h2 {
+  font-size: 48px;
+  font-weight: 500;
+  letter-spacing: 0;
+  line-height: 1.02;
+  margin: 0 0 28px;
+}
+
+.mcp-connect-head p {
+  color: var(--mute);
+  font-size: 22px;
+  line-height: 1.35;
+  margin: 0;
+}
+
+.mcp-connect-head code {
+  background: var(--bone-2);
+  border-radius: 8px;
+  color: var(--ink);
+  font-size: 0.88em;
+  padding: 7px 14px;
+}
+
+.mcp-tabs {
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  gap: 40px;
+  margin-top: 48px;
+  overflow-x: auto;
+}
+
+.mcp-tab {
+  background: transparent;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  color: var(--ink);
+  cursor: pointer;
+  flex: 0 0 auto;
+  font: inherit;
+  font-size: 18px;
+  padding: 0 0 18px;
+}
+
+.mcp-tab[aria-selected="true"] {
+  border-bottom-color: var(--accent);
+  color: var(--accent);
+}
+
+.mcp-code-panel {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  margin-top: 48px;
+  overflow: hidden;
+}
+
+.mcp-panel-actions {
+  align-items: center;
+  color: var(--mute);
+  display: flex;
+  font-size: 13px;
+  gap: 16px;
+  justify-content: space-between;
+  min-height: 48px;
+  padding: 12px 22px 0;
+}
+
+.mcp-copy-button {
+  background: transparent;
+  border: 0;
+  color: var(--mute);
+  cursor: pointer;
+  font: inherit;
+  padding: 0;
+}
+
+.mcp-copy-button:hover {
+  color: var(--ink);
+}
+
+.mcp-code {
+  color: #143a78;
+  font-size: 18px;
+  line-height: 1.6;
+  margin: 0;
+  min-height: 230px;
+  overflow: auto;
+  padding: 30px 34px 34px;
+  white-space: pre-wrap;
+}
+
+.mcp-connect.compact .mcp-connect-head h2 {
+  display: none;
+}
+
+.mcp-connect.compact .mcp-connect-head p {
+  font-size: 16px;
+}
+
+.mcp-connect.compact .mcp-tabs {
+  gap: 28px;
+  margin-top: 24px;
+}
+
+.mcp-connect.compact .mcp-tab {
+  font-size: 15px;
+}
+
+.mcp-connect.compact .mcp-code-panel {
+  border-radius: 18px;
+  margin-top: 24px;
+}
+
+.mcp-connect.compact .mcp-code {
+  font-size: 13px;
+  min-height: 180px;
+  padding: 20px;
+}
+
 .noscript {
   margin: 32px;
 }
@@ -2255,6 +2382,30 @@ code {
     grid-template-columns: 1fr;
   }
 
+  .mcp-connect-head h2 {
+    font-size: 40px;
+  }
+
+  .mcp-connect-head p {
+    font-size: 18px;
+  }
+
+  .mcp-tabs {
+    gap: 28px;
+    margin-top: 34px;
+  }
+
+  .mcp-code-panel {
+    border-radius: 18px;
+    margin-top: 34px;
+  }
+
+  .mcp-code {
+    font-size: 15px;
+    min-height: 220px;
+    padding: 22px;
+  }
+
   .compat-strip {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -2361,6 +2512,19 @@ code {
   .doc-table div,
   .tool-list div {
     grid-template-columns: 1fr;
+  }
+
+  .mcp-tabs {
+    gap: 22px;
+  }
+
+  .mcp-tab {
+    font-size: 16px;
+  }
+
+  .mcp-panel-actions {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   .compat-strip {

@@ -6,6 +6,8 @@ import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import { computeDashboardMetrics, paidAmount } from "../dashboard-metrics.ts";
+import { McpClientTabs } from "../mcp-client-tabs.tsx";
+import { firstQueryPrompt } from "../mcp-content.ts";
 
 const apiBase = process.env.NEXT_PUBLIC_TOOLROUTER_API_URL || "";
 const appBase = (process.env.NEXT_PUBLIC_TOOLROUTER_APP_URL || "").replace(/\/$/u, "");
@@ -14,26 +16,6 @@ const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
 const devAuthEnabled = process.env.NEXT_PUBLIC_TOOLROUTER_DEV_AUTH === "true";
 const unverifiedAgentKitStatus = ["Not", "Verified"].join(" ");
 const recentCheckoutWindowMs = 15 * 60 * 1000;
-const quickstartMcpConfig = `{
-  "mcpServers": {
-    "toolrouter": {
-      "command": "npm",
-      "args": ["--prefix", "/path/to/toolrouter", "run", "start:mcp"],
-      "env": {
-        "TOOLROUTER_API_URL": "https://toolrouter.world",
-        "TOOLROUTER_API_KEY": "tr_..."
-      }
-    }
-  }
-}`;
-const quickstartPrompt = `Use ToolRouter's search category to research the top sushi places in SF.
-Call toolrouter_search with:
-{
-  "query": "top sushi places in San Francisco",
-  "maxUsd": "0.01"
-}
-
-Summarize the best 5 options and include the ToolRouter request id.`;
 const supabase =
   supabaseUrl && supabaseAnonKey
     ? createClient(supabaseUrl, supabaseAnonKey)
@@ -1193,16 +1175,16 @@ export default function DashboardPage() {
                       Client setup
                     </a>
                   </div>
-                  <pre className="code-block">
-                    <code>{quickstartMcpConfig}</code>
-                  </pre>
+                  <div className="quickstart-mcp-body">
+                    <McpClientTabs compact />
+                  </div>
                 </section>
                 <section className="card quickstart-card">
                   <div className="hd">
                     <h2>First query</h2>
                   </div>
                   <pre className="code-block">
-                    <code>{quickstartPrompt}</code>
+                    <code>{firstQueryPrompt}</code>
                   </pre>
                 </section>
               </section>
