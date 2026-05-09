@@ -97,7 +97,7 @@ export function tools(): McpTool[] {
       title: "Browser use",
       description: "Start a browser session through ToolRouter's recommended browser-use endpoint.",
       inputSchema: jsonSchema({
-        estimated_minutes: { type: "integer", minimum: 1, maximum: 120 },
+        estimated_minutes: { type: "integer", minimum: 5, maximum: 120 },
         maxUsd: { type: "string" },
         payment_mode: { type: "string", enum: ["agentkit_first", "x402_only"] },
       }),
@@ -148,7 +148,7 @@ export function tools(): McpTool[] {
       title: "Browserbase session",
       description: "Create a paid Browserbase browser session through ToolRouter.",
       inputSchema: jsonSchema({
-        estimated_minutes: { type: "integer", minimum: 1, maximum: 120 },
+        estimated_minutes: { type: "integer", minimum: 5, maximum: 120 },
         maxUsd: { type: "string" },
         payment_mode: { type: "string", enum: ["agentkit_first", "x402_only"] },
       }),
@@ -196,11 +196,11 @@ function endpointPayload(name: string, args: any) {
     };
   }
   if (name === "toolrouter_browser_use" || name === "browserbase_session_create") {
-    const minutes = args.estimated_minutes || args.estimatedMinutes || 1;
+    const minutes = args.estimated_minutes || args.estimatedMinutes || 5;
     return {
       endpoint_id: "browserbase.session",
       input: { estimated_minutes: minutes },
-      maxUsd: args.maxUsd || "0.01",
+      maxUsd: args.maxUsd || "0.02",
       ...(paymentMode ? { payment_mode: paymentMode } : {}),
     };
   }

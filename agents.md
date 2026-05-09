@@ -59,6 +59,7 @@ These are durable project decisions for future agents working in this repo.
 - x402 USDC payment should support Base, `eip155:8453`.
 - If AgentKit succeeds, trace path is `agentkit` and `charged` is false.
 - If AgentKit returns `402` and x402 succeeds, trace path is `agentkit_to_x402`.
+- For `free_trial` endpoints, AgentKit value is realized only when the final request path is `agentkit` and `charged` is false. A paid `agentkit_to_x402` fallback is useful trace detail, but it must not be displayed or stored as `AgentKit-Free Trial` and must not count as healthy free-trial AgentKit evidence.
 - Use `x402_only` only for explicit wallet/payment smoke tests, not normal user traffic.
 - Live Exa AgentKit smoke should prove the free-trial path by requiring `path === "agentkit"` and `charged === false`.
 - Product-level spend caps are intentionally not active yet. `maxUsd` is optional caller protection, and `X402_MAX_USD_PER_REQUEST` remains only as an emergency wallet ceiling in the x402 signer path.

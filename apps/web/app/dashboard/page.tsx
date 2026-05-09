@@ -232,13 +232,17 @@ function pathChip(path: string, charged: boolean) {
 
 function valueChip(row: any) {
   const path = String(row.path || "").toLowerCase();
-  if (path !== "agentkit" && path !== "agentkit_to_x402") {
-    return <span className="muted">-</span>;
-  }
   if (!row.agentkit_value_type && !row.agentkit_value_label) {
     return <span className="muted">-</span>;
   }
   const normalized = String(row.agentkit_value_type || row.agentkit_value_label).toLowerCase();
+  const isFreeTrial = normalized.includes("free");
+  const realized = isFreeTrial
+    ? path === "agentkit" && !row.charged
+    : path === "agentkit" || path === "agentkit_to_x402";
+  if (!realized) {
+    return <span className="muted">-</span>;
+  }
   const label =
     normalized.includes("access")
       ? "Access"

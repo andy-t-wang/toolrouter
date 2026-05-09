@@ -95,7 +95,8 @@ describe("web dashboard static wiring", () => {
     assert.match(dashboardPage, /\/exa-logomark\.svg/);
     assert.match(dashboardPage, /\/browserbase-logomark\.svg/);
     assert.match(dashboardPage, /value-chip/);
-    assert.match(dashboardPage, /path !== "agentkit" && path !== "agentkit_to_x402"/);
+    assert.match(dashboardPage, /isFreeTrial/);
+    assert.match(dashboardPage, /path === "agentkit" && !row\.charged/);
     assert.match(dashboardPage, /Credit balance/);
     assert.match(dashboardPage, /\/v1\/top-ups\?limit=10/);
     assert.match(dashboardPage, /activeTopUps\.length \? \(/);

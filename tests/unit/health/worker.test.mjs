@@ -105,4 +105,119 @@ describe("endpoint health worker", () => {
     assert.equal(db.insertedHealthChecks[0].checked_at, "2026-05-09T11:00:00.000Z");
     assert.equal(db.insertedHealthChecks[0].path, "agentkit");
   });
+
+  it("does not reuse a paid fallback as free-trial AgentKit evidence", async () => {
+    const endpoint = getEndpoint("exa.search");
+    const db = createDb([
+      {
+        id: "req_recent_paid_fallback",
+        ts: "2026-05-09T10:00:00.000Z",
+        endpoint_id: "exa.search",
+        status_code: 200,
+        ok: true,
+        path: "agentkit_to_x402",
+        charged: true,
+      },
+    ]);
+    let executed = false;
+
+    const result = await runEndpointHealthCheck({
+      endpoint,
+      db,
+      executor: async () => {
+        executed = true;
+        return {
+          ok: true,
+          status_code: 200,
+          path: "agentkit",
+          charged: false,
+          latency_ms: 40,
+        };
+      },
+      now: () => new Date("2026-05-09T11:00:00.000Z"),
+      recentRequestWindowMs: 12 * 60 * 60 * 1000,
+    });
+
+    assert.equal(executed, true);
+    assert.equal(result.status, "healthy");
+    assert.equal(db.insertedHealthChecks[0].path, "agentkit");
+  });
+
+  it("marks a free-trial paid fallback as degraded even when the provider call succeeds", async () => {
+    const endpoint = getEndpoint("exa.search");
+    const db = createDb();
+
+    const result = await runEndpointHealthCheck({
+      endpoint,
+      db,
+      executor: async () => ({
+        ok: true,
+        status_code: 200,
+        path: "agentkit_to_x402",
+        charged: true,
+        latency_ms: 40,
+        amount_usd: "0.007",
+      }),
+      now: () => new Date("2026-05-09T11:00:00.000Z"),
+      useRecentRequests: false,
+    });
+
+    assert.equal(result.status, "degraded");
+    assert.equal(db.insertedHealthChecks[0].path, "agentkit_to_x402");
+    assert.equal(db.insertedHealthChecks[0].charged, true);
+  });
+
+  it("allows AgentKit access endpoints to be healthy when they use x402 with AgentKit proof", async () => {
+    const endpoint = getEndpoint("browserbase.search");
+    const db = createDb();
+
+    const result = await runEndpointHealthCheck({
+      endpoint,
+      db,
+      executor: async () => ({
+        ok: true,
+        status_code: 200,
+        path: "agentkit_to_x402",
+        charged: true,
+        latency_ms: 40,
+        amount_usd: "0.01",
+      }),
+      now: () => new Date("2026-05-09T11:00:00.000Z"),
+      useRecentRequests: false,
+    });
+
+    assert.equal(result.status, "healthy");
+    assert.equal(db.insertedHealthChecks[0].path, "agentkit_to_x402");
+    assert.equal(db.insertedHealthChecks[0].charged, true);
+  });
+
+  it("persists safe provider body errors for failed health probes", async () => {
+    const endpoint = getEndpoint("browserbase.fetch");
+    const db = createDb();
+
+    const result = await runEndpointHealthCheck({
+      endpoint,
+      db,
+      executor: async () => ({
+        ok: false,
+        status_code: 500,
+        path: "agentkit_to_x402",
+        charged: false,
+        latency_ms: 1_700,
+        body: {
+          error: "Failed to create payment intent",
+          details: "amount is below provider minimum",
+        },
+      }),
+      now: () => new Date("2026-05-09T11:00:00.000Z"),
+      useRecentRequests: false,
+    });
+
+    assert.equal(result.status, "failing");
+    assert.equal(
+      db.insertedHealthChecks[0].error,
+      "Failed to create payment intent: amount is below provider minimum",
+    );
+    assert.equal(db.upsertedStatuses[0].last_error, db.insertedHealthChecks[0].error);
+  });
 });

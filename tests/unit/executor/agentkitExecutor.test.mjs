@@ -199,6 +199,31 @@ describe("AgentKit/x402 executor", () => {
     assert.deepEqual(seen.v1Networks, ["base"]);
   });
 
+  it("does not mark a failed x402 retry as charged", async () => {
+    const seen = captures();
+    const result = await executeEndpoint({
+      endpoint: baseEndpoint(),
+      request: providerRequest(),
+      maxUsd: "0.01",
+      traceId: "trace_failed_fallback",
+      paymentDeps: fakePaymentDeps({
+        captures: seen,
+        agentkitResponse: new Response("", { status: 402 }),
+        x402Response: jsonResponse(
+          { error: "Payment required to access this resource" },
+          { status: 402 },
+        ),
+      }),
+    });
+
+    assert.equal(result.path, "agentkit_to_x402");
+    assert.equal(result.status_code, 402);
+    assert.equal(result.ok, false);
+    assert.equal(result.charged, false);
+    assert.equal(result.amount_usd, null);
+    assert.equal(result.payment_reference, null);
+  });
+
   it("supports x402-only mode for paid live smoke tests", async () => {
     const seen = captures();
     const result = await executeEndpoint({
@@ -234,10 +259,10 @@ describe("AgentKit/x402 executor", () => {
         method: "POST",
         url: "https://x402.browserbase.com/browser/session/create",
         headers: {},
-        json: { estimatedMinutes: 1 },
-        estimatedUsd: "0.002",
+        json: { estimatedMinutes: 5 },
+        estimatedUsd: "0.01",
       },
-      maxUsd: "0.01",
+      maxUsd: "0.02",
       traceId: "trace_browserbase_agentkit_header",
       paymentDeps: fakePaymentDeps({
         captures: seen,
@@ -245,7 +270,7 @@ describe("AgentKit/x402 executor", () => {
         x402Response: paymentResponse({ connectUrl: "wss://connect.browserbase.com/session" }),
         selectedRequirements: {
           network: "base",
-          maxAmountRequired: "2000",
+          maxAmountRequired: "10000",
           scheme: "exact",
         },
       }),
@@ -269,18 +294,18 @@ describe("AgentKit/x402 executor", () => {
     const networkPolicy = seen.policies[0];
     assert.deepEqual(
       networkPolicy(1, [
-        { network: "base", scheme: "exact", maxAmountRequired: "2000" },
-        { network: "eip155:137", scheme: "exact", amount: "2000" },
+        { network: "base", scheme: "exact", maxAmountRequired: "10000" },
+        { network: "eip155:137", scheme: "exact", amount: "10000" },
       ]).map((requirement) => requirement.network),
       ["base"],
     );
     const amountPolicy = seen.policies[1];
     assert.deepEqual(
       amountPolicy(1, [
-        { network: "base", scheme: "exact", maxAmountRequired: "2000" },
-        { network: "base", scheme: "exact", maxAmountRequired: "20000" },
+        { network: "base", scheme: "exact", maxAmountRequired: "10000" },
+        { network: "base", scheme: "exact", maxAmountRequired: "30000" },
       ]).map((requirement) => requirement.maxAmountRequired),
-      ["2000"],
+      ["10000"],
     );
   });
 

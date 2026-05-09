@@ -90,9 +90,14 @@ describe("endpoint registry", () => {
     assert.deepEqual(fetch.json, { url: "https://example.com/" });
     assert.equal(fetch.estimatedUsd, "0.01");
 
-    const session = buildEndpointRequest("browserbase.session", { estimated_minutes: 1 });
+    assert.throws(
+      () => buildEndpointRequest("browserbase.session", { estimated_minutes: 1 }),
+      /estimatedMinutes must be between 5 and 120/,
+    );
+
+    const session = buildEndpointRequest("browserbase.session", { estimated_minutes: 5 });
     assert.equal(session.url, "https://x402.browserbase.com/browser/session/create");
-    assert.deepEqual(session.json, { estimatedMinutes: 1 });
-    assert.equal(session.estimatedUsd, "0.002");
+    assert.deepEqual(session.json, { estimatedMinutes: 5 });
+    assert.equal(session.estimatedUsd, "0.01");
   });
 });

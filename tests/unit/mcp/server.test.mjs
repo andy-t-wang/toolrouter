@@ -27,6 +27,8 @@ describe("ToolRouter MCP server", () => {
     assert.ok(listed.result.tools.some((tool) => tool.name === "toolrouter_list_categories"));
     assert.ok(listed.result.tools.some((tool) => tool.name === "toolrouter_recommend_endpoint"));
     assert.ok(tools().some((tool) => tool.name === "browserbase_session_create"));
+    const sessionTool = tools().find((tool) => tool.name === "browserbase_session_create");
+    assert.equal(sessionTool.inputSchema.properties.estimated_minutes.minimum, 5);
   });
 
   it("calls named endpoint tools through POST /v1/requests", async () => {
@@ -132,6 +134,24 @@ describe("ToolRouter MCP server", () => {
       input: { url: "https://example.com" },
       maxUsd: "0.02",
       payment_mode: "x402_only",
+    });
+  });
+
+  it("defaults Browserbase session calls to the provider minimum", async () => {
+    const calls = [];
+    const result = await callTool("browserbase_session_create", {}, {
+      env: { TOOLROUTER_API_URL: "http://router.test", TOOLROUTER_API_KEY: "tr_test" },
+      fetchImpl: async (url, init) => {
+        calls.push({ url, init });
+        return response({ id: "req_4", endpoint_id: "browserbase.session", path: "x402", charged: true });
+      },
+    });
+
+    assert.equal(result.isError, false);
+    assert.deepEqual(JSON.parse(calls[0].init.body), {
+      endpoint_id: "browserbase.session",
+      input: { estimated_minutes: 5 },
+      maxUsd: "0.02",
     });
   });
 

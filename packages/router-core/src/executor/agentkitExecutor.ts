@@ -122,9 +122,10 @@ function receiptFromResponse(response, events) {
   const header = response.headers.get("payment-response") || response.headers.get("x-payment-response");
   const decoded = maybeDecodePaymentHeader(header);
   const selected = [...events].reverse().find((event) => event.type === "x402_payment_selected") || {};
+  const canUseSelectedPayment = response.ok;
   return {
-    amount_usd: decoded?.amount_usd || decoded?.amountUsd || selected.amount_usd || null,
-    currency: decoded?.currency || (selected.amount_usd ? "USD" : null),
+    amount_usd: decoded?.amount_usd || decoded?.amountUsd || (canUseSelectedPayment ? selected.amount_usd : null) || null,
+    currency: decoded?.currency || (canUseSelectedPayment && selected.amount_usd ? "USD" : null),
     payment_reference:
       decoded?.payment_reference ||
       decoded?.paymentReference ||
@@ -145,12 +146,11 @@ function normalizePaymentMode(paymentMode, endpoint) {
   return resolved;
 }
 
-function chargedFrom({ path, receipt, events }) {
+function chargedFrom({ path, receipt, events, response }) {
   if (path === "agentkit") return false;
   return Boolean(
     receipt.payment_reference ||
-      receipt.amount_usd ||
-      events.some((event) => event.type === "x402_payment_selected"),
+      (response?.ok && events.some((event) => event.type === "x402_payment_selected")),
   );
 }
 
@@ -323,7 +323,7 @@ export async function executeEndpoint({ endpoint, request, maxUsd, traceId, paym
     status_code: response.status,
     ok: response.ok,
     path,
-    charged: chargedFrom({ path, receipt, events }),
+    charged: chargedFrom({ path, receipt, events, response }),
     estimated_usd: request.estimated_usd || request.estimatedUsd || null,
     ...receipt,
     latency_ms: Date.now() - started,

@@ -6,6 +6,7 @@ export const DEFAULT_HEALTH_CHECK_INTERVAL_MS = 12 * 60 * 60 * 1000;
 
 export const HEALTH_STATUSES = Object.freeze(["healthy", "degraded", "failing", "unverified"]);
 const AGENTKIT_HEALTH_PATHS = new Set(["agentkit", "agentkit_to_x402"]);
+const FREE_TRIAL_VALUE_TYPE = "free_trial";
 
 function maybeNumber(value) {
   if (value === undefined || value === null) return null;
@@ -20,6 +21,17 @@ function maybeString(value) {
 
 function pick(result, snakeName, camelName) {
   return result?.[snakeName] ?? result?.[camelName] ?? null;
+}
+
+function providerBodyError(result) {
+  const body = result?.body;
+  if (!body) return null;
+  if (typeof body === "string") return body;
+  if (typeof body !== "object") return null;
+  const message = body.error || body.message;
+  const details = body.details;
+  if (message && details) return `${message}: ${details}`;
+  return message || details || null;
 }
 
 function normalizeExecutionResult(result, fallbackLatencyMs) {
@@ -41,20 +53,33 @@ function normalizeExecutionResult(result, fallbackLatencyMs) {
     ),
     payment_network: maybeString(pick(result, "payment_network", "paymentNetwork") ?? payment.network),
     payment_error: maybeString(pick(result, "payment_error", "paymentError") ?? payment.error),
-    error: maybeString(result?.error),
+    error: maybeString(result?.error ?? providerBodyError(result)),
   };
 }
 
-function statusFromResult(result) {
+function freeTrialValueRealized(endpoint, row) {
+  return endpoint?.agentkit_value_type !== FREE_TRIAL_VALUE_TYPE || (row?.path === "agentkit" && !row?.charged);
+}
+
+function agentKitValueRealized(endpoint, row) {
+  if (endpoint?.agentkit_value_type === FREE_TRIAL_VALUE_TYPE) return freeTrialValueRealized(endpoint, row);
+  return AGENTKIT_HEALTH_PATHS.has(row?.path);
+}
+
+function statusFromResult(result, endpoint) {
   if (result.payment_error) return "degraded";
-  if (result.ok) return result.latency_ms > 10_000 ? "degraded" : "healthy";
+  if (result.ok) {
+    if (result.latency_ms > 10_000) return "degraded";
+    if (!freeTrialValueRealized(endpoint, result)) return "degraded";
+    return "healthy";
+  }
   if (result.status_code === null) return "failing";
   if (result.status_code >= 500) return "failing";
   return "degraded";
 }
 
-function isSuccessfulAgentKitRequest(row) {
-  if (!AGENTKIT_HEALTH_PATHS.has(row?.path)) return false;
+function isSuccessfulAgentKitRequest(endpoint, row) {
+  if (!agentKitValueRealized(endpoint, row)) return false;
   if (row?.error) return false;
   if (row?.ok === false) return false;
   const statusCode = maybeNumber(row?.status_code);
@@ -70,7 +95,7 @@ async function recentAgentKitRequest({ db, endpoint, since }) {
       since: since.toISOString(),
       limit: 25,
     });
-    return (rows || []).find(isSuccessfulAgentKitRequest) || null;
+    return (rows || []).find((row) => isSuccessfulAgentKitRequest(endpoint, row)) || null;
   } catch {
     return null;
   }
@@ -82,13 +107,15 @@ function rowFromRequest(endpoint, requestRow, fallbackCheckedAt) {
     status_code: maybeNumber(requestRow.status_code),
     ok: requestRow.ok !== false,
     latency_ms: maybeNumber(requestRow.latency_ms) ?? 0,
+    path: maybeString(requestRow.path),
+    charged: Boolean(requestRow.charged),
     payment_error: maybeString(requestRow.payment_error),
   };
   return {
     id: `hc_req_${requestRow.id || randomUUID()}_${randomUUID()}`,
     endpoint_id: endpoint.id,
     checked_at: checkedAt,
-    status: statusFromResult(normalized),
+    status: statusFromResult(normalized, endpoint),
     status_code: normalized.status_code,
     latency_ms: normalized.latency_ms,
     path: maybeString(requestRow.path),
@@ -246,7 +273,7 @@ export async function runEndpointHealthCheck({
           id: `hc_${randomUUID()}`,
           endpoint_id: endpoint.id,
           checked_at: checkedAt.toISOString(),
-          status: statusFromResult(normalized),
+          status: statusFromResult(normalized, endpoint),
           status_code: normalized.status_code,
           latency_ms: normalized.latency_ms,
           path: normalized.path,

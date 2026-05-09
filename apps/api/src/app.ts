@@ -95,7 +95,10 @@ function checkCountsAsUp(check: any) {
   return check.status === "healthy" || check.status === "degraded";
 }
 
-function checkCountsAsAgentKit(check: any) {
+function checkCountsAsAgentKit(check: any, endpoint: any) {
+  if (endpoint?.agentkit_value_type === "free_trial") {
+    return check?.path === "agentkit" && !check?.charged;
+  }
   return check?.path === "agentkit" || check?.path === "agentkit_to_x402";
 }
 
@@ -301,8 +304,8 @@ function healthSummaryForEndpoint(
     .filter(Number.isFinite);
   const currentStatus = status?.status || latestCheck?.status || "unverified";
   const latestAgentKitEvidence = latestByCheckedAt([
-    ...(status && checkCountsAsAgentKit(status) ? [status] : []),
-    ...checks.filter(checkCountsAsAgentKit),
+    ...(status && checkCountsAsAgentKit(status, endpoint) ? [status] : []),
+    ...checks.filter((check) => checkCountsAsAgentKit(check, endpoint)),
   ]);
   return {
     id: endpoint.id,

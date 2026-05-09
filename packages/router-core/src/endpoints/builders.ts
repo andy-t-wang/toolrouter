@@ -239,7 +239,7 @@ export function buildBrowserbaseSessionRequest(input, endpoint) {
   const data = assertInputRecord(input);
   const estimatedMinutes = readInteger(data, ["estimatedMinutes", "estimated_minutes"], "estimatedMinutes", {
     defaultValue: 5,
-    min: 1,
+    min: 5,
     max: 120,
   });
   return providerRequest(endpoint, { estimatedMinutes }, (0.12 * estimatedMinutes) / 60);
