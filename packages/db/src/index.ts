@@ -261,9 +261,9 @@ export class LocalStore {
     return this.read().credit_purchases.find((row: any) => row.provider_checkout_session_id === provider_checkout_session_id) || null;
   }
 
-  async listCreditPurchases({ status, limit = 100 }: { status?: string; limit?: number } = {}) {
+  async listCreditPurchases({ user_id, status, limit = 100 }: { user_id?: string; status?: string; limit?: number } = {}) {
     return this.read().credit_purchases
-      .filter((row: any) => !status || row.status === status)
+      .filter((row: any) => (!user_id || row.user_id === user_id) && (!status || row.status === status))
       .slice(0, Math.max(1, Math.min(Number(limit || 100), 500)));
   }
 
@@ -541,12 +541,13 @@ export class SupabaseStore {
     }))?.[0] || null;
   }
 
-  async listCreditPurchases({ status, limit = 100 }: { status?: string; limit?: number } = {}) {
+  async listCreditPurchases({ user_id, status, limit = 100 }: { user_id?: string; status?: string; limit?: number } = {}) {
     const params: any = {
       select: "*",
-      order: "created_at.asc",
+      order: "created_at.desc",
       limit,
     };
+    if (user_id) params.user_id = `eq.${user_id}`;
     if (status) params.status = `eq.${status}`;
     return this.request(`/credit_purchases?${qs(params)}`);
   }

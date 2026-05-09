@@ -12,6 +12,11 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
 const devAuthEnabled = process.env.NEXT_PUBLIC_TOOLROUTER_DEV_AUTH === "true";
 const unverifiedAgentKitStatus = ["Not", "Verified"].join(" ");
+const pendingTopUpStatuses = new Set([
+  "checkout_pending",
+  "funding_pending",
+  "funding_failed",
+]);
 const supabase =
   supabaseUrl && supabaseAnonKey
     ? createClient(supabaseUrl, supabaseAnonKey)
@@ -261,6 +266,7 @@ export default function DashboardPage() {
   const [keys, setKeys] = useState<any[]>([]);
   const [balance, setBalance] = useState<any>(null);
   const [ledger, setLedger] = useState<any[]>([]);
+  const [topUps, setTopUps] = useState<any[]>([]);
   const [callerId, setCallerId] = useState("default");
   const [revealedKey, setRevealedKey] = useState("");
   const [copiedKey, setCopiedKey] = useState(false);
@@ -326,10 +332,20 @@ export default function DashboardPage() {
         : registrationState === "submitting"
           ? "Finishing"
           : "Verify with AgentKit";
+  const pendingTopUps = topUps.filter((topUp) =>
+    pendingTopUpStatuses.has(String(topUp.status || "")),
+  );
 
   async function refresh(token = sessionToken) {
     if (!token) return;
-    const [requestBody, monthRequestBody, keyBody, balanceBody, ledgerBody] =
+    const [
+      requestBody,
+      monthRequestBody,
+      keyBody,
+      balanceBody,
+      ledgerBody,
+      topUpBody,
+    ] =
       await Promise.all([
         jsonFetch("/v1/dashboard/requests?limit=100", { token }),
         jsonFetch(
@@ -339,12 +355,14 @@ export default function DashboardPage() {
         jsonFetch("/v1/api-keys", { token }),
         jsonFetch("/v1/balance", { token }),
         jsonFetch("/v1/ledger?limit=50", { token }),
+        jsonFetch("/v1/top-ups?limit=10", { token }),
       ]);
     setRequests(requestBody.requests || []);
     setMonthRequests(monthRequestBody.requests || []);
     setKeys(keyBody.api_keys || []);
     setBalance(balanceBody.balance || null);
     setLedger(ledgerBody.entries || []);
+    setTopUps(topUpBody.top_ups || []);
   }
 
   useEffect(() => {
@@ -446,6 +464,7 @@ export default function DashboardPage() {
       body: JSON.stringify({ amountUsd: topUpAmount }),
     });
     const url = body.top_up?.checkout_url;
+    if (body.top_up) setTopUps((current) => [body.top_up, ...current]);
     setBanner(
       url
         ? "Opening secure checkout..."
@@ -860,19 +879,21 @@ export default function DashboardPage() {
                   </section>
                 </div>
 
-                <section className="billing-notice">
-                  <div>
-                    <strong>
-                      Credits usually appear within 30-90 seconds after
-                      checkout.
-                    </strong>
-                    <p>
-                      If account funding is delayed, the payment stays recorded
-                      and ToolRouter retries settlement. Credits are only made
-                      available after settlement succeeds.
-                    </p>
-                  </div>
-                </section>
+                {pendingTopUps.length ? (
+                  <section className="billing-notice">
+                    <div>
+                      <strong>
+                        Credits usually appear within 30-90 seconds after
+                        checkout.
+                      </strong>
+                      <p>
+                        If account funding is delayed, the payment stays recorded
+                        and ToolRouter retries settlement. Credits are only made
+                        available after settlement succeeds.
+                      </p>
+                    </div>
+                  </section>
+                ) : null}
 
                 {balance && !agentKitVerified ? (
                   <section className="card verification-card">

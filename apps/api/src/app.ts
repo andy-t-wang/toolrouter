@@ -57,6 +57,19 @@ function publicEndpoint(endpoint: any, statusByEndpoint: Map<string, any>) {
   };
 }
 
+function publicTopUp(purchase: any) {
+  return {
+    id: purchase.id,
+    provider: purchase.provider || "stripe",
+    provider_reference: purchase.provider_checkout_session_id || null,
+    amount_usd: purchase.amount_usd,
+    status: purchase.status,
+    created_at: purchase.created_at || null,
+    updated_at: purchase.updated_at || null,
+    error: purchase.error || null,
+  };
+}
+
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 const AGENT_BOOK_CONTRACT = "0xA23aB2712eA7BBa896930544C7d6636a96b944dA";
 const AGENTKIT_REGISTRATION_APP_ID = "app_a7c3e2b6b83927251a0db5345bd7146a";
@@ -1128,6 +1141,21 @@ export function createApiApp({
         user_id: user.user_id,
         limit,
       }),
+    };
+  });
+
+  app.get("/v1/top-ups", async (request: any) => {
+    const user = await authenticateSupabaseUser(request.headers);
+    const limit = Math.max(
+      1,
+      Math.min(Number(request.query?.limit || 20), 100),
+    );
+    const purchases = await store.listCreditPurchases({
+      user_id: user.user_id,
+      limit,
+    });
+    return {
+      top_ups: purchases.map(publicTopUp),
     };
   });
 

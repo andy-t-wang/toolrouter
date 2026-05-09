@@ -214,6 +214,13 @@ describe("router API", () => {
     assert.match(topUp.provider_reference, /^cs_dev_/);
     assert.equal(topUp.wallet_address, undefined);
 
+    const topUpsResponse = await fetch(`${baseUrl}/v1/top-ups`, { headers: sessionHeaders() });
+    assert.equal(topUpsResponse.status, 200);
+    const topUps = await topUpsResponse.json();
+    assert.equal(topUps.top_ups[0].id, topUp.id);
+    assert.equal(topUps.top_ups[0].status, "checkout_pending");
+    assert.equal(topUps.top_ups[0].checkout_url, undefined);
+
     const pendingResponse = await fetch(`${baseUrl}/v1/balance`, { headers: sessionHeaders() });
     const pending = await pendingResponse.json();
     assert.equal(pending.balance.available_usd, "100");
@@ -253,6 +260,11 @@ describe("router API", () => {
     const ledgerResponse = await fetch(`${baseUrl}/v1/ledger`, { headers: sessionHeaders() });
     const ledger = await ledgerResponse.json();
     assert.ok(ledger.entries.some((entry) => entry.type === "top_up_settled"));
+
+    const settledTopUpsResponse = await fetch(`${baseUrl}/v1/top-ups`, { headers: sessionHeaders() });
+    const settledTopUps = await settledTopUpsResponse.json();
+    assert.equal(settledTopUps.top_ups[0].id, topUp.id);
+    assert.equal(settledTopUps.top_ups[0].status, "funded");
   });
 
   it("rejects top-ups above the configured cap before checkout", async () => {
