@@ -37,6 +37,8 @@ describe("web dashboard static wiring", () => {
     assert.match(landingPage, /\/dashboard/);
     assert.match(landingPage, /\/v1\/status/);
     assert.match(landingPage, /publicEndpointStatus\(provider\)/);
+    assert.match(landingPage, /publicEndpointUptime/);
+    assert.match(landingPage, /publicEndpointSparkline\(provider\)/);
     assert.match(landingPage, /displayEndpointId\(provider\)/);
     assert.doesNotMatch(landingPage, /AgentKitStatusBadge/);
     assert.doesNotMatch(landingPage, /status-human-badge/);

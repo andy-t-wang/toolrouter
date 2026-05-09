@@ -118,6 +118,15 @@ function publicEndpointStatus(endpoint: Pick<LandingEndpoint, "status">) {
     : "unverified";
 }
 
+function publicEndpointUptime(endpoint: Pick<LandingEndpoint, "status">) {
+  return publicEndpointStatus(endpoint) === "healthy" ? 100 : null;
+}
+
+function publicEndpointSparkline(endpoint: Pick<LandingEndpoint, "status">) {
+  const uptime = publicEndpointUptime(endpoint);
+  return typeof uptime === "number" ? [uptime] : [];
+}
+
 function mergeEndpointRows(rows: LandingEndpoint[]) {
   const fallbackById = new Map(
     fallbackStatus.endpoints.map((endpoint) => [endpoint.id, endpoint]),
@@ -138,7 +147,7 @@ function mergeEndpointRows(rows: LandingEndpoint[]) {
 
 function summarizeStatus(endpoints: LandingEndpoint[], bodySummary: any = {}) {
   const trackedUptime = endpoints
-    .map((endpoint) => endpoint.uptime_30d)
+    .map(publicEndpointUptime)
     .filter((value): value is number => typeof value === "number");
   return {
     endpoint_count: Math.max(
@@ -303,9 +312,10 @@ function ProviderMark({ provider }: { provider: LandingEndpoint }) {
 }
 
 function UptimeRow({ provider }: { provider: LandingEndpoint }) {
+  const publicUptime = publicEndpointUptime(provider);
   const uptime =
-    typeof provider.uptime_30d === "number"
-      ? `${provider.uptime_30d.toFixed(2)}%`
+    typeof publicUptime === "number"
+      ? `${publicUptime.toFixed(2)}%`
       : "—";
   const latency = provider.p50_latency_ms ?? provider.latency_ms;
   return (
@@ -327,7 +337,7 @@ function UptimeRow({ provider }: { provider: LandingEndpoint }) {
         <StatusDot status={publicEndpointStatus(provider)} />
       </div>
       <div className="hide-md">
-        <Uptime30 values={provider.sparkline_30d || []} />
+        <Uptime30 values={publicEndpointSparkline(provider)} />
       </div>
       <div className="num mono">{uptime}</div>
       <div className="num mono muted">
