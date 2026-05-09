@@ -2,7 +2,7 @@ const routerMcpJson = `{
   "mcpServers": {
     "toolrouter": {
       "command": "npm",
-      "args": ["--prefix", "/path/to/toolrouter", "run", "start:mcp"],
+      "args": ["--silent", "--prefix", "/path/to/toolrouter", "run", "start:mcp"],
       "env": {
         "TOOLROUTER_API_URL": "https://toolrouter.world",
         "TOOLROUTER_API_KEY": "tr_..."
@@ -28,7 +28,7 @@ export const mcpClients = [
     code: `claude mcp add --scope user \\
   -e TOOLROUTER_API_URL=https://toolrouter.world \\
   -e TOOLROUTER_API_KEY=tr_... \\
-  toolrouter -- npm --prefix /path/to/toolrouter run start:mcp`,
+  toolrouter -- npm --silent --prefix /path/to/toolrouter run start:mcp`,
   },
   {
     id: "codex",
@@ -37,7 +37,7 @@ export const mcpClients = [
     code: `codex mcp add \\
   --env TOOLROUTER_API_URL=https://toolrouter.world \\
   --env TOOLROUTER_API_KEY=tr_... \\
-  toolrouter -- npm --prefix /path/to/toolrouter run start:mcp`,
+  toolrouter -- npm --silent --prefix /path/to/toolrouter run start:mcp`,
   },
   {
     id: "cursor",
@@ -58,7 +58,7 @@ ${routerMcpJson}`,
     "toolrouter": {
       "type": "stdio",
       "command": "npm",
-      "args": ["--prefix", "/path/to/toolrouter", "run", "start:mcp"],
+      "args": ["--silent", "--prefix", "/path/to/toolrouter", "run", "start:mcp"],
       "env": {
         "TOOLROUTER_API_URL": "https://toolrouter.world",
         "TOOLROUTER_API_KEY": "tr_..."
@@ -74,7 +74,7 @@ ${routerMcpJson}`,
     code: `mcp_servers:
   toolrouter:
     command: "npm"
-    args: ["--prefix", "/path/to/toolrouter", "run", "start:mcp"]
+    args: ["--silent", "--prefix", "/path/to/toolrouter", "run", "start:mcp"]
     env:
       TOOLROUTER_API_URL: "https://toolrouter.world"
       TOOLROUTER_API_KEY: "tr_..."

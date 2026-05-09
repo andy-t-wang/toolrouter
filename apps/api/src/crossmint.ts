@@ -241,6 +241,42 @@ export class CrossmintClient {
     const wallet = await this.getSignedWallet(walletLocator);
     return normalizeSignature(await EVMWallet.from(wallet).signMessage({ message }));
   }
+
+  async signTypedData({
+    walletLocator,
+    domain,
+    types,
+    primaryType,
+    message,
+  }: {
+    walletLocator: string;
+    domain: Record<string, unknown>;
+    types: Record<string, unknown>;
+    primaryType: string;
+    message: Record<string, unknown>;
+  }) {
+    if (bool(process.env.ROUTER_DEV_MODE) && !this.configured) {
+      const encoded = Buffer.from(
+        `dev:${walletLocator}:${primaryType}:${JSON.stringify({ domain, types, message })}`,
+      )
+        .toString("hex")
+        .slice(0, 130)
+        .padEnd(130, "0");
+      return `0x${encoded}`;
+    }
+
+    const { EVMWallet } = await this.wallets();
+    const wallet = await this.getSignedWallet(walletLocator);
+    return normalizeSignature(
+      await EVMWallet.from(wallet).signTypedData({
+        domain,
+        types,
+        primaryType,
+        message,
+        chain: this.config.chain || "base",
+      }),
+    );
+  }
 }
 
 export function createCrossmintClient(config: CrossmintConfig = {}) {

@@ -668,6 +668,15 @@ async function paymentSignerForRequest(store: any, crossmint: any, auth: any) {
         message,
       });
     },
+    signTypedData: async (payload: any) => {
+      return crossmint.signTypedData({
+        walletLocator: wallet.wallet_locator,
+        domain: payload.domain,
+        types: payload.types,
+        primaryType: payload.primaryType,
+        message: payload.message,
+      });
+    },
   };
 }
 

@@ -158,6 +158,11 @@ function normalizeSignerAccount(account) {
       }
       return account.signMessage({ message: payload });
     },
+    ...(typeof account.signTypedData === "function"
+      ? {
+          signTypedData: (payload) => account.signTypedData(payload),
+        }
+      : {}),
   };
 }
 
