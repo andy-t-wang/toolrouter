@@ -118,6 +118,32 @@ function maybeDecodePaymentHeader(header) {
   }
 }
 
+async function paymentRequiredFromResponse(response) {
+  const header = response.headers.get("payment-required") || response.headers.get("PAYMENT-REQUIRED");
+  const decoded = maybeDecodePaymentHeader(header);
+  if (decoded) return decoded;
+  try {
+    return await response.clone().json();
+  } catch {
+    return null;
+  }
+}
+
+function agentkitExtensionFromPaymentRequired(paymentRequired) {
+  const extension = paymentRequired?.extensions?.agentkit;
+  if (!extension || typeof extension !== "object") return null;
+  return extension;
+}
+
+async function retryWithAgentKitHeader({ response, request, init, agentkit, baseFetch }) {
+  const paymentRequired = await paymentRequiredFromResponse(response);
+  const extension = agentkitExtensionFromPaymentRequired(paymentRequired);
+  if (!extension || typeof agentkit?.createHeader !== "function") return response;
+  const headers = new Headers(init.headers);
+  headers.set("agentkit", await agentkit.createHeader(extension));
+  return baseFetch(request.url, { ...init, headers });
+}
+
 function receiptFromResponse(response, events) {
   const header = response.headers.get("payment-response") || response.headers.get("x-payment-response");
   const decoded = maybeDecodePaymentHeader(header);
@@ -292,6 +318,7 @@ export async function executeEndpoint({ endpoint, request, maxUsd, traceId, paym
     response = await fetchWithPayment(request.url, await buildPaymentInit({ endpoint, deps, account, request }));
     path = usesAgentKitProofHeader(endpoint) ? "agentkit_to_x402" : "x402";
   } else {
+    const baseFetch = fetchImpl || fetch;
     const agentkit = deps.createAgentkitClient({
       signer: {
         address: account.address,
@@ -304,12 +331,21 @@ export async function executeEndpoint({ endpoint, request, maxUsd, traceId, paym
     response = await agentkit.fetch(request.url, init);
     path = "agentkit";
     if (response.status === 402) {
+      response = await retryWithAgentKitHeader({
+        response,
+        request,
+        init,
+        agentkit,
+        baseFetch,
+      });
+    }
+    if (response.status === 402) {
       const fetchWithPayment = createPaymentFetch({
         ...deps,
         account,
         maxUsd: paymentMaxUsd,
         events,
-        baseFetch: fetchImpl || fetch,
+        baseFetch,
       });
       response = await fetchWithPayment(request.url, init);
       path = "agentkit_to_x402";

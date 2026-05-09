@@ -60,6 +60,40 @@ function paymentResponse(body = { results: [] }) {
   return jsonResponse(body, { headers: { "payment-response": receipt } });
 }
 
+function agentkitChallengeResponse() {
+  const paymentRequired = {
+    x402Version: 2,
+    accepts: [],
+    extensions: {
+      agentkit: {
+        info: {
+          version: "1",
+          statement: "Verify your agent is backed by a real human to access Exa",
+          domain: "api.exa.ai",
+          uri: "https://api.exa.ai/search",
+          nonce: "nonce_header",
+          issuedAt: "2026-05-09T00:00:00.000Z",
+          resources: ["https://api.exa.ai/search"],
+        },
+        supportedChains: [
+          { chainId: "eip155:480", type: "eip191" },
+          { chainId: "eip155:480", type: "eip1271" },
+        ],
+        schema: {},
+      },
+    },
+  };
+  return jsonResponse(
+    { error: "Payment required to access this resource" },
+    {
+      status: 402,
+      headers: {
+        "payment-required": Buffer.from(JSON.stringify(paymentRequired)).toString("base64"),
+      },
+    },
+  );
+}
+
 function fakePaymentDeps({ captures, agentkitResponse, x402Response, selectedRequirements }) {
   class FakeX402Client {
     register() {}
@@ -84,6 +118,18 @@ function fakePaymentDeps({ captures, agentkitResponse, x402Response, selectedReq
     createAgentkitClient(config) {
       captures.agentkitConfig = config;
       return {
+        async createHeader(extension) {
+          captures.agentkitHeaderExtension = extension;
+          return Buffer.from(
+            JSON.stringify({
+              ...extension.info,
+              address: config.signer.address,
+              chainId: config.signer.chainId,
+              type: config.signer.type,
+              signature: await config.signer.signMessage(`siwe:${extension.info.domain}:${extension.info.uri}`),
+            }),
+          ).toString("base64");
+        },
         async fetch(url, init) {
           captures.agentkitCalls.push({ url, init });
           return agentkitResponse;
@@ -130,6 +176,7 @@ function captures() {
     policies: [],
     agentkitConfig: null,
     agentkitProofInfo: null,
+    agentkitHeaderExtension: null,
     schemeAccount: null,
     v1Networks: [],
   };
@@ -197,6 +244,36 @@ describe("AgentKit/x402 executor", () => {
     assert.equal(seen.agentkitCalls.length, 1);
     assert.equal(seen.x402Calls.length, 1);
     assert.deepEqual(seen.v1Networks, ["base"]);
+  });
+
+  it("signs Exa's AgentKit challenge from the payment-required response header", async () => {
+    const seen = captures();
+    const retryCalls = [];
+    const result = await executeEndpoint({
+      endpoint: baseEndpoint(),
+      request: providerRequest(),
+      maxUsd: "0.01",
+      traceId: "trace_exa_header_agentkit",
+      fetchImpl: async (url, init) => {
+        retryCalls.push({ url, init });
+        return jsonResponse({ results: [{ url: "https://example.com" }] });
+      },
+      paymentDeps: fakePaymentDeps({
+        captures: seen,
+        agentkitResponse: agentkitChallengeResponse(),
+        x402Response: paymentResponse(),
+      }),
+    });
+
+    assert.equal(result.path, "agentkit");
+    assert.equal(result.charged, false);
+    assert.equal(seen.agentkitCalls.length, 1);
+    assert.equal(seen.x402Calls.length, 0);
+    assert.equal(retryCalls.length, 1);
+    assert.equal(retryCalls[0].url, "https://api.exa.ai/search");
+    assert.ok(retryCalls[0].init.headers.get("agentkit"));
+    assert.equal(seen.agentkitHeaderExtension.info.domain, "api.exa.ai");
+    assert.equal(seen.agentkitHeaderExtension.info.uri, "https://api.exa.ai/search");
   });
 
   it("does not mark a failed x402 retry as charged", async () => {

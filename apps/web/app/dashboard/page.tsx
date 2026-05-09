@@ -244,6 +244,11 @@ function statusTextClass(row: any) {
   return statusCode >= 400 ? "bad-text" : "";
 }
 
+function requestFailed(row: any) {
+  const statusCode = Number(row?.status_code);
+  return Boolean(row?.error || row?.ok === false || (Number.isFinite(statusCode) && statusCode >= 400));
+}
+
 function rowTimestamp(row: any) {
   const timestamp = Date.parse(row?.ts || "");
   return Number.isFinite(timestamp) ? timestamp : 0;
@@ -353,9 +358,9 @@ function benefitCell(row: any) {
 
 function humanBadge() {
   return (
-    <span className="human-badge" aria-label="World ID verified human">
-      <span className="human-mark" aria-hidden="true" />
-      <span>human</span>
+    <span className="human-badge" aria-label="AgentKit enabled for verified human">
+      <img className="human-badge-mark" src="/human.svg" alt="" aria-hidden="true" />
+      <span>AgentKit - Enabled</span>
     </span>
   );
 }
@@ -854,8 +859,8 @@ export default function DashboardPage() {
                     </strong>
                     <span className="metric-hint">
                       {dashboardMetrics.agentKitCount.toLocaleString()} of{" "}
-                      {dashboardMetrics.totalRequests.toLocaleString()} on free
-                      path
+                      {dashboardMetrics.successfulRequestCount.toLocaleString()} successful
+                      requests
                     </span>
                   </section>
                 </div>
@@ -868,20 +873,20 @@ export default function DashboardPage() {
                     <div className="free-paid-summary">
                       <div className="split-stats">
                         <div>
-                          <span className="metric-label">AgentKit (free)</span>
+                          <span className="metric-label">AgentKit</span>
                           <strong className="split-count">
                             {dashboardMetrics.agentKitCount.toLocaleString()}
                           </strong>
                         </div>
                         <div>
-                          <span className="metric-label">x402 (paid)</span>
+                          <span className="metric-label">x402</span>
                           <strong className="split-count">
                             {dashboardMetrics.x402Count.toLocaleString()}
                           </strong>
                         </div>
                       </div>
                       <span className="muted mono num">
-                        {dashboardMetrics.agentKitShare.toFixed(1)}% free
+                        {dashboardMetrics.agentKitShare.toFixed(1)}% AgentKit
                       </span>
                     </div>
                     <div
@@ -920,7 +925,10 @@ export default function DashboardPage() {
                       <tbody>
                         {recentRequests.length ? (
                           recentRequests.map((row) => (
-                            <tr key={row.id}>
+                            <tr
+                              className={requestFailed(row) ? "request-row failed" : "request-row"}
+                              key={row.id}
+                            >
                               <td className="mono muted">
                                 {formatTime(row.ts)}
                               </td>

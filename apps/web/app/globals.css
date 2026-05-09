@@ -863,6 +863,18 @@ code {
   color: var(--bad);
 }
 
+.recent-calls-table tr.request-row.failed td {
+  background: var(--bad-soft);
+}
+
+.recent-calls-table tr.request-row.failed td:first-child {
+  box-shadow: inset 3px 0 0 var(--bad);
+}
+
+.recent-calls-table tr.request-row.failed:hover td {
+  background: #ead0d0;
+}
+
 .tbl th,
 .tbl td {
   border-bottom: 1px solid var(--line);
@@ -1015,23 +1027,11 @@ code {
   width: fit-content;
 }
 
-.human-mark {
-  border: 1.5px solid var(--ink);
-  border-radius: 999px;
-  display: inline-block;
-  height: 12px;
-  position: relative;
-  width: 12px;
-}
-
-.human-mark::after {
-  border: 1.5px solid var(--ink);
-  border-left-color: transparent;
-  border-radius: 999px;
-  content: "";
-  inset: 2px;
-  position: absolute;
-  transform: rotate(28deg);
+.human-badge-mark {
+  display: block;
+  flex: none;
+  height: 14px;
+  width: 14px;
 }
 
 .verification-card {

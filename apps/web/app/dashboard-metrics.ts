@@ -2,7 +2,10 @@ export type DashboardRequestRow = {
   amount_usd?: unknown;
   charged?: unknown;
   credit_captured_usd?: unknown;
+  error?: unknown;
+  ok?: unknown;
   path?: unknown;
+  status_code?: unknown;
 };
 
 function toNumber(value: unknown) {
@@ -24,13 +27,21 @@ export function normalizedPaymentPath(path: unknown) {
   return "unknown";
 }
 
+export function requestSucceeded(row: DashboardRequestRow) {
+  const statusCode = Number(row.status_code);
+  if (row.error || row.ok === false) return false;
+  return !Number.isFinite(statusCode) || statusCode < 400;
+}
+
 export function computeDashboardMetrics(rows: DashboardRequestRow[], now = new Date()) {
   const totalRequests = rows.length;
-  const agentKitCount = rows.filter((row) => normalizedPaymentPath(row.path) === "agentkit").length;
-  const x402Count = rows.filter((row) => normalizedPaymentPath(row.path) === "x402").length;
+  const successfulRows = rows.filter(requestSucceeded);
+  const agentKitCount = successfulRows.filter((row) => normalizedPaymentPath(row.path) === "agentkit").length;
+  const x402Count = successfulRows.filter((row) => normalizedPaymentPath(row.path) === "x402").length;
   const totalPaid = rows.reduce((sum, row) => sum + paidAmount(row), 0);
-  const agentKitPercent = totalRequests ? (agentKitCount / totalRequests) * 100 : 0;
-  const agentKitShare = agentKitCount + x402Count ? (agentKitCount / (agentKitCount + x402Count)) * 100 : 0;
+  const successfulRequestCount = successfulRows.length;
+  const agentKitPercent = successfulRequestCount ? (agentKitCount / successfulRequestCount) * 100 : 0;
+  const agentKitShare = successfulRequestCount ? (agentKitCount / successfulRequestCount) * 100 : 0;
   const dayOfMonth = Math.max(1, now.getDate());
   return {
     agentKitCount,
@@ -41,6 +52,7 @@ export function computeDashboardMetrics(rows: DashboardRequestRow[], now = new D
     trackedPathCount: agentKitCount + x402Count,
     totalPaid,
     totalRequests,
+    successfulRequestCount,
     x402Count,
   };
 }

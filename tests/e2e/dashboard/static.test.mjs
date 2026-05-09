@@ -78,6 +78,11 @@ describe("web dashboard static wiring", () => {
     assert.match(dashboardPage, /Total paid/);
     assert.match(dashboardPage, /% using AgentKit/);
     assert.match(dashboardPage, /AgentKit vs x402/);
+    assert.match(dashboardPage, /successful\s+requests/);
+    assert.doesNotMatch(dashboardPage, /on free\s+path/);
+    assert.doesNotMatch(dashboardPage, /AgentKit \(free\)/);
+    assert.doesNotMatch(dashboardPage, /x402 \(paid\)/);
+    assert.doesNotMatch(dashboardPage, /% free/);
     assert.match(dashboardPage, /Recent calls/);
     assert.doesNotMatch(dashboardPage, /Endpoint registry/);
     assert.doesNotMatch(dashboardPage, /Supabase monitoring/);
@@ -92,6 +97,8 @@ describe("web dashboard static wiring", () => {
     assert.match(dashboardPage, /\/v1\/agentkit\/registration/);
     assert.match(dashboardPage, /\/v1\/agentkit\/registration\/complete/);
     assert.match(dashboardPage, /\/human\.svg/);
+    assert.match(dashboardPage, /AgentKit - Enabled/);
+    assert.match(dashboardPage, /human-badge-mark/);
     assert.match(dashboardPage, /endpointCell\(row\.endpoint_id\)/);
     assert.match(dashboardPage, /\/exa-logomark\.svg/);
     assert.match(dashboardPage, /\/browserbase-logomark\.svg/);
@@ -99,6 +106,7 @@ describe("web dashboard static wiring", () => {
     assert.match(dashboardPage, /<th>Benefit<\/th>/);
     assert.match(dashboardPage, /protocolChip\(row\)/);
     assert.match(dashboardPage, /benefitCell\(row\)/);
+    assert.match(dashboardPage, /requestFailed\(row\)/);
     assert.match(dashboardPage, /statusTextClass\(row\)/);
     assert.match(dashboardPage, /compactRecentRequests\(requests\)/);
     assert.match(dashboardPage, /logicalRequestKey\(row\)/);
@@ -180,6 +188,7 @@ describe("web dashboard static wiring", () => {
     assert.match(css, /\.mkt-hero/);
     assert.match(css, /\.topnav/);
     assert.match(css, /\.recent-calls-table/);
+    assert.match(css, /\.recent-calls-table tr\.request-row\.failed td/);
     assert.match(css, /\.billing-grid/);
     assert.match(css, /\.endpoint-cell\s*\{[^}]*display:\s*inline-flex/);
     assert.doesNotMatch(css, /\.endpoint-cell\s*\{[^}]*display:\s*grid/);
