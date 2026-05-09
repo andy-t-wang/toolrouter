@@ -11,12 +11,7 @@ const routerMcpJson = `{
   }
 }`;
 
-export const firstQueryPrompt = `Use ToolRouter's search category to research the top sushi places in SF.
-Call toolrouter_search with:
-{
-  "query": "top sushi places in San Francisco",
-  "maxUsd": "0.01"
-}
+export const firstQueryPrompt = `Use ToolRouter to search for the top sushi places in San Francisco.
 
 Summarize the best 5 options and include the ToolRouter request id.`;
 

@@ -147,7 +147,8 @@ describe("web dashboard static wiring", () => {
     assert.match(dashboardPage, /<McpClientTabs compact \/>/);
     assert.match(dashboardPage, /Set up MCP/);
     assert.match(dashboardPage, /First query/);
-    assert.match(mcpContent, /toolrouter_search/);
+    assert.match(mcpContent, /top sushi places in San Francisco/);
+    assert.doesNotMatch(mcpContent, /toolrouter_search/);
     assert.doesNotMatch(dashboardPage, /AgentKit examples/);
     assert.doesNotMatch(dashboardPage, /endpoint_id: "exa\.search"/);
     assert.doesNotMatch(dashboardPage, /\/call/);
