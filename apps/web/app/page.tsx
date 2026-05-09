@@ -92,7 +92,7 @@ const fallbackStatus: LandingStatus = {
 };
 
 async function loadLandingStatus(): Promise<LandingStatus> {
-  const base = process.env.TOOLROUTER_API_INTERNAL_URL || process.env.NEXT_PUBLIC_TOOLROUTER_API_URL || "http://127.0.0.1:9402";
+  const base = process.env.TOOLROUTER_API_INTERNAL_URL || process.env.NEXT_PUBLIC_TOOLROUTER_API_URL || "https://toolrouter.world";
   try {
     const response = await fetch(`${base.replace(/\/$/u, "")}/v1/status`, { cache: "no-store" });
     if (!response.ok) return fallbackStatus;

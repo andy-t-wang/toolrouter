@@ -28,7 +28,7 @@ function envValue(env: any, names: string[]) {
 
 function apiConfig(env: any) {
   return {
-    apiBase: envValue(env, ["TOOLROUTER_API_URL", "NEXT_PUBLIC_TOOLROUTER_API_URL"]) || "http://127.0.0.1:9402",
+    apiBase: envValue(env, ["TOOLROUTER_API_URL", "NEXT_PUBLIC_TOOLROUTER_API_URL"]) || "https://toolrouter.world",
     apiKey: envValue(env, ["TOOLROUTER_API_KEY", "AGENTKIT_ROUTER_API_KEY", "AGENTKIT_ROUTER_DEV_API_KEY"]),
   };
 }

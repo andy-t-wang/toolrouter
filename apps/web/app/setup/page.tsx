@@ -91,8 +91,8 @@ export default function SetupPage() {
             <div>
               <h2 className="mkt-display">Common MCP config</h2>
               <p>
-                Create an API key in the dashboard, clone the ToolRouter repo somewhere stable, then point your MCP
-                client at the adapter. The adapter calls the production router at toolrouter.world.
+                Create an API key in the dashboard, point your MCP client at the ToolRouter adapter, and route calls
+                through the production API at toolrouter.world.
               </p>
             </div>
             <pre className="landing-code"><code>{routerMcpJson}</code></pre>
@@ -104,7 +104,7 @@ export default function SetupPage() {
             <div>
               <h2 className="mkt-display">Client setup</h2>
               <p>
-                Replace <code>/path/to/toolrouter</code> with your local checkout and replace <code>tr_...</code> with
+                Replace <code>/path/to/toolrouter</code> with your ToolRouter adapter path and replace <code>tr_...</code> with
                 the API key shown once in the dashboard.
               </p>
             </div>

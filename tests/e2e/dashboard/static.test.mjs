@@ -29,6 +29,7 @@ describe("web dashboard static wiring", () => {
     assert.match(landingPage, /\/dashboard/);
     assert.match(landingPage, /\/v1\/status/);
     assert.match(landingPage, /<AgentationDev \/>/);
+    assert.doesNotMatch(landingPage, /http:\/\/127\.0\.0\.1:9402/);
     assert.doesNotMatch(landingPage, /Get an MCP key/);
     assert.doesNotMatch(landingPage, /Pricing/);
     assert.doesNotMatch(landingPage, /Changelog/);
@@ -43,6 +44,8 @@ describe("web dashboard static wiring", () => {
 
   it("presents setup around generic tool categories before provider-specific endpoints", () => {
     assert.match(setupPage, /https:\/\/toolrouter\.world/);
+    assert.doesNotMatch(setupPage, /localhost/);
+    assert.doesNotMatch(setupPage, /127\.0\.0\.1/);
     assert.doesNotMatch(setupPage, /127\.0\.0\.1:9402/);
     assert.match(setupPage, /Codex/);
     assert.match(setupPage, /Claude Code/);
