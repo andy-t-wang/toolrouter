@@ -245,7 +245,7 @@ export default async function LandingPage() {
         <nav className="mkt-nav" aria-label="Main navigation">
           <div className="mkt-container mkt-nav-inner">
             <a className="mkt-brand" href="/">
-              <span className="brand-mark" aria-hidden="true" />
+              <img className="brand-mark" src="/toolrouter-mark.svg" alt="" aria-hidden="true" />
               <span>ToolRouter</span>
             </a>
             <div className="mkt-nav-actions">
@@ -399,7 +399,7 @@ export default async function LandingPage() {
         <footer className="mkt-foot">
           <div className="mkt-container mkt-foot-inner">
             <a className="mkt-brand small" href="/">
-              <span className="brand-mark" aria-hidden="true" />
+              <img className="brand-mark" src="/toolrouter-mark.svg" alt="" aria-hidden="true" />
               <span>ToolRouter</span>
             </a>
             <span className="mono">v0.1.0</span>

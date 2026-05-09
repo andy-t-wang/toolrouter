@@ -180,22 +180,10 @@ code {
 }
 
 .brand-mark {
-  background: var(--ink);
-  border-radius: 6px;
+  display: block;
   flex: none;
-  height: 22px;
-  position: relative;
-  width: 22px;
-}
-
-.brand-mark::after {
-  border: 2px solid var(--bone);
-  border-radius: 50%;
-  border-right-color: transparent;
-  content: "";
-  inset: 5px;
-  position: absolute;
-  transform: rotate(35deg);
+  height: 26px;
+  width: 32px;
 }
 
 .workspace-path {

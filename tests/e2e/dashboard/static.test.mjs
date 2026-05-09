@@ -14,6 +14,7 @@ const css = readFileSync(new URL("../../../apps/web/app/globals.css", import.met
 describe("web dashboard static wiring", () => {
   it("keeps the public landing page at the root route", () => {
     assert.match(landingPage, /ToolRouter/);
+    assert.match(landingPage, /\/toolrouter-mark\.svg/);
     assert.match(landingPage, /Tools your agent/);
     assert.match(landingPage, /Get an API key/);
     assert.match(landingPage, /View console/);

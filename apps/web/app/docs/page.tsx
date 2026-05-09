@@ -35,7 +35,7 @@ export default function DocsPage() {
         <nav className="mkt-nav" aria-label="Main navigation">
           <div className="mkt-container mkt-nav-inner">
             <a className="mkt-brand" href="/">
-              <span className="brand-mark" aria-hidden="true" />
+              <img className="brand-mark" src="/toolrouter-mark.svg" alt="" aria-hidden="true" />
               <span>ToolRouter</span>
             </a>
             <div className="mkt-nav-actions">
