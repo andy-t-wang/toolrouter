@@ -221,12 +221,11 @@ function keyStatus(active: boolean) {
 }
 
 function protocolForRow(row: any) {
+  const explicitProtocol = String(row?.protocol || row?.payment_protocol || "").toLowerCase();
+  if (explicitProtocol === "mpp") return "MPP";
+  if (explicitProtocol === "x402") return "x402";
   const route = String(row?.path || "unknown").toLowerCase();
-  const benefit = String(row?.agentkit_value_type || row?.agentkit_value_label || "").toLowerCase();
-  const isPaidAgentKitBenefit = benefit.includes("access") || benefit.includes("discount");
-  if (route === "agentkit" && isPaidAgentKitBenefit) return "x402";
-  if (route === "agentkit") return "MPP";
-  if (route === "x402" || route === "agentkit_to_x402") return "x402";
+  if (route === "agentkit" || route === "x402" || route === "agentkit_to_x402") return "x402";
   return route;
 }
 

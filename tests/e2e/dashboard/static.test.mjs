@@ -20,6 +20,10 @@ describe("web dashboard static wiring", () => {
     assert.match(landingPage, /ToolRouter/);
     assert.match(landingPage, /\/toolrouter-mark\.svg/);
     assert.match(landingPage, /Tools your agent/);
+    assert.match(landingPage, /Simplified billing/);
+    assert.match(landingPage, /no\s+stablecoin\s+top-ups/);
+    assert.match(landingPage, /Verified human boosts/);
+    assert.match(landingPage, /free trials,\s+discounts,\s+or access paths/);
     assert.match(landingPage, /Get an API key/);
     assert.match(landingPage, /View console/);
     assert.match(landingPage, /\/setup/);
@@ -119,8 +123,9 @@ describe("web dashboard static wiring", () => {
     assert.match(dashboardPage, /AgentKit - \{label\}/);
     assert.doesNotMatch(dashboardPage, /<th>Value<\/th>/);
     assert.doesNotMatch(dashboardPage, /agentkit-value-kind/);
+    assert.match(dashboardPage, /payment_protocol/);
     assert.match(dashboardPage, /MPP/);
-    assert.match(dashboardPage, /isPaidAgentKitBenefit/);
+    assert.doesNotMatch(dashboardPage, /isPaidAgentKitBenefit/);
     assert.match(dashboardPage, /isFreeTrial/);
     assert.match(dashboardPage, /path === "agentkit" && !row\.charged/);
     assert.match(dashboardPage, /Credit balance/);

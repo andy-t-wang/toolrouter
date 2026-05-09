@@ -337,54 +337,44 @@ function UptimeRow({ provider }: { provider: LandingEndpoint }) {
   );
 }
 
-function ProviderCluster({ providers }: { providers: LandingEndpoint[] }) {
-  const marks = providers.slice(0, 9).map((provider) => ({
-    id: provider.id,
-    initial: titleCase(provider.provider).slice(0, 2).toUpperCase(),
-    logo: providerLogoSrc(provider.provider),
-  }));
-  const resolved = marks.length
-    ? marks
-    : [{ id: "fallback", initial: "EX", logo: "/exa-logomark.svg" }];
-  const compactPositions: Record<number, Array<{ l: string; t: string }>> = {
-    1: [{ l: "calc(50% - 16px)", t: "calc(50% - 16px)" }],
-    2: [
-      { l: "calc(38% - 16px)", t: "calc(50% - 16px)" },
-      { l: "calc(62% - 16px)", t: "calc(50% - 16px)" },
-    ],
-    3: [
-      { l: "calc(50% - 16px)", t: "calc(26% - 16px)" },
-      { l: "calc(34% - 16px)", t: "calc(66% - 16px)" },
-      { l: "calc(66% - 16px)", t: "calc(66% - 16px)" },
-    ],
-  };
-  const fullPositions = [
-    { l: "14%", t: "12%" },
-    { l: "46%", t: "6%" },
-    { l: "76%", t: "14%" },
-    { l: "6%", t: "42%" },
-    { l: "38%", t: "38%" },
-    { l: "68%", t: "44%" },
-    { l: "22%", t: "70%" },
-    { l: "54%", t: "72%" },
-    { l: "82%", t: "68%" },
-  ];
-  const positions = compactPositions[resolved.length] || fullPositions;
+function BillingArt() {
   return (
-    <div className="vp-cluster">
-      {resolved.map((mark, index) => (
-        <span
-          key={`${mark.id}-${index}`}
-          className={`lg ${mark.logo ? "logo-lg" : ""}`}
-          style={{ left: positions[index].l, top: positions[index].t }}
-        >
-          {mark.logo ? (
-            <img src={mark.logo} alt="" aria-hidden="true" />
-          ) : (
-            mark.initial
-          )}
-        </span>
-      ))}
+    <div className="vp-billing-art" aria-hidden="true">
+      <div className="vp-billing-card api">
+        <span className="mono">API</span>
+      </div>
+      <div className="vp-billing-lines">
+        <span />
+        <span />
+        <span />
+      </div>
+      <div className="vp-billing-card ledger">
+        <div className="vp-billing-row">
+          <span>Exa</span>
+          <strong>$0.007</strong>
+        </div>
+        <div className="vp-billing-row">
+          <span>Browserbase</span>
+          <strong>$0.01</strong>
+        </div>
+        <div className="vp-billing-total">
+          <span>ToolRouter</span>
+          <strong>1 balance</strong>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function HumanBoostArt() {
+  return (
+    <div className="vp-human-boost" aria-hidden="true">
+      <div className="vp-human-mark">
+        <img src="/human.svg" alt="" />
+      </div>
+      <span className="vp-boost-node free">Free trial</span>
+      <span className="vp-boost-node access">Access</span>
+      <span className="vp-boost-node discount">Discount</span>
     </div>
   );
 }
@@ -469,13 +459,14 @@ export default async function LandingPage() {
             <div className="vp-grid">
               <div className="vp-card">
                 <div className="vp-art">
-                  <ProviderCluster providers={providers} />
+                  <BillingArt />
                 </div>
-                <h3>One API for any tool</h3>
+                <h3>Simplified billing</h3>
                 <p>
-                  Connect once over MCP. Call any verified endpoint by name:
-                  Exa, Browserbase, Algolia, AgentMail, and more. No per-vendor
-                  SDKs, no per-vendor wallets.
+                  One API key and one credit balance for every tool. ToolRouter
+                  handles provider x402 payments behind the scenes: no
+                  stablecoin top-ups, wallet management, or per-vendor billing
+                  setup.
                 </p>
               </div>
 
@@ -583,6 +574,18 @@ export default async function LandingPage() {
                   If a provider goes down, ToolRouter routes to a verified
                   equivalent. Your agent keeps working through the incident, and
                   you see the failover in the trace.
+                </p>
+              </div>
+
+              <div className="vp-card">
+                <div className="vp-art">
+                  <HumanBoostArt />
+                </div>
+                <h3>Verified human boosts</h3>
+                <p>
+                  Verified AgentKit accounts can unlock provider benefits for
+                  delegated work: free trials, discounts, or access paths. Your
+                  agent gets the boost without extra provider setup.
                 </p>
               </div>
 
