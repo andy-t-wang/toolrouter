@@ -63,6 +63,8 @@ describe("web dashboard static wiring", () => {
     assert.match(dashboardPage, /QRCodeSVG/);
     assert.match(dashboardPage, /Scan with World App/);
     assert.match(dashboardPage, /Open verification link/);
+    assert.match(dashboardPage, /ToolRouter returned an unexpected response/);
+    assert.match(dashboardPage, /World App verification returned an unexpected response/);
     assert.match(dashboardPage, /\/v1\/agentkit\/registration/);
     assert.match(dashboardPage, /\/v1\/agentkit\/registration\/complete/);
     assert.match(dashboardPage, /Credit balance/);

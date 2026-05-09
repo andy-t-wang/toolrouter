@@ -249,7 +249,19 @@ async function jsonFetch(
       ...(options.headers || {}),
     },
   });
-  const body = await response.json();
+  const text = await response.text();
+  let body: any = {};
+  if (text) {
+    try {
+      body = JSON.parse(text);
+    } catch {
+      throw new Error(
+        response.ok
+          ? "ToolRouter returned an unexpected response. Refresh and try again."
+          : `Request failed: ${response.status}`,
+      );
+    }
+  }
   if (!response.ok)
     throw new Error(
       body.error?.message || `Request failed: ${response.status}`,
@@ -519,7 +531,13 @@ export default function DashboardPage() {
       const deadline =
         Date.now() + (prepared.registration.expires_in_seconds || 300) * 1000;
       while (Date.now() < deadline) {
-        await worldID.getState().pollForUpdates();
+        try {
+          await worldID.getState().pollForUpdates();
+        } catch {
+          throw new Error(
+            "World App verification returned an unexpected response. Start the verification again.",
+          );
+        }
         const state = worldID.getState();
         if (state.errorCode) {
           throw new Error(`World App verification failed: ${state.errorCode}`);

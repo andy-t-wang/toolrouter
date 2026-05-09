@@ -532,6 +532,50 @@ function hashHumanId(value: string) {
   return createHash("sha256").update(value).digest("hex");
 }
 
+async function parseAgentKitRelayResponse(response: any) {
+  const contentType =
+    typeof response.headers?.get === "function"
+      ? response.headers.get("content-type") || ""
+      : "";
+  const text = await response.text();
+  let body: any = null;
+  if (text) {
+    try {
+      body = JSON.parse(text);
+    } catch {
+      throw Object.assign(
+        new Error(
+          "AgentKit registration relay returned a non-JSON response. Please try again.",
+        ),
+        {
+          statusCode: 502,
+          code: "agentkit_registration_failed",
+          details: {
+            relay_status: response.status,
+            relay_content_type: contentType || "unknown",
+          },
+        },
+      );
+    }
+  }
+  if (!response.ok) {
+    const message =
+      body?.error?.message ||
+      body?.error ||
+      body?.message ||
+      `relay returned ${response.status}`;
+    throw Object.assign(new Error(`AgentKit registration failed: ${message}`), {
+      statusCode: 502,
+      code: "agentkit_registration_failed",
+      details: {
+        relay_status: response.status,
+        relay_content_type: contentType || "unknown",
+      },
+    });
+  }
+  return body || {};
+}
+
 function agentBookRegistrationService() {
   const client = createPublicClient({
     chain: worldchain,
@@ -557,17 +601,7 @@ function agentBookRegistrationService() {
           body: JSON.stringify(registration),
         },
       );
-      if (!response.ok) {
-        const body = await response.text();
-        throw Object.assign(
-          new Error(`AgentKit registration failed: ${response.status}: ${body}`),
-          {
-            statusCode: 502,
-            code: "agentkit_registration_failed",
-          },
-        );
-      }
-      return response.json();
+      return parseAgentKitRelayResponse(response);
     },
   };
 }
@@ -1009,8 +1043,14 @@ export function createApiApp({
     done();
   });
 
-  app.setErrorHandler((error: any, _request, reply) => {
+  app.setErrorHandler((error: any, request, reply) => {
     const normalized = normalizeApiError(error);
+    if (normalized.statusCode >= 500) {
+      request.log.error(
+        { code: normalized.code, details: normalized.details },
+        normalized.message,
+      );
+    }
     reply.status(normalized.statusCode).send({
       error: {
         code: normalized.code,
