@@ -20,11 +20,9 @@ const LEDGER_TYPE_LABELS: Record<string, string> = {
   top_up_settled: "Credits added",
   top_up_failed: "Top-up failed",
   request_charge: "Usage charged",
-  request_release: "Credits returned",
   request_started: "Usage started",
   reserve: "Usage started",
   capture: "Usage charged",
-  release: "Credits returned",
 };
 
 function parseUsd(value: unknown) {
@@ -58,19 +56,21 @@ function latestMeaningfulEntry(entries: LedgerEntry[]) {
   );
 }
 
-function collapseRequestLedgerGroup(referenceId: string, entries: LedgerEntry[]) {
+function collapseRequestLedgerGroup(referenceId: string, entries: LedgerEntry[]): LedgerDisplayEntry | null {
   const captured = entries
     .filter((entry) => entry.type === "capture")
     .reduce((total, entry) => total + parseUsd(entry.amount_usd), 0n);
   const released = entries
     .filter((entry) => entry.type === "release")
     .reduce((total, entry) => total + parseUsd(entry.amount_usd), 0n);
+  if (captured === 0n && released > 0n) return null;
+
   const reserve = entries.find((entry) => entry.type === "reserve") || entries[0];
   const display = latestMeaningfulEntry(entries);
-  const amount = captured > 0n ? captured : released > 0n ? released : parseUsd(reserve?.amount_usd);
-  const type = captured > 0n ? "request_charge" : released > 0n ? "request_release" : "request_started";
+  const amount = captured > 0n ? captured : parseUsd(reserve?.amount_usd);
+  const type = captured > 0n ? "request_charge" : "request_started";
   const direction: LedgerDisplayEntry["amount_direction"] =
-    captured > 0n ? "negative" : released > 0n ? "positive" : "neutral";
+    captured > 0n ? "negative" : "neutral";
 
   return {
     ...display,
@@ -109,9 +109,9 @@ export function compactLedgerEntries(entries: LedgerEntry[] = []): LedgerDisplay
     grouped.set(referenceId, [...(grouped.get(referenceId) || []), entry]);
   }
 
-  const collapsed = [...grouped.entries()].map(([referenceId, group]) =>
-    collapseRequestLedgerGroup(referenceId, group),
-  );
+  const collapsed = [...grouped.entries()]
+    .map(([referenceId, group]) => collapseRequestLedgerGroup(referenceId, group))
+    .filter((entry): entry is LedgerDisplayEntry => Boolean(entry));
   return [...passthrough, ...collapsed].sort((a, b) => Date.parse(b.ts || "") - Date.parse(a.ts || ""));
 }
 
@@ -127,7 +127,7 @@ export function ledgerTypeLabel(type: unknown) {
 export function ledgerAmountPolarity(entry: LedgerDisplayEntry) {
   if (entry.amount_direction) return entry.amount_direction;
   const type = String(entry.type || "");
-  if (type === "top_up_settled" || type === "release") return "positive";
+  if (type === "top_up_settled") return "positive";
   if (type === "capture") return "negative";
   if (parseUsd(entry.amount_usd) > 0n && type === "adjustment") return "positive";
   if (parseUsd(entry.amount_usd) < 0n) return "negative";

@@ -826,13 +826,60 @@ code {
   width: 24px;
 }
 
-.path-chip {
+.protocol-chip {
   align-items: center;
+  justify-content: center;
+  min-width: 46px;
 }
 
-.value-chip {
+.protocol-chip.x402,
+.protocol-chip.mpp {
+  background: var(--bone-2);
+  border: 1px solid var(--line);
+  color: var(--ink);
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+}
+
+.agentkit-value {
   align-items: center;
+  display: inline-flex;
   gap: 6px;
+  min-width: 0;
+  vertical-align: middle;
+}
+
+.agentkit-badge,
+.agentkit-value-kind {
+  align-items: center;
+  border-radius: 4px;
+  display: inline-flex;
+  font-size: 11px;
+  height: 20px;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.agentkit-badge {
+  background: #fff;
+  border: 1px solid var(--line);
+  color: var(--ink);
+  gap: 6px;
+  padding: 0 7px 0 5px;
+}
+
+.agentkit-value-kind {
+  padding: 0 8px;
+}
+
+.agentkit-value-kind.free,
+.agentkit-value-kind.access {
+  background: var(--good-soft);
+  color: var(--good);
+}
+
+.agentkit-value-kind.discount {
+  background: var(--warn-soft);
+  color: var(--warn);
 }
 
 .agentkit-logo {

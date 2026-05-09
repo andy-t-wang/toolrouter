@@ -94,7 +94,14 @@ describe("web dashboard static wiring", () => {
     assert.match(dashboardPage, /endpointCell\(row\.endpoint_id\)/);
     assert.match(dashboardPage, /\/exa-logomark\.svg/);
     assert.match(dashboardPage, /\/browserbase-logomark\.svg/);
-    assert.match(dashboardPage, /value-chip/);
+    assert.match(dashboardPage, /<th>Protocol<\/th>/);
+    assert.match(dashboardPage, /protocolChip\(row\)/);
+    assert.match(dashboardPage, /statusTextClass\(row\)/);
+    assert.match(dashboardPage, /compactRecentRequests\(requests\)/);
+    assert.match(dashboardPage, /logicalRequestKey\(row\)/);
+    assert.match(dashboardPage, /sameRecentX402Request\(row, other\)/);
+    assert.match(dashboardPage, /agentkit-badge/);
+    assert.match(dashboardPage, /agentkit-value-kind/);
     assert.match(dashboardPage, /isFreeTrial/);
     assert.match(dashboardPage, /path === "agentkit" && !row\.charged/);
     assert.match(dashboardPage, /Credit balance/);

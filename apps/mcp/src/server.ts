@@ -314,26 +314,85 @@ export async function handleJsonRpcMessage(message: JsonRpcRequest, options: any
   return errorResponse(message.id, -32601, `Method not found: ${message.method}`);
 }
 
+function encodeLineMessage(payload: any) {
+  return `${JSON.stringify(payload)}\n`;
+}
+
+function encodeFramedMessage(payload: any) {
+  const body = JSON.stringify(payload);
+  return `Content-Length: ${Buffer.byteLength(body, "utf8")}\r\n\r\n${body}`;
+}
+
+function frameHeaderEnd(buffer: Buffer) {
+  const crlf = buffer.indexOf("\r\n\r\n");
+  const lf = buffer.indexOf("\n\n");
+  if (crlf === -1 && lf === -1) return null;
+  if (crlf !== -1 && (lf === -1 || crlf < lf)) {
+    return { index: crlf, length: 4 };
+  }
+  return { index: lf, length: 2 };
+}
+
+function startsWithFrameHeader(buffer: Buffer) {
+  const prefix = buffer.subarray(0, Math.min(buffer.length, 32)).toString("utf8");
+  return /^Content-Length:/iu.test(prefix);
+}
+
 export function startStdioServer({ input = stdin, output = stdout, env = process.env, fetchImpl = fetch }: any = {}) {
-  let buffer = "";
-  input.setEncoding("utf8");
-  input.on("data", (chunk: string) => {
-    buffer += chunk;
-    const lines = buffer.split(/\r?\n/u);
-    buffer = lines.pop() || "";
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (!trimmed) continue;
-      Promise.resolve()
-        .then(async () => handleJsonRpcMessage(JSON.parse(trimmed), { env, fetchImpl }))
-        .then((payload) => {
-          if (payload) output.write(`${JSON.stringify(payload)}\n`);
-        })
-        .catch((error) => {
-          const message = error instanceof Error ? error.message : String(error);
-          output.write(`${JSON.stringify(errorResponse(null, -32603, message))}\n`);
-        });
+  let buffer = Buffer.alloc(0);
+  let mode: "frame" | "line" | null = null;
+
+  const writePayload = (payload: any, format: "frame" | "line") => {
+    if (!payload) return;
+    output.write(format === "frame" ? encodeFramedMessage(payload) : encodeLineMessage(payload));
+  };
+
+  const handleBody = (body: string, format: "frame" | "line") => {
+    Promise.resolve()
+      .then(async () => handleJsonRpcMessage(JSON.parse(body), { env, fetchImpl }))
+      .then((payload) => writePayload(payload, format))
+      .catch((error) => {
+        const message = error instanceof Error ? error.message : String(error);
+        writePayload(errorResponse(null, -32603, message), format);
+      });
+  };
+
+  const drain = () => {
+    while (buffer.length) {
+      if (mode === "frame" || (mode === null && startsWithFrameHeader(buffer))) {
+        const headerEnd = frameHeaderEnd(buffer);
+        if (!headerEnd) return;
+        const header = buffer.subarray(0, headerEnd.index).toString("utf8");
+        const match = header.match(/^Content-Length:\s*(\d+)\s*$/imu);
+        if (!match) {
+          buffer = Buffer.alloc(0);
+          writePayload(errorResponse(null, -32600, "Invalid MCP frame"), "frame");
+          return;
+        }
+        const contentLength = Number(match[1]);
+        const bodyStart = headerEnd.index + headerEnd.length;
+        const bodyEnd = bodyStart + contentLength;
+        if (buffer.length < bodyEnd) return;
+        const body = buffer.subarray(bodyStart, bodyEnd).toString("utf8");
+        buffer = buffer.subarray(bodyEnd);
+        mode = "frame";
+        if (body.trim()) handleBody(body, "frame");
+        continue;
+      }
+
+      const newline = buffer.indexOf("\n");
+      if (newline === -1) return;
+      const line = buffer.subarray(0, newline).toString("utf8").replace(/\r$/u, "").trim();
+      buffer = buffer.subarray(newline + 1);
+      mode = "line";
+      if (line) handleBody(line, "line");
     }
+  };
+
+  input.on("data", (chunk: Buffer | string) => {
+    const next = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk, "utf8");
+    buffer = Buffer.concat([buffer, next]);
+    drain();
   });
 }
 

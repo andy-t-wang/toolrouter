@@ -46,7 +46,7 @@ describe("dashboard ledger presentation", () => {
     assert.equal(ledgerAmountSign(rows[0]), "-");
   });
 
-  it("shows returned request credits as one positive row", () => {
+  it("hides fully returned request credits from the compact ledger", () => {
     const rows = compactLedgerEntries([
       {
         id: "reserve_2",
@@ -66,12 +66,7 @@ describe("dashboard ledger presentation", () => {
       },
     ]);
 
-    assert.equal(rows.length, 1);
-    assert.equal(rows[0].type, "request_release");
-    assert.equal(rows[0].amount_usd, "0.02");
-    assert.equal(ledgerTypeLabel(rows[0].type), "Credits returned");
-    assert.equal(ledgerAmountPolarity(rows[0]), "positive");
-    assert.equal(ledgerAmountSign(rows[0]), "+");
+    assert.equal(rows.length, 0);
   });
 
   it("keeps top-ups visible as positive credit rows", () => {

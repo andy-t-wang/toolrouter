@@ -70,17 +70,14 @@ ${routerMcpJson}`,
   {
     id: "hermes",
     label: "Hermes",
-    detail: "Add this under Hermes mcp_servers, then reload MCP.",
+    detail: "Export TOOLROUTER_API_KEY, add this under Hermes mcp_servers, then reload MCP.",
     code: `mcp_servers:
   toolrouter:
     command: "npm"
     args: ["--silent", "--prefix", "/path/to/toolrouter", "run", "start:mcp"]
     env:
       TOOLROUTER_API_URL: "https://toolrouter.world"
-      TOOLROUTER_API_KEY: "tr_..."
-    tools:
-      prompts: false
-      resources: false`,
+      TOOLROUTER_API_KEY: \${TOOLROUTER_API_KEY}`,
   },
   {
     id: "openclaw",

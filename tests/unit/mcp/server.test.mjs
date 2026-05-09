@@ -1,12 +1,34 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { PassThrough } from "node:stream";
 
-import { callTool, handleJsonRpcMessage, tools } from "../../../apps/mcp/src/server.ts";
+import { callTool, handleJsonRpcMessage, startStdioServer, tools } from "../../../apps/mcp/src/server.ts";
 
 function response(body, init = {}) {
   return new Response(JSON.stringify(body), {
     status: init.status || 200,
     headers: { "content-type": "application/json" },
+  });
+}
+
+function framed(message) {
+  const body = JSON.stringify(message);
+  return `Content-Length: ${Buffer.byteLength(body, "utf8")}\r\n\r\n${body}`;
+}
+
+function decodeFrame(raw) {
+  const separator = raw.indexOf("\r\n\r\n");
+  assert.notEqual(separator, -1);
+  const header = raw.slice(0, separator);
+  const body = raw.slice(separator + 4);
+  const length = Number(header.match(/Content-Length:\s*(\d+)/i)?.[1]);
+  assert.equal(Buffer.byteLength(body, "utf8"), length);
+  return JSON.parse(body);
+}
+
+function onceData(stream) {
+  return new Promise((resolve) => {
+    stream.once("data", (chunk) => resolve(chunk.toString("utf8")));
   });
 }
 
@@ -29,6 +51,30 @@ describe("ToolRouter MCP server", () => {
     assert.ok(tools().some((tool) => tool.name === "browserbase_session_create"));
     const sessionTool = tools().find((tool) => tool.name === "browserbase_session_create");
     assert.equal(sessionTool.inputSchema.properties.estimated_minutes.minimum, 5);
+  });
+
+  it("supports Content-Length framed stdio used by MCP clients", async () => {
+    const input = new PassThrough();
+    const output = new PassThrough();
+    startStdioServer({
+      input,
+      output,
+      env: { TOOLROUTER_API_URL: "http://router.test", TOOLROUTER_API_KEY: "tr_test" },
+      fetchImpl: async () => response({}),
+    });
+
+    const received = onceData(output);
+    input.write(framed({
+      jsonrpc: "2.0",
+      id: 1,
+      method: "initialize",
+      params: { protocolVersion: "2025-11-25", capabilities: {}, clientInfo: { name: "hermes", version: "1" } },
+    }));
+
+    const payload = decodeFrame(await received);
+    assert.equal(payload.jsonrpc, "2.0");
+    assert.equal(payload.id, 1);
+    assert.equal(payload.result.serverInfo.name, "toolrouter-mcp");
   });
 
   it("calls named endpoint tools through POST /v1/requests", async () => {

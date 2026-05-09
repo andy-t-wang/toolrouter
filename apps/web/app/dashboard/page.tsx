@@ -22,6 +22,7 @@ const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
 const devAuthEnabled = process.env.NEXT_PUBLIC_TOOLROUTER_DEV_AUTH === "true";
 const unverifiedAgentKitStatus = ["Not", "Verified"].join(" ");
 const recentCheckoutWindowMs = 15 * 60 * 1000;
+const x402ChallengeWindowMs = 2 * 60 * 1000;
 const supabase =
   supabaseUrl && supabaseAnonKey
     ? createClient(supabaseUrl, supabaseAnonKey)
@@ -219,15 +220,105 @@ function keyStatus(active: boolean) {
   );
 }
 
-function pathChip(path: string, charged: boolean) {
-  const route = String(path || "unknown").toLowerCase();
-  if (route === "agentkit")
-    return <span className="chip free path-chip">agentkit</span>;
-  if (route === "x402")
-    return <span className="chip accent">x402{charged ? " · paid" : ""}</span>;
-  if (route === "agentkit_to_x402")
-    return <span className="chip accent">x402{charged ? " · paid" : ""}</span>;
-  return <span className="chip neutral">{route}</span>;
+function protocolForRow(row: any) {
+  const route = String(row?.path || "unknown").toLowerCase();
+  if (route === "agentkit") return "MPP";
+  if (route === "x402" || route === "agentkit_to_x402") return "x402";
+  return route;
+}
+
+function protocolChip(row: any) {
+  const protocol = protocolForRow(row);
+  if (protocol === "MPP") return <span className="chip protocol-chip mpp">MPP</span>;
+  if (protocol === "x402") return <span className="chip protocol-chip x402">x402</span>;
+  return <span className="chip neutral">{protocol}</span>;
+}
+
+function statusTextClass(row: any) {
+  const statusCode = Number(row?.status_code);
+  if (!Number.isFinite(statusCode)) return "";
+  if (statusCode === 402 && protocolForRow(row) === "x402") return "muted";
+  return statusCode >= 400 ? "bad-text" : "";
+}
+
+function rowTimestamp(row: any) {
+  const timestamp = Date.parse(row?.ts || "");
+  return Number.isFinite(timestamp) ? timestamp : 0;
+}
+
+function isSuccessfulRequestRow(row: any) {
+  const statusCode = Number(row?.status_code);
+  return Number.isFinite(statusCode) && statusCode >= 200 && statusCode < 400;
+}
+
+function isX402ChallengeRow(row: any) {
+  return protocolForRow(row) === "x402" && Number(row?.status_code) === 402;
+}
+
+function logicalRequestKey(row: any) {
+  return row?.trace_id || row?.credit_reservation_id || "";
+}
+
+function rowDisplayScore(row: any) {
+  let score = 0;
+  if (isSuccessfulRequestRow(row)) score += 100;
+  if (paidAmount(row) > 0) score += 20;
+  if (row?.agentkit_value_type || row?.agentkit_value_label) score += 10;
+  if (isX402ChallengeRow(row)) score -= 5;
+  return score;
+}
+
+function preferredRequestRow(current: any, candidate: any) {
+  const currentScore = rowDisplayScore(current);
+  const candidateScore = rowDisplayScore(candidate);
+  if (candidateScore !== currentScore) {
+    return candidateScore > currentScore ? candidate : current;
+  }
+  return rowTimestamp(candidate) > rowTimestamp(current) ? candidate : current;
+}
+
+function sameRecentX402Request(left: any, right: any) {
+  if (left === right) return false;
+  if (protocolForRow(left) !== "x402" || protocolForRow(right) !== "x402") return false;
+  if (left?.endpoint_id !== right?.endpoint_id) return false;
+  if ((left?.api_key_id || "") !== (right?.api_key_id || "")) return false;
+  if ((left?.caller_id || "") !== (right?.caller_id || "")) return false;
+  const leftTime = rowTimestamp(left);
+  const rightTime = rowTimestamp(right);
+  if (!leftTime || !rightTime) return false;
+  return Math.abs(leftTime - rightTime) <= x402ChallengeWindowMs;
+}
+
+function compactRecentRequests(rows: any[]) {
+  const grouped = new Map<string, { index: number; row: any }>();
+  const compacted: any[] = [];
+
+  for (const row of rows) {
+    const key = logicalRequestKey(row);
+    if (!key) {
+      compacted.push(row);
+      continue;
+    }
+    const existing = grouped.get(key);
+    if (!existing) {
+      grouped.set(key, { index: compacted.length, row });
+      compacted.push(row);
+      continue;
+    }
+    const preferred = preferredRequestRow(existing.row, row);
+    existing.row = preferred;
+    compacted[existing.index] = preferred;
+  }
+
+  return compacted.filter((row, index) => {
+    if (!isX402ChallengeRow(row)) return true;
+    return !compacted.some(
+      (other, otherIndex) =>
+        otherIndex !== index &&
+        sameRecentX402Request(row, other) &&
+        isSuccessfulRequestRow(other),
+    );
+  });
 }
 
 function valueChip(row: any) {
@@ -249,15 +340,18 @@ function valueChip(row: any) {
       : normalized.includes("discount")
         ? "Discount"
         : "Free";
-  const cls = normalized.includes("access")
-    ? "accent"
+  const kind = normalized.includes("access")
+    ? "access"
     : normalized.includes("discount")
-      ? "warn"
+      ? "discount"
       : "free";
   return (
-    <span className={`chip ${cls} value-chip`} title={`AgentKit ${label}`}>
-      <img className="agentkit-logo" src="/human.svg" alt="" aria-hidden="true" />
-      {label}
+    <span className="agentkit-value" title={`AgentKit ${label}`}>
+      <span className="agentkit-badge">
+        <img className="agentkit-logo" src="/human.svg" alt="" aria-hidden="true" />
+        AgentKit
+      </span>
+      <span className={`agentkit-value-kind ${kind}`}>{label}</span>
     </span>
   );
 }
@@ -378,6 +472,7 @@ export default function DashboardPage() {
     const rows = monthRequests.length ? monthRequests : requests;
     return computeDashboardMetrics(rows);
   }, [monthRequests, requests]);
+  const recentRequests = useMemo(() => compactRecentRequests(requests), [requests]);
   const ledgerRows = useMemo(() => compactLedgerEntries(ledger), [ledger]);
   const agentKitVerified = Boolean(balance?.agentkit_verification?.verified);
   const agentKitCheckMeta = [
@@ -820,7 +915,7 @@ export default function DashboardPage() {
                         <tr>
                           <th>Time</th>
                           <th>Endpoint</th>
-                          <th>Path</th>
+                          <th>Protocol</th>
                           <th>Value</th>
                           <th className="num">Status</th>
                           <th className="num">Latency</th>
@@ -828,17 +923,17 @@ export default function DashboardPage() {
                         </tr>
                       </thead>
                       <tbody>
-                        {requests.length ? (
-                          requests.map((row) => (
+                        {recentRequests.length ? (
+                          recentRequests.map((row) => (
                             <tr key={row.id}>
                               <td className="mono muted">
                                 {formatTime(row.ts)}
                               </td>
                               <td>{endpointCell(row.endpoint_id)}</td>
-                              <td>{pathChip(row.path, row.charged)}</td>
+                              <td>{protocolChip(row)}</td>
                               <td>{valueChip(row)}</td>
                               <td
-                                className={`mono num ${Number(row.status_code) >= 400 ? "bad-text" : ""}`}
+                                className={`mono num ${statusTextClass(row)}`}
                               >
                                 {row.status_code || "-"}
                               </td>
