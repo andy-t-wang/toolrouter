@@ -1,12 +1,5 @@
 import Fastify from "fastify";
 import { createHash, randomUUID } from "node:crypto";
-import {
-  createPublicClient,
-  decodeAbiParameters,
-  http,
-} from "viem";
-import { worldchain } from "viem/chains";
-import { solidityEncode } from "@worldcoin/idkit-core/hashing";
 
 import { authenticateApiKey, authenticateSupabaseUser } from "@toolrouter/auth";
 import { createCache, enforceRequestPolicy } from "@toolrouter/cache";
@@ -34,6 +27,11 @@ import {
 import { createCrossmintClient } from "./crossmint.ts";
 import { createStripeClient } from "./stripe.ts";
 import { createAlertClient } from "./alerts.ts";
+import {
+  agentBookRegistrationService,
+  buildAgentKitVerificationRequest,
+  registrationPayloadFromBody,
+} from "./agentkitRegistration.ts";
 
 function requestFilters(query: any) {
   return {
@@ -71,19 +69,6 @@ function publicTopUp(purchase: any) {
 }
 
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
-const AGENT_BOOK_CONTRACT = "0xA23aB2712eA7BBa896930544C7d6636a96b944dA";
-const AGENTKIT_REGISTRATION_APP_ID = "app_a7c3e2b6b83927251a0db5345bd7146a";
-const AGENTKIT_REGISTRATION_ACTION = "agentbook-registration";
-const AGENTKIT_REGISTRATION_RELAY = "https://x402-worldchain.vercel.app";
-const AGENT_BOOK_ABI = [
-  {
-    inputs: [{ internalType: "address", name: "", type: "address" }],
-    name: "getNextNonce",
-    outputs: [{ internalType: "uint256", name: "", type: "uint256" }],
-    stateMutability: "view",
-    type: "function",
-  },
-] as const;
 const STATUS_RANK: Record<string, number> = {
   healthy: 0,
   degraded: 1,
@@ -532,132 +517,6 @@ function hashHumanId(value: string) {
   return createHash("sha256").update(value).digest("hex");
 }
 
-async function parseAgentKitRelayResponse(response: any) {
-  const contentType =
-    typeof response.headers?.get === "function"
-      ? response.headers.get("content-type") || ""
-      : "";
-  const text = await response.text();
-  let body: any = null;
-  if (text) {
-    try {
-      body = JSON.parse(text);
-    } catch {
-      throw Object.assign(
-        new Error(
-          "AgentKit registration relay returned a non-JSON response. Please try again.",
-        ),
-        {
-          statusCode: 502,
-          code: "agentkit_registration_failed",
-          details: {
-            relay_status: response.status,
-            relay_content_type: contentType || "unknown",
-          },
-        },
-      );
-    }
-  }
-  if (!response.ok) {
-    const message =
-      body?.error?.message ||
-      body?.error ||
-      body?.message ||
-      `relay returned ${response.status}`;
-    throw Object.assign(new Error(`AgentKit registration failed: ${message}`), {
-      statusCode: 502,
-      code: "agentkit_registration_failed",
-      details: {
-        relay_status: response.status,
-        relay_content_type: contentType || "unknown",
-      },
-    });
-  }
-  return body || {};
-}
-
-function agentBookRegistrationService() {
-  const client = createPublicClient({
-    chain: worldchain,
-    transport: http(process.env.AGENTKIT_WORLDCHAIN_RPC_URL || undefined),
-  });
-  const relayUrl =
-    process.env.AGENTKIT_REGISTRATION_RELAY_URL ||
-    AGENTKIT_REGISTRATION_RELAY;
-  return {
-    nextNonce: (address: string) =>
-      (client as any).readContract({
-        address: AGENT_BOOK_CONTRACT,
-        abi: AGENT_BOOK_ABI,
-        functionName: "getNextNonce",
-        args: [address as `0x${string}`],
-      }) as Promise<bigint>,
-    submit: async (registration: any) => {
-      const response = await fetch(
-        `${relayUrl.replace(/\/$/u, "")}/register`,
-        {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify(registration),
-        },
-      );
-      return parseAgentKitRelayResponse(response);
-    },
-  };
-}
-
-function normalizeAgentKitProof(rawProof: unknown) {
-  if (Array.isArray(rawProof)) return rawProof.map((value) => String(value));
-  if (typeof rawProof !== "string" || !rawProof.trim()) {
-    throw Object.assign(new Error("World ID proof is required"), {
-      statusCode: 400,
-      code: "invalid_agentkit_registration",
-    });
-  }
-  const trimmed = rawProof.trim();
-  if (trimmed.startsWith("[")) {
-    try {
-      const parsed = JSON.parse(trimmed);
-      if (Array.isArray(parsed)) return parsed.map((value) => String(value));
-    } catch {
-      // Fall through to ABI decode.
-    }
-  }
-  try {
-    const decoded = decodeAbiParameters(
-      [{ type: "uint256[8]" }],
-      trimmed as `0x${string}`,
-    )[0];
-    return decoded.map((value) => `0x${value.toString(16).padStart(64, "0")}`);
-  } catch {
-    throw Object.assign(new Error("World ID proof format is invalid"), {
-      statusCode: 400,
-      code: "invalid_agentkit_registration",
-    });
-  }
-}
-
-function requiredString(value: unknown, label: string) {
-  if (typeof value === "string" && value.trim()) return value.trim();
-  throw Object.assign(new Error(`${label} is required`), {
-    statusCode: 400,
-    code: "invalid_agentkit_registration",
-  });
-}
-
-function registrationProofFromBody(body: any) {
-  const result = body?.result && typeof body.result === "object" ? body.result : {};
-  return {
-    root: requiredString(body?.root || body?.merkle_root || result.merkle_root, "merkle root"),
-    nullifierHash: requiredString(
-      body?.nullifierHash || body?.nullifier_hash || result.nullifier_hash,
-      "nullifier hash",
-    ),
-    nonce: requiredString(body?.nonce, "nonce"),
-    proof: normalizeAgentKitProof(body?.proof || result.proof),
-  };
-}
-
 async function prepareAgentKitRegistration({
   store,
   crossmint,
@@ -673,23 +532,11 @@ async function prepareAgentKitRegistration({
   }
   const registration = agentBookRegistration || agentBookRegistrationService();
   const nonce = await registration.nextNonce(wallet.address);
-  const signal = solidityEncode(
-    ["address", "uint256"],
-    [wallet.address, String(nonce)],
-  );
   return {
-    registration: {
-      app_id:
-        process.env.AGENTKIT_REGISTRATION_APP_ID ||
-        AGENTKIT_REGISTRATION_APP_ID,
-      action:
-        process.env.AGENTKIT_REGISTRATION_ACTION ||
-        AGENTKIT_REGISTRATION_ACTION,
-      verification_level: "orb",
-      signal,
-      nonce: String(nonce),
-      expires_in_seconds: 300,
-    },
+    registration: buildAgentKitVerificationRequest({
+      agentAddress: wallet.address,
+      nonce,
+    }),
     agentkit_verification: safeAgentKitVerification(wallet),
   };
 }
@@ -709,15 +556,7 @@ async function completeAgentKitRegistration({
       code: "agentkit_wallet_missing",
     });
   }
-  const proof = registrationProofFromBody(body || {});
-  const registration = {
-    agent: wallet.address,
-    root: proof.root,
-    nonce: proof.nonce,
-    nullifierHash: proof.nullifierHash,
-    proof: proof.proof,
-    contract: AGENT_BOOK_CONTRACT,
-  };
+  const registration = registrationPayloadFromBody(wallet.address, body);
   const service = agentBookRegistration || agentBookRegistrationService();
   const result = await service.submit(registration);
   const verification = await verifyAgentKitAccount({
