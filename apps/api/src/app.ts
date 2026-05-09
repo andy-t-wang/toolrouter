@@ -1,5 +1,12 @@
 import Fastify from "fastify";
 import { createHash, randomUUID } from "node:crypto";
+import {
+  createPublicClient,
+  decodeAbiParameters,
+  encodeAbiParameters,
+  http,
+} from "viem";
+import { worldchain } from "viem/chains";
 
 import { authenticateApiKey, authenticateSupabaseUser } from "@toolrouter/auth";
 import { createCache, enforceRequestPolicy } from "@toolrouter/cache";
@@ -51,6 +58,19 @@ function publicEndpoint(endpoint: any, statusByEndpoint: Map<string, any>) {
 }
 
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+const AGENT_BOOK_CONTRACT = "0xA23aB2712eA7BBa896930544C7d6636a96b944dA";
+const AGENTKIT_REGISTRATION_APP_ID = "app_a7c3e2b6b83927251a0db5345bd7146a";
+const AGENTKIT_REGISTRATION_ACTION = "agentbook-registration";
+const AGENTKIT_REGISTRATION_RELAY = "https://x402-worldchain.vercel.app";
+const AGENT_BOOK_ABI = [
+  {
+    inputs: [{ internalType: "address", name: "", type: "address" }],
+    name: "getNextNonce",
+    outputs: [{ internalType: "uint256", name: "", type: "uint256" }],
+    stateMutability: "view",
+    type: "function",
+  },
+] as const;
 const STATUS_RANK: Record<string, number> = {
   healthy: 0,
   degraded: 1,
@@ -499,6 +519,174 @@ function hashHumanId(value: string) {
   return createHash("sha256").update(value).digest("hex");
 }
 
+function agentBookRegistrationService() {
+  const client = createPublicClient({
+    chain: worldchain,
+    transport: http(process.env.AGENTKIT_WORLDCHAIN_RPC_URL || undefined),
+  });
+  const relayUrl =
+    process.env.AGENTKIT_REGISTRATION_RELAY_URL ||
+    AGENTKIT_REGISTRATION_RELAY;
+  return {
+    nextNonce: (address: string) =>
+      (client as any).readContract({
+        address: AGENT_BOOK_CONTRACT,
+        abi: AGENT_BOOK_ABI,
+        functionName: "getNextNonce",
+        args: [address as `0x${string}`],
+      }) as Promise<bigint>,
+    submit: async (registration: any) => {
+      const response = await fetch(
+        `${relayUrl.replace(/\/$/u, "")}/register`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(registration),
+        },
+      );
+      if (!response.ok) {
+        const body = await response.text();
+        throw Object.assign(
+          new Error(`AgentKit registration failed: ${response.status}: ${body}`),
+          {
+            statusCode: 502,
+            code: "agentkit_registration_failed",
+          },
+        );
+      }
+      return response.json();
+    },
+  };
+}
+
+function normalizeAgentKitProof(rawProof: unknown) {
+  if (Array.isArray(rawProof)) return rawProof.map((value) => String(value));
+  if (typeof rawProof !== "string" || !rawProof.trim()) {
+    throw Object.assign(new Error("World ID proof is required"), {
+      statusCode: 400,
+      code: "invalid_agentkit_registration",
+    });
+  }
+  const trimmed = rawProof.trim();
+  if (trimmed.startsWith("[")) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (Array.isArray(parsed)) return parsed.map((value) => String(value));
+    } catch {
+      // Fall through to ABI decode.
+    }
+  }
+  try {
+    const decoded = decodeAbiParameters(
+      [{ type: "uint256[8]" }],
+      trimmed as `0x${string}`,
+    )[0];
+    return decoded.map((value) => `0x${value.toString(16).padStart(64, "0")}`);
+  } catch {
+    throw Object.assign(new Error("World ID proof format is invalid"), {
+      statusCode: 400,
+      code: "invalid_agentkit_registration",
+    });
+  }
+}
+
+function requiredString(value: unknown, label: string) {
+  if (typeof value === "string" && value.trim()) return value.trim();
+  throw Object.assign(new Error(`${label} is required`), {
+    statusCode: 400,
+    code: "invalid_agentkit_registration",
+  });
+}
+
+function registrationProofFromBody(body: any) {
+  const result = body?.result && typeof body.result === "object" ? body.result : {};
+  return {
+    root: requiredString(body?.root || body?.merkle_root || result.merkle_root, "merkle root"),
+    nullifierHash: requiredString(
+      body?.nullifierHash || body?.nullifier_hash || result.nullifier_hash,
+      "nullifier hash",
+    ),
+    nonce: requiredString(body?.nonce, "nonce"),
+    proof: normalizeAgentKitProof(body?.proof || result.proof),
+  };
+}
+
+async function prepareAgentKitRegistration({
+  store,
+  crossmint,
+  user,
+  agentBookRegistration,
+}: any) {
+  const wallet = await ensureAgentKitAccount(store, crossmint, user);
+  if (!wallet.address) {
+    throw Object.assign(new Error("AgentKit account address is missing"), {
+      statusCode: 500,
+      code: "agentkit_wallet_missing",
+    });
+  }
+  const registration = agentBookRegistration || agentBookRegistrationService();
+  const nonce = await registration.nextNonce(wallet.address);
+  const signal = encodeAbiParameters(
+    [{ type: "address" }, { type: "uint256" }],
+    [wallet.address as `0x${string}`, BigInt(nonce)],
+  );
+  return {
+    registration: {
+      app_id:
+        process.env.AGENTKIT_REGISTRATION_APP_ID ||
+        AGENTKIT_REGISTRATION_APP_ID,
+      action:
+        process.env.AGENTKIT_REGISTRATION_ACTION ||
+        AGENTKIT_REGISTRATION_ACTION,
+      verification_level: "orb",
+      signal,
+      nonce: String(nonce),
+      expires_in_seconds: 300,
+    },
+    agentkit_verification: safeAgentKitVerification(wallet),
+  };
+}
+
+async function completeAgentKitRegistration({
+  store,
+  crossmint,
+  user,
+  body,
+  agentBookVerifier,
+  agentBookRegistration,
+}: any) {
+  const wallet = await ensureAgentKitAccount(store, crossmint, user);
+  if (!wallet.address) {
+    throw Object.assign(new Error("AgentKit account address is missing"), {
+      statusCode: 500,
+      code: "agentkit_wallet_missing",
+    });
+  }
+  const proof = registrationProofFromBody(body || {});
+  const registration = {
+    agent: wallet.address,
+    root: proof.root,
+    nonce: proof.nonce,
+    nullifierHash: proof.nullifierHash,
+    proof: proof.proof,
+    contract: AGENT_BOOK_CONTRACT,
+  };
+  const service = agentBookRegistration || agentBookRegistrationService();
+  const result = await service.submit(registration);
+  const verification = await verifyAgentKitAccount({
+    store,
+    crossmint,
+    user,
+    agentBookVerifier,
+  });
+  return {
+    registration: {
+      tx_hash: result?.txHash || result?.transactionHash || null,
+    },
+    ...verification,
+  };
+}
+
 async function loadAgentBookVerifier() {
   const { createAgentBookVerifier } = await import("@worldcoin/agentkit");
   return createAgentBookVerifier({
@@ -773,6 +961,7 @@ export function createApiApp({
   stripe = createStripeClient(),
   alerts = createAlertClient(),
   agentBookVerifier = null,
+  agentBookRegistration = null,
   logger = true,
 }: any = {}) {
   validateRegistry();
@@ -899,6 +1088,28 @@ export function createApiApp({
   app.post("/v1/agentkit/account-verification", async (request: any) => {
     const user = await authenticateSupabaseUser(request.headers);
     return verifyAgentKitAccount({ store, crossmint, user, agentBookVerifier });
+  });
+
+  app.post("/v1/agentkit/registration", async (request: any) => {
+    const user = await authenticateSupabaseUser(request.headers);
+    return prepareAgentKitRegistration({
+      store,
+      crossmint,
+      user,
+      agentBookRegistration,
+    });
+  });
+
+  app.post("/v1/agentkit/registration/complete", async (request: any) => {
+    const user = await authenticateSupabaseUser(request.headers);
+    return completeAgentKitRegistration({
+      store,
+      crossmint,
+      user,
+      body: request.body || {},
+      agentBookVerifier,
+      agentBookRegistration,
+    });
   });
 
   app.post("/v1/wallet/agentkit-verification", async (request: any) => {

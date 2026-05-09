@@ -58,8 +58,11 @@ describe("web dashboard static wiring", () => {
     assert.doesNotMatch(dashboardPage, /Endpoint registry/);
     assert.doesNotMatch(dashboardPage, /Supabase monitoring/);
     assert.match(dashboardPage, /Account Verification/);
-    assert.match(dashboardPage, /Check the account against AgentKit/);
-    assert.match(dashboardPage, /Check Status/);
+    assert.match(dashboardPage, /Verify this account with AgentKit through World App/);
+    assert.match(dashboardPage, /Verify with AgentKit/);
+    assert.match(dashboardPage, /Open World App verification/);
+    assert.match(dashboardPage, /\/v1\/agentkit\/registration/);
+    assert.match(dashboardPage, /\/v1\/agentkit\/registration\/complete/);
     assert.match(dashboardPage, /Credit balance/);
     assert.match(dashboardPage, /Credits usually appear within 30-90 seconds after\s+checkout/);
     assert.match(dashboardPage, /ToolRouter retries settlement/);
@@ -74,6 +77,7 @@ describe("web dashboard static wiring", () => {
     assert.doesNotMatch(dashboardPage, /Pending/);
     assert.doesNotMatch(dashboardPage, /Reserved/);
     assert.doesNotMatch(dashboardPage, /not verified/);
+    assert.doesNotMatch(dashboardPage, /Not Verified/);
     assert.doesNotMatch(dashboardPage, /Check wallet/);
     assert.doesNotMatch(dashboardPage, /Check account against AgentKit/);
     assert.doesNotMatch(dashboardPage, /billing wallet/);

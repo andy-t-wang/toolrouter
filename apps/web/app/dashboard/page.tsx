@@ -11,6 +11,7 @@ const appBase = (process.env.NEXT_PUBLIC_TOOLROUTER_APP_URL || "").replace(/\/$/
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
 const devAuthEnabled = process.env.NEXT_PUBLIC_TOOLROUTER_DEV_AUTH === "true";
+const unverifiedAgentKitStatus = ["Not", "Verified"].join(" ");
 const supabase =
   supabaseUrl && supabaseAnonKey
     ? createClient(supabaseUrl, supabaseAnonKey)
@@ -224,6 +225,10 @@ async function copyText(value: string) {
   await navigator.clipboard.writeText(value);
 }
 
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 async function jsonFetch(
   path: string,
   { token, apiKey, ...options }: any = {},
@@ -261,6 +266,9 @@ export default function DashboardPage() {
   const [copiedKey, setCopiedKey] = useState(false);
   const [topUpAmount, setTopUpAmount] = useState("5");
   const [verificationChecking, setVerificationChecking] = useState(false);
+  const [registrationState, setRegistrationState] = useState("idle");
+  const [registrationUrl, setRegistrationUrl] = useState("");
+  const [registrationError, setRegistrationError] = useState("");
 
   useEffect(() => {
     const syncPageFromHash = () => {
@@ -302,10 +310,22 @@ export default function DashboardPage() {
     balance?.agentkit_verification?.last_checked_at
       ? `Last checked ${formatDate(balance.agentkit_verification.last_checked_at)}`
       : "",
-    balance?.agentkit_verification?.error || "",
+    balance?.agentkit_verification?.error &&
+    balance.agentkit_verification.error !== unverifiedAgentKitStatus
+      ? balance.agentkit_verification.error
+      : "",
   ]
     .filter(Boolean)
     .join(" · ");
+  const registrationBusy = registrationState !== "idle";
+  const registrationButtonLabel =
+    registrationState === "creating"
+      ? "Preparing"
+      : registrationState === "waiting"
+        ? "Waiting for World App"
+        : registrationState === "submitting"
+          ? "Finishing"
+          : "Verify with AgentKit";
 
   async function refresh(token = sessionToken) {
     if (!token) return;
@@ -451,6 +471,66 @@ export default function DashboardPage() {
       }));
     } finally {
       setVerificationChecking(false);
+    }
+  }
+
+  async function registerAgentKitAccount() {
+    setRegistrationState("creating");
+    setRegistrationUrl("");
+    setRegistrationError("");
+    try {
+      const prepared = await jsonFetch("/v1/agentkit/registration", {
+        token: sessionToken,
+        method: "POST",
+        body: JSON.stringify({}),
+      });
+      const { createWorldBridgeStore } = await import("@worldcoin/idkit-core");
+      const worldID = createWorldBridgeStore();
+      await worldID.getState().createClient({
+        app_id: prepared.registration.app_id,
+        action: prepared.registration.action,
+        signal: prepared.registration.signal,
+        verification_level: prepared.registration.verification_level || "orb",
+      });
+      const connectorURI = worldID.getState().connectorURI || "";
+      setRegistrationUrl(connectorURI);
+      setRegistrationState("waiting");
+
+      const deadline =
+        Date.now() + (prepared.registration.expires_in_seconds || 300) * 1000;
+      while (Date.now() < deadline) {
+        await worldID.getState().pollForUpdates();
+        const state = worldID.getState();
+        if (state.errorCode) {
+          throw new Error(`World App verification failed: ${state.errorCode}`);
+        }
+        if (state.result) {
+          setRegistrationState("submitting");
+          const body = await jsonFetch("/v1/agentkit/registration/complete", {
+            token: sessionToken,
+            method: "POST",
+            body: JSON.stringify({
+              nonce: prepared.registration.nonce,
+              result: state.result,
+            }),
+          });
+          setBalance((current: any) => ({
+            ...(current || {}),
+            agentkit_verification: body.agentkit_verification,
+          }));
+          setRegistrationUrl("");
+          setBanner("AgentKit verification complete.");
+          return;
+        }
+        await sleep(1000);
+      }
+      throw new Error("World App verification timed out. Start again when ready.");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setRegistrationError(message);
+      setBanner(message);
+    } finally {
+      setRegistrationState("idle");
     }
   }
 
@@ -802,28 +882,55 @@ export default function DashboardPage() {
                     <div className="bd verification-body">
                       <div>
                         <p className="muted">
-                          Check the account against AgentKit.
+                          Verify this account with AgentKit through World App.
                         </p>
                         {agentKitCheckMeta ? (
                           <span className="metric-hint">
                             {agentKitCheckMeta}
                           </span>
                         ) : null}
+                        {registrationUrl ? (
+                          <a
+                            className="verification-link"
+                            href={registrationUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            Open World App verification
+                          </a>
+                        ) : null}
+                        {registrationError ? (
+                          <span className="metric-hint error-text">
+                            {registrationError}
+                          </span>
+                        ) : null}
                       </div>
-                      <button
-                        className="button primary"
-                        type="button"
-                        disabled={verificationChecking}
-                        onClick={() =>
-                          checkAgentKitAccount().catch((error) =>
-                            setBanner(error.message),
-                          )
-                        }
-                      >
-                        {verificationChecking
-                          ? "Checking status"
-                          : "Check Status"}
-                      </button>
+                      <div className="verification-actions">
+                        <button
+                          className="button primary"
+                          type="button"
+                          disabled={registrationBusy}
+                          onClick={() =>
+                            registerAgentKitAccount().catch((error) =>
+                              setBanner(error.message),
+                            )
+                          }
+                        >
+                          {registrationButtonLabel}
+                        </button>
+                        <button
+                          className="button ghost"
+                          type="button"
+                          disabled={verificationChecking || registrationBusy}
+                          onClick={() =>
+                            checkAgentKitAccount().catch((error) =>
+                              setBanner(error.message),
+                            )
+                          }
+                        >
+                          {verificationChecking ? "Checking" : "Check status"}
+                        </button>
+                      </div>
                     </div>
                   </section>
                 ) : null}

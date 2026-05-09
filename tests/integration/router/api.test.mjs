@@ -37,9 +37,13 @@ describe("router API", () => {
   let baseUrl;
   let store;
   let agentBookLookups;
+  let agentBookNonces;
+  let agentBookRegistrations;
 
   before(async () => {
     agentBookLookups = [];
+    agentBookNonces = [];
+    agentBookRegistrations = [];
     store = createStore();
     app = createApiApp({
       logger: false,
@@ -49,6 +53,16 @@ describe("router API", () => {
         lookupHuman: async (address) => {
           agentBookLookups.push(address);
           return "human_dev";
+        },
+      },
+      agentBookRegistration: {
+        nextNonce: async (address) => {
+          agentBookNonces.push(address);
+          return 7n;
+        },
+        submit: async (registration) => {
+          agentBookRegistrations.push(registration);
+          return { txHash: "0xagentkittx" };
         },
       },
     });
@@ -356,6 +370,44 @@ describe("router API", () => {
       body: JSON.stringify({}),
     });
     assert.equal(compatibilityResponse.status, 200);
+  });
+
+  it("prepares and completes AgentKit account registration", async () => {
+    const prepareResponse = await fetch(`${baseUrl}/v1/agentkit/registration`, {
+      method: "POST",
+      headers: sessionHeaders(),
+      body: JSON.stringify({}),
+    });
+    assert.equal(prepareResponse.status, 200);
+    const prepared = await prepareResponse.json();
+    assert.equal(prepared.registration.app_id, "app_a7c3e2b6b83927251a0db5345bd7146a");
+    assert.equal(prepared.registration.action, "agentbook-registration");
+    assert.equal(prepared.registration.verification_level, "orb");
+    assert.equal(prepared.registration.nonce, "7");
+    assert.match(prepared.registration.signal, /^0x[a-fA-F0-9]+$/u);
+    assert.equal(prepared.registration.agent, undefined);
+    assert.ok(agentBookNonces.includes("0x0000000000000000000000000000000000000000"));
+
+    const completeResponse = await fetch(`${baseUrl}/v1/agentkit/registration/complete`, {
+      method: "POST",
+      headers: sessionHeaders(),
+      body: JSON.stringify({
+        nonce: prepared.registration.nonce,
+        result: {
+          merkle_root: "0x01",
+          nullifier_hash: "0x02",
+          proof: Array.from({ length: 8 }, (_unused, index) => `0x${String(index + 1).padStart(64, "0")}`),
+        },
+      }),
+    });
+    assert.equal(completeResponse.status, 200);
+    const completed = await completeResponse.json();
+    assert.equal(completed.registration.tx_hash, "0xagentkittx");
+    assert.equal(completed.agentkit_verification.verified, true);
+    assert.equal(agentBookRegistrations.at(-1).agent, "0x0000000000000000000000000000000000000000");
+    assert.equal(agentBookRegistrations.at(-1).nonce, "7");
+    assert.equal(agentBookRegistrations.at(-1).contract, "0xA23aB2712eA7BBa896930544C7d6636a96b944dA");
+    assert.equal(agentBookRegistrations.at(-1).proof.length, 8);
   });
 
   it("creates and reads request traces", async () => {

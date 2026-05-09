@@ -1015,6 +1015,28 @@ code {
   margin: 0;
 }
 
+.verification-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.verification-link {
+  color: var(--ink);
+  display: inline-flex;
+  font-size: 13px;
+  font-weight: 500;
+  margin-top: 12px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.error-text {
+  color: #8a3f2a;
+}
+
 .key-status {
   align-items: center;
   color: var(--ink);
@@ -2285,6 +2307,10 @@ code {
   .verification-body {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .verification-actions {
+    justify-content: flex-start;
   }
 }
 
