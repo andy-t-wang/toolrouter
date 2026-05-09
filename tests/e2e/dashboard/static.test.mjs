@@ -67,6 +67,8 @@ describe("web dashboard static wiring", () => {
     assert.match(dashboardPage, /World App verification returned an unexpected response/);
     assert.match(dashboardPage, /\/v1\/agentkit\/registration/);
     assert.match(dashboardPage, /\/v1\/agentkit\/registration\/complete/);
+    assert.match(dashboardPage, /\/human\.svg/);
+    assert.match(dashboardPage, /request sent with agentkit/);
     assert.match(dashboardPage, /Credit balance/);
     assert.match(dashboardPage, /\/v1\/top-ups\?limit=10/);
     assert.match(dashboardPage, /pendingTopUps\.length \? \(/);

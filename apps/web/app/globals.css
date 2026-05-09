@@ -808,6 +808,17 @@ code {
   width: fit-content;
 }
 
+.path-chip {
+  align-items: center;
+}
+
+.agentkit-logo {
+  display: block;
+  flex: 0 0 auto;
+  height: 14px;
+  width: 14px;
+}
+
 .bad-text {
   color: var(--bad);
 }

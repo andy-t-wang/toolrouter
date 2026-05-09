@@ -185,11 +185,21 @@ function keyStatus(active: boolean) {
 function pathChip(path: string, charged: boolean) {
   const route = String(path || "unknown").toLowerCase();
   if (route === "agentkit")
-    return <span className="chip free">agentkit · free</span>;
+    return (
+      <span className="chip free path-chip agentkit-path" title="request sent with agentkit">
+        <img className="agentkit-logo" src="/human.svg" alt="" aria-hidden="true" />
+        agentkit · free
+      </span>
+    );
   if (route === "x402")
     return <span className="chip accent">x402{charged ? " · paid" : ""}</span>;
   if (route === "agentkit_to_x402")
-    return <span className="chip accent">agentkit to x402 · paid</span>;
+    return (
+      <span className="chip accent path-chip agentkit-path" title="request sent with agentkit">
+        <img className="agentkit-logo" src="/human.svg" alt="" aria-hidden="true" />
+        agentkit to x402 · paid
+      </span>
+    );
   return <span className="chip neutral">{route}</span>;
 }
 
