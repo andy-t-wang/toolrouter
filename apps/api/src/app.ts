@@ -3,10 +3,10 @@ import { createHash, randomUUID } from "node:crypto";
 import {
   createPublicClient,
   decodeAbiParameters,
-  encodeAbiParameters,
   http,
 } from "viem";
 import { worldchain } from "viem/chains";
+import { solidityEncode } from "@worldcoin/idkit-core/hashing";
 
 import { authenticateApiKey, authenticateSupabaseUser } from "@toolrouter/auth";
 import { createCache, enforceRequestPolicy } from "@toolrouter/cache";
@@ -673,9 +673,9 @@ async function prepareAgentKitRegistration({
   }
   const registration = agentBookRegistration || agentBookRegistrationService();
   const nonce = await registration.nextNonce(wallet.address);
-  const signal = encodeAbiParameters(
-    [{ type: "address" }, { type: "uint256" }],
-    [wallet.address as `0x${string}`, BigInt(nonce)],
+  const signal = solidityEncode(
+    ["address", "uint256"],
+    [wallet.address, String(nonce)],
   );
   return {
     registration: {

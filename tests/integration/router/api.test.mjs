@@ -396,7 +396,10 @@ describe("router API", () => {
     assert.equal(prepared.registration.action, "agentbook-registration");
     assert.equal(prepared.registration.verification_level, "orb");
     assert.equal(prepared.registration.nonce, "7");
-    assert.match(prepared.registration.signal, /^0x[a-fA-F0-9]+$/u);
+    assert.deepEqual(prepared.registration.signal, {
+      types: ["address", "uint256"],
+      values: ["0x0000000000000000000000000000000000000000", "7"],
+    });
     assert.equal(prepared.registration.agent, undefined);
     assert.ok(agentBookNonces.includes("0x0000000000000000000000000000000000000000"));
 
