@@ -13,11 +13,7 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
 const devAuthEnabled = process.env.NEXT_PUBLIC_TOOLROUTER_DEV_AUTH === "true";
 const unverifiedAgentKitStatus = ["Not", "Verified"].join(" ");
-const pendingTopUpStatuses = new Set([
-  "checkout_pending",
-  "funding_pending",
-  "funding_failed",
-]);
+const recentCheckoutWindowMs = 15 * 60 * 1000;
 const supabase =
   supabaseUrl && supabaseAnonKey
     ? createClient(supabaseUrl, supabaseAnonKey)
@@ -29,6 +25,14 @@ function allowLocalDevSession() {
     window.location.hostname === "127.0.0.1" ||
     window.location.hostname === "localhost";
   return localHost && (!supabase || devAuthEnabled);
+}
+
+function isActiveTopUp(topUp: any) {
+  const status = String(topUp?.status || "");
+  if (status === "funding_pending") return true;
+  if (status !== "checkout_pending") return false;
+  const referenceTime = Date.parse(topUp.updated_at || topUp.created_at || "");
+  return Number.isFinite(referenceTime) && Date.now() - referenceTime < recentCheckoutWindowMs;
 }
 
 async function sessionFromUrlHash() {
@@ -355,9 +359,7 @@ export default function DashboardPage() {
         : registrationState === "submitting"
           ? "Finishing"
           : "Verify with AgentKit";
-  const pendingTopUps = topUps.filter((topUp) =>
-    pendingTopUpStatuses.has(String(topUp.status || "")),
-  );
+  const activeTopUps = topUps.filter(isActiveTopUp);
 
   async function refresh(token = sessionToken) {
     if (!token) return;
@@ -892,7 +894,7 @@ export default function DashboardPage() {
                   </section>
                 </div>
 
-                {pendingTopUps.length ? (
+                {activeTopUps.length ? (
                   <section className="billing-notice">
                     <div>
                       <strong>
