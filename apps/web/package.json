@@ -14,6 +14,7 @@
     "@worldcoin/idkit-core": "^2.1.0",
     "agentation": "^3.0.2",
     "next": "^16.2.4",
+    "qrcode.react": "^4.2.0",
     "react": "^19.2.5",
     "react-dom": "^19.2.5"
   },

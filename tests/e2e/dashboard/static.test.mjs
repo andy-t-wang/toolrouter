@@ -60,7 +60,9 @@ describe("web dashboard static wiring", () => {
     assert.match(dashboardPage, /Account Verification/);
     assert.match(dashboardPage, /Verify this account with AgentKit through World App/);
     assert.match(dashboardPage, /Verify with AgentKit/);
-    assert.match(dashboardPage, /Open World App verification/);
+    assert.match(dashboardPage, /QRCodeSVG/);
+    assert.match(dashboardPage, /Scan with World App/);
+    assert.match(dashboardPage, /Open verification link/);
     assert.match(dashboardPage, /\/v1\/agentkit\/registration/);
     assert.match(dashboardPage, /\/v1\/agentkit\/registration\/complete/);
     assert.match(dashboardPage, /Credit balance/);

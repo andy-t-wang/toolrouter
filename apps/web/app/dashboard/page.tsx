@@ -4,6 +4,7 @@ import { Agentation } from "agentation";
 import { createClient } from "@supabase/supabase-js";
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
+import { QRCodeSVG } from "qrcode.react";
 import { computeDashboardMetrics, paidAmount } from "../dashboard-metrics.ts";
 
 const apiBase = process.env.NEXT_PUBLIC_TOOLROUTER_API_URL || "";
@@ -911,14 +912,27 @@ export default function DashboardPage() {
                           </span>
                         ) : null}
                         {registrationUrl ? (
-                          <a
-                            className="verification-link"
-                            href={registrationUrl}
-                            target="_blank"
-                            rel="noreferrer"
-                          >
-                            Open World App verification
-                          </a>
+                          <div className="verification-qr">
+                            <div className="verification-qr-code">
+                              <QRCodeSVG
+                                value={registrationUrl}
+                                size={164}
+                                level="M"
+                                marginSize={1}
+                              />
+                            </div>
+                            <div>
+                              <strong>Scan with World App</strong>
+                              <a
+                                className="verification-link"
+                                href={registrationUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                              >
+                                Open verification link
+                              </a>
+                            </div>
+                          </div>
                         ) : null}
                         {registrationError ? (
                           <span className="metric-hint error-text">

@@ -1033,6 +1033,32 @@ code {
   text-underline-offset: 3px;
 }
 
+.verification-qr {
+  align-items: center;
+  display: flex;
+  gap: 16px;
+  margin-top: 14px;
+}
+
+.verification-qr strong {
+  color: var(--ink);
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.verification-qr-code {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: inline-flex;
+  padding: 10px;
+}
+
+.verification-qr-code svg {
+  display: block;
+}
+
 .error-text {
   color: #8a3f2a;
 }
@@ -2311,6 +2337,11 @@ code {
 
   .verification-actions {
     justify-content: flex-start;
+  }
+
+  .verification-qr {
+    align-items: flex-start;
+    flex-direction: column;
   }
 }
 
