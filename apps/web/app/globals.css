@@ -840,53 +840,23 @@ code {
   font-family: "JetBrains Mono", ui-monospace, monospace;
 }
 
-.agentkit-value {
+.agentkit-benefit {
   align-items: center;
+  color: var(--ink);
   display: inline-flex;
   gap: 6px;
+  font-size: 13px;
+  line-height: 1.2;
   min-width: 0;
   vertical-align: middle;
-}
-
-.agentkit-badge,
-.agentkit-value-kind {
-  align-items: center;
-  border-radius: 4px;
-  display: inline-flex;
-  font-size: 11px;
-  height: 20px;
-  line-height: 1;
   white-space: nowrap;
 }
 
-.agentkit-badge {
-  background: #fff;
-  border: 1px solid var(--line);
-  color: var(--ink);
-  gap: 6px;
-  padding: 0 7px 0 5px;
-}
-
-.agentkit-value-kind {
-  padding: 0 8px;
-}
-
-.agentkit-value-kind.free,
-.agentkit-value-kind.access {
-  background: var(--good-soft);
-  color: var(--good);
-}
-
-.agentkit-value-kind.discount {
-  background: var(--warn-soft);
-  color: var(--warn);
-}
-
-.agentkit-logo {
+.agentkit-benefit-mark {
   display: block;
   flex: 0 0 auto;
-  height: 14px;
-  width: 14px;
+  height: 16px;
+  width: 16px;
 }
 
 .bad-text {
@@ -930,19 +900,16 @@ code {
   text-align: right;
 }
 
-.endpoint-cell {
-  display: grid;
-  gap: 4px;
-  min-width: 0;
-}
-
 .endpoint-cell strong {
   color: var(--ink);
   font-weight: 500;
 }
 
 .endpoint-cell span {
-  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .clip {

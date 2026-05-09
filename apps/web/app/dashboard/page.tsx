@@ -222,6 +222,9 @@ function keyStatus(active: boolean) {
 
 function protocolForRow(row: any) {
   const route = String(row?.path || "unknown").toLowerCase();
+  const benefit = String(row?.agentkit_value_type || row?.agentkit_value_label || "").toLowerCase();
+  const isPaidAgentKitBenefit = benefit.includes("access") || benefit.includes("discount");
+  if (route === "agentkit" && isPaidAgentKitBenefit) return "x402";
   if (route === "agentkit") return "MPP";
   if (route === "x402" || route === "agentkit_to_x402") return "x402";
   return route;
@@ -321,7 +324,7 @@ function compactRecentRequests(rows: any[]) {
   });
 }
 
-function valueChip(row: any) {
+function benefitCell(row: any) {
   const path = String(row.path || "").toLowerCase();
   if (!row.agentkit_value_type && !row.agentkit_value_label) {
     return <span className="muted">-</span>;
@@ -339,19 +342,11 @@ function valueChip(row: any) {
       ? "Access"
       : normalized.includes("discount")
         ? "Discount"
-        : "Free";
-  const kind = normalized.includes("access")
-    ? "access"
-    : normalized.includes("discount")
-      ? "discount"
-      : "free";
+        : "Free Trial";
   return (
-    <span className="agentkit-value" title={`AgentKit ${label}`}>
-      <span className="agentkit-badge">
-        <img className="agentkit-logo" src="/human.svg" alt="" aria-hidden="true" />
-        AgentKit
-      </span>
-      <span className={`agentkit-value-kind ${kind}`}>{label}</span>
+    <span className="agentkit-benefit" title={`AgentKit - ${label}`}>
+      <img className="agentkit-benefit-mark" src="/human.svg" alt="" aria-hidden="true" />
+      AgentKit - {label}
     </span>
   );
 }
@@ -916,7 +911,7 @@ export default function DashboardPage() {
                           <th>Time</th>
                           <th>Endpoint</th>
                           <th>Protocol</th>
-                          <th>Value</th>
+                          <th>Benefit</th>
                           <th className="num">Status</th>
                           <th className="num">Latency</th>
                           <th className="num">Charge</th>
@@ -931,7 +926,7 @@ export default function DashboardPage() {
                               </td>
                               <td>{endpointCell(row.endpoint_id)}</td>
                               <td>{protocolChip(row)}</td>
-                              <td>{valueChip(row)}</td>
+                              <td>{benefitCell(row)}</td>
                               <td
                                 className={`mono num ${statusTextClass(row)}`}
                               >

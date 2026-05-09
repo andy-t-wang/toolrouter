@@ -9,6 +9,7 @@ const mcpClientTabs = readFileSync(new URL("../../../apps/web/app/mcp-client-tab
 const mcpContent = readFileSync(new URL("../../../apps/web/app/mcp-content.ts", import.meta.url), "utf8");
 const dashboardPage = readFileSync(new URL("../../../apps/web/app/dashboard/page.tsx", import.meta.url), "utf8");
 const dashboardLedger = readFileSync(new URL("../../../apps/web/app/dashboard-ledger.ts", import.meta.url), "utf8");
+const layout = readFileSync(new URL("../../../apps/web/app/layout.tsx", import.meta.url), "utf8");
 const authConfirmRoute = readFileSync(new URL("../../../apps/web/app/auth/confirm/route.ts", import.meta.url), "utf8");
 const confirmationTemplate = readFileSync(new URL("../../../supabase/email-templates/confirmation.html", import.meta.url), "utf8");
 const magicLinkTemplate = readFileSync(new URL("../../../supabase/email-templates/magic-link.html", import.meta.url), "utf8");
@@ -95,13 +96,18 @@ describe("web dashboard static wiring", () => {
     assert.match(dashboardPage, /\/exa-logomark\.svg/);
     assert.match(dashboardPage, /\/browserbase-logomark\.svg/);
     assert.match(dashboardPage, /<th>Protocol<\/th>/);
+    assert.match(dashboardPage, /<th>Benefit<\/th>/);
     assert.match(dashboardPage, /protocolChip\(row\)/);
+    assert.match(dashboardPage, /benefitCell\(row\)/);
     assert.match(dashboardPage, /statusTextClass\(row\)/);
     assert.match(dashboardPage, /compactRecentRequests\(requests\)/);
     assert.match(dashboardPage, /logicalRequestKey\(row\)/);
     assert.match(dashboardPage, /sameRecentX402Request\(row, other\)/);
-    assert.match(dashboardPage, /agentkit-badge/);
-    assert.match(dashboardPage, /agentkit-value-kind/);
+    assert.match(dashboardPage, /AgentKit - \{label\}/);
+    assert.doesNotMatch(dashboardPage, /<th>Value<\/th>/);
+    assert.doesNotMatch(dashboardPage, /agentkit-value-kind/);
+    assert.match(dashboardPage, /MPP/);
+    assert.match(dashboardPage, /isPaidAgentKitBenefit/);
     assert.match(dashboardPage, /isFreeTrial/);
     assert.match(dashboardPage, /path === "agentkit" && !row\.charged/);
     assert.match(dashboardPage, /Credit balance/);
@@ -175,5 +181,9 @@ describe("web dashboard static wiring", () => {
     assert.match(css, /\.topnav/);
     assert.match(css, /\.recent-calls-table/);
     assert.match(css, /\.billing-grid/);
+    assert.match(css, /\.endpoint-cell\s*\{[^}]*display:\s*inline-flex/);
+    assert.doesNotMatch(css, /\.endpoint-cell\s*\{[^}]*display:\s*grid/);
+    assert.match(layout, /rel="icon"/);
+    assert.match(layout, /\/toolrouter-mark\.svg/);
   });
 });
