@@ -1813,17 +1813,6 @@ code {
   width: 100%;
 }
 
-.status-human-badge {
-  font-size: 10px;
-  height: 18px;
-  padding: 0 6px 0 5px;
-}
-
-.status-human-badge .agentkit-logo {
-  height: 12px;
-  width: 12px;
-}
-
 .mkt-uptime-bars {
   align-items: flex-end;
   display: flex;

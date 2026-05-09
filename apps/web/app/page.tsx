@@ -112,6 +112,12 @@ function average(values: number[]) {
   return values.reduce((sum, value) => sum + value, 0) / values.length;
 }
 
+function publicEndpointStatus(endpoint: Pick<LandingEndpoint, "status">) {
+  return endpoint.status && endpoint.status !== "unverified"
+    ? "healthy"
+    : "unverified";
+}
+
 function mergeEndpointRows(rows: LandingEndpoint[]) {
   const fallbackById = new Map(
     fallbackStatus.endpoints.map((endpoint) => [endpoint.id, endpoint]),
@@ -140,7 +146,7 @@ function summarizeStatus(endpoints: LandingEndpoint[], bodySummary: any = {}) {
       endpoints.length,
     ),
     operational_count: endpoints.filter(
-      (endpoint) => endpoint.status === "healthy",
+      (endpoint) => publicEndpointStatus(endpoint) === "healthy",
     ).length,
     uptime_30d: average(trackedUptime),
     last_checked_at:
@@ -154,8 +160,8 @@ function summarizeStatus(endpoints: LandingEndpoint[], bodySummary: any = {}) {
 function fleetStatusFromEndpoints(endpoints: LandingEndpoint[]) {
   return endpoints.reduce(
     (current, endpoint) =>
-      statusRank(endpoint.status) > statusRank(current)
-        ? endpoint.status
+      statusRank(publicEndpointStatus(endpoint)) > statusRank(current)
+        ? publicEndpointStatus(endpoint)
         : current,
     endpoints.length ? "healthy" : "unverified",
   );
@@ -279,31 +285,19 @@ function providerLogoSrc(provider: string) {
   return null;
 }
 
+function displayEndpointId(provider: LandingEndpoint) {
+  const prefix = `${provider.provider}.`;
+  return provider.id.startsWith(prefix)
+    ? provider.id.slice(prefix.length)
+    : provider.id;
+}
+
 function ProviderMark({ provider }: { provider: LandingEndpoint }) {
   const src = providerLogoSrc(provider.provider);
   const label = titleCase(provider.provider);
   return (
     <span className={`prov-mark ${src ? "prov-logo" : ""}`} aria-hidden="true">
       {src ? <img src={src} alt="" /> : label.slice(0, 2).toUpperCase()}
-    </span>
-  );
-}
-
-function AgentKitStatusBadge({ provider }: { provider: LandingEndpoint }) {
-  if (!provider.agentkit_operational) return null;
-  const label = provider.agentkit_value_label || "AgentKit";
-  return (
-    <span
-      className="human-badge status-human-badge"
-      title={`${label} checked ${formatProbeAge(provider.agentkit_last_checked_at)}`}
-    >
-      <img
-        className="agentkit-logo"
-        src="/human.svg"
-        alt=""
-        aria-hidden="true"
-      />
-      <span>human</span>
     </span>
   );
 }
@@ -322,14 +316,15 @@ function UptimeRow({ provider }: { provider: LandingEndpoint }) {
           <span>
             <span className="provider-name">{provider.name}</span>
             <span className="provider-meta">
-              <span className="mono muted provider-id">{provider.id}</span>
-              <AgentKitStatusBadge provider={provider} />
+              <span className="mono muted provider-id">
+                {displayEndpointId(provider)}
+              </span>
             </span>
           </span>
         </div>
       </div>
       <div>
-        <StatusDot status={provider.status} />
+        <StatusDot status={publicEndpointStatus(provider)} />
       </div>
       <div className="hide-md">
         <Uptime30 values={provider.sparkline_30d || []} />

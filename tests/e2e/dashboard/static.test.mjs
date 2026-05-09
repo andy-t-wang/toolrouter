@@ -32,6 +32,10 @@ describe("web dashboard static wiring", () => {
     assert.match(landingPage, /Claude/);
     assert.match(landingPage, /\/dashboard/);
     assert.match(landingPage, /\/v1\/status/);
+    assert.match(landingPage, /publicEndpointStatus\(provider\)/);
+    assert.match(landingPage, /displayEndpointId\(provider\)/);
+    assert.doesNotMatch(landingPage, /AgentKitStatusBadge/);
+    assert.doesNotMatch(landingPage, /status-human-badge/);
     assert.match(landingPage, /<AgentationDev \/>/);
     assert.doesNotMatch(landingPage, /http:\/\/127\.0\.0\.1:9402/);
     assert.doesNotMatch(landingPage, /Get an MCP key/);
@@ -84,6 +88,7 @@ describe("web dashboard static wiring", () => {
     assert.doesNotMatch(dashboardPage, /x402 \(paid\)/);
     assert.doesNotMatch(dashboardPage, /% free/);
     assert.match(dashboardPage, /Recent calls/);
+    assert.doesNotMatch(dashboardPage, /Filters/);
     assert.doesNotMatch(dashboardPage, /Endpoint registry/);
     assert.doesNotMatch(dashboardPage, /Supabase monitoring/);
     assert.match(dashboardPage, /Account Verification/);
@@ -189,6 +194,7 @@ describe("web dashboard static wiring", () => {
     assert.match(css, /\.topnav/);
     assert.match(css, /\.recent-calls-table/);
     assert.match(css, /\.recent-calls-table tr\.request-row\.failed td/);
+    assert.doesNotMatch(css, /\.status-human-badge/);
     assert.match(css, /\.billing-grid/);
     assert.match(css, /\.endpoint-cell\s*\{[^}]*display:\s*inline-flex/);
     assert.doesNotMatch(css, /\.endpoint-cell\s*\{[^}]*display:\s*grid/);

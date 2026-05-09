@@ -905,9 +905,6 @@ export default function DashboardPage() {
                 <section className="card recent-calls-card">
                   <div className="hd">
                     <h2>Recent calls</h2>
-                    <button className="button ghost compact" type="button">
-                      Filters
-                    </button>
                   </div>
                   <div className="table-scroll">
                     <table className="tbl recent-calls-table">
