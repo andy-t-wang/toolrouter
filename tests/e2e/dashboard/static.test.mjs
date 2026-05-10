@@ -75,6 +75,8 @@ describe("web dashboard static wiring", () => {
     assert.match(setupSurface, /Hermes/);
     assert.match(setupSurface, /OpenClaw/);
     assert.match(setupSurface, /start:mcp/);
+    assert.match(setupSurface, /\/reload-mcp/);
+    assert.match(setupSurface, /hermes mcp test toolrouter/);
     assert.match(setupSurface, /role="tab"/);
     assert.match(setupSurface, /mcp-code-panel/);
     assert.match(setupPage, /Tool categories/);
@@ -82,6 +84,9 @@ describe("web dashboard static wiring", () => {
     assert.match(setupPage, /browser use/);
     assert.match(setupPage, /toolrouter_list_categories/);
     assert.match(setupPage, /recommended endpoint/);
+    assert.match(mcpContent, /First list the available ToolRouter tool categories/);
+    assert.match(mcpContent, /include the ToolRouter request id/);
+    assert.doesNotMatch(mcpContent, /restart/);
     assert.doesNotMatch(setupPage, /Available tools/);
   });
 
@@ -89,6 +94,14 @@ describe("web dashboard static wiring", () => {
     assert.match(dashboardPage, /Requests/);
     assert.match(dashboardPage, /Total paid/);
     assert.match(dashboardPage, /% using AgentKit/);
+    assert.match(dashboardPage, /dashboardNavItems/);
+    assert.match(dashboardPage, /dashboardNavLabel\(item\)/);
+    assert.match(dashboardPage, /dashboardNavIcon\(item\)/);
+    assert.match(dashboardPage, /className="topnav-tabs"/);
+    assert.match(dashboardPage, /aria-label="Dashboard sections"/);
+    assert.match(dashboardPage, /Verify your agent for benefits/);
+    assert.match(dashboardPage, /Unlock AgentKit free trials,\s+discounts,\s+and access paths/);
+    assert.match(dashboardPage, /Verify agent/);
     assert.match(dashboardPage, /AgentKit vs x402/);
     assert.match(dashboardPage, /successful\s+requests/);
     assert.doesNotMatch(dashboardPage, /on free\s+path/);
@@ -201,6 +214,13 @@ describe("web dashboard static wiring", () => {
     assert.match(css, /--bone/);
     assert.match(css, /\.mkt-hero/);
     assert.match(css, /\.topnav/);
+    assert.match(css, /\.topnav-tabs/);
+    assert.match(css, /\.topnav-tabs\s*\{[^}]*display:\s*none/);
+    assert.match(css, /@media \(max-width: 1080px\)[\s\S]*\.topnav-tabs\s*\{[^}]*display:\s*flex/);
+    assert.match(css, /@media \(max-width: 560px\)[\s\S]*\.topnav \.top-brand\s*\{[^}]*display:\s*none/);
+    assert.match(css, /@media \(max-width: 560px\)[\s\S]*\.topnav-tabs \.icon\s*\{[^}]*display:\s*none/);
+    assert.match(css, /\.verify-agent-banner/);
+    assert.match(css, /@media \(max-width: 820px\)[\s\S]*\.verify-agent-banner\s*\{[^}]*flex-direction:\s*column/);
     assert.match(css, /\.recent-calls-table/);
     assert.match(css, /\.recent-calls-table tr\.request-row\.failed td/);
     assert.doesNotMatch(css, /\.status-human-badge/);

@@ -274,9 +274,24 @@ export class LocalStore {
     return this.read().credit_purchases.find((row: any) => row.provider_checkout_session_id === provider_checkout_session_id) || null;
   }
 
-  async listCreditPurchases({ user_id, status, limit = 100 }: { user_id?: string; status?: string; limit?: number } = {}) {
+  async listCreditPurchases({
+    user_id,
+    status,
+    since,
+    limit = 100,
+  }: {
+    user_id?: string;
+    status?: string;
+    since?: string;
+    limit?: number;
+  } = {}) {
     return this.read().credit_purchases
-      .filter((row: any) => (!user_id || row.user_id === user_id) && (!status || row.status === status))
+      .filter(
+        (row: any) =>
+          (!user_id || row.user_id === user_id) &&
+          (!status || row.status === status) &&
+          (!since || Date.parse(row.created_at) >= Date.parse(since)),
+      )
       .slice(0, Math.max(1, Math.min(Number(limit || 100), 500)));
   }
 
@@ -554,7 +569,17 @@ export class SupabaseStore {
     }))?.[0] || null;
   }
 
-  async listCreditPurchases({ user_id, status, limit = 100 }: { user_id?: string; status?: string; limit?: number } = {}) {
+  async listCreditPurchases({
+    user_id,
+    status,
+    since,
+    limit = 100,
+  }: {
+    user_id?: string;
+    status?: string;
+    since?: string;
+    limit?: number;
+  } = {}) {
     const params: any = {
       select: "*",
       order: "created_at.desc",
@@ -562,6 +587,7 @@ export class SupabaseStore {
     };
     if (user_id) params.user_id = `eq.${user_id}`;
     if (status) params.status = `eq.${status}`;
+    if (since) params.created_at = `gte.${since}`;
     return this.request(`/credit_purchases?${qs(params)}`);
   }
 

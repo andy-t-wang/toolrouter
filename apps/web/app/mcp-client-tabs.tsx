@@ -25,7 +25,8 @@ export function McpClientTabs({ compact = false }: McpClientTabsProps) {
       <div className="mcp-connect-head">
         <h2>Connect your client</h2>
         <p>
-          Replace <code>tr_...</code> with the API key you copied from ToolRouter.
+          Replace <code>tr_...</code> with the API key you copied from ToolRouter. After updating MCP config,
+          reload MCP from your client or start a fresh session so the new server is discovered.
         </p>
       </div>
 

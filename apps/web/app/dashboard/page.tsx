@@ -28,6 +28,24 @@ const supabase =
     ? createClient(supabaseUrl, supabaseAnonKey)
     : null;
 
+type IconName = "home" | "key" | "onboard" | "copy" | "wallet" | "check";
+const dashboardNavItems = ["dashboard", "keys", "billing", "quickstart"] as const;
+type DashboardNavItem = (typeof dashboardNavItems)[number];
+const dashboardNavMeta: Record<DashboardNavItem, { icon: IconName; label: string }> = {
+  dashboard: { icon: "home", label: "Dashboard" },
+  keys: { icon: "key", label: "API keys" },
+  billing: { icon: "wallet", label: "Billing" },
+  quickstart: { icon: "onboard", label: "Quickstart" },
+};
+
+function dashboardNavIcon(item: DashboardNavItem) {
+  return dashboardNavMeta[item].icon;
+}
+
+function dashboardNavLabel(item: DashboardNavItem) {
+  return dashboardNavMeta[item].label;
+}
+
 function allowLocalDevSession() {
   if (typeof window === "undefined") return false;
   const localHost =
@@ -66,7 +84,7 @@ async function sessionFromUrlHash() {
 function Icon({
   name,
 }: {
-  name: "home" | "key" | "onboard" | "copy" | "wallet" | "check";
+  name: IconName;
 }) {
   const paths: Record<string, ReactNode> = {
     home: (
@@ -170,6 +188,25 @@ function formatTime(value: string | null | undefined) {
     second: "2-digit",
     hour12: false,
   });
+}
+
+function formatActivityDay(value: string) {
+  const date = new Date(`${value}T00:00:00Z`);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  }).format(date);
+}
+
+function barHeight(value: number, max: number) {
+  if (!value || !max) return "0%";
+  return `${Math.max(3, Math.round((value / max) * 100))}%`;
+}
+
+function sumActivity(days: any[], read: (day: any) => number) {
+  return days.reduce((sum, day) => sum + read(day), 0);
 }
 
 function monthStartIso() {
@@ -766,37 +803,34 @@ export default function DashboardPage() {
               <img className="brand-mark" src="/toolrouter-mark.svg" alt="" aria-hidden="true" />
               <span>ToolRouter</span>
             </a>
-          </div>
-        </header>
-
-        <div className="dash">
-          <aside className="side">
-            <nav className="side-links">
-              {["dashboard", "keys", "billing", "quickstart"].map((item) => (
+            <nav className="topnav-tabs" aria-label="Dashboard sections">
+              {dashboardNavItems.map((item) => (
                 <a
                   key={item}
                   className={page === item ? "active" : ""}
                   href={`#${item}`}
                   onClick={() => setPage(item)}
                 >
-                  {item === "dashboard" ? (
-                    <Icon name="home" />
-                  ) : item === "keys" ? (
-                    <Icon name="key" />
-                  ) : item === "billing" ? (
-                    <Icon name="wallet" />
-                  ) : (
-                    <Icon name="onboard" />
-                  )}
-                  <span>
-                    {item === "dashboard"
-                      ? "Dashboard"
-                      : item === "keys"
-                        ? "API keys"
-                        : item === "billing"
-                          ? "Billing"
-                          : "Quickstart"}
-                  </span>
+                  <Icon name={dashboardNavIcon(item)} />
+                  <span>{dashboardNavLabel(item)}</span>
+                </a>
+              ))}
+            </nav>
+          </div>
+        </header>
+
+        <div className="dash">
+          <aside className="side">
+            <nav className="side-links">
+              {dashboardNavItems.map((item) => (
+                <a
+                  key={item}
+                  className={page === item ? "active" : ""}
+                  href={`#${item}`}
+                  onClick={() => setPage(item)}
+                >
+                  <Icon name={dashboardNavIcon(item)} />
+                  <span>{dashboardNavLabel(item)}</span>
                 </a>
               ))}
             </nav>
@@ -830,6 +864,38 @@ export default function DashboardPage() {
                     </button>
                   </div>
                 </div>
+
+                {balance && !agentKitVerified ? (
+                  <section className="verify-agent-banner">
+                    <div className="verify-agent-copy">
+                      <img
+                        className="verify-agent-mark"
+                        src="/human.svg"
+                        alt=""
+                        aria-hidden="true"
+                      />
+                      <div>
+                        <strong>Verify your agent for benefits</strong>
+                        <p>
+                          Unlock AgentKit free trials, discounts, and access paths
+                          for verified delegation.
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      className="button primary compact"
+                      type="button"
+                      onClick={() => {
+                        setPage("billing");
+                        if (typeof window !== "undefined") {
+                          window.location.hash = "billing";
+                        }
+                      }}
+                    >
+                      Verify agent
+                    </button>
+                  </section>
+                ) : null}
 
                 <div className="stats-grid">
                   <section className="card stat-card">

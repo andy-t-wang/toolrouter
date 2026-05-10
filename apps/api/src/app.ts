@@ -219,6 +219,16 @@ function isErrorRequest(row: any) {
   );
 }
 
+function isAgentKitUse(row: any) {
+  return row?.path === "agentkit" || row?.path === "agentkit_to_x402";
+}
+
+function isCompletedStripeSession(purchase: any) {
+  return ["funding_pending", "funded", "funding_failed"].includes(
+    String(purchase?.status || ""),
+  );
+}
+
 function sumPaid(rows: any[]) {
   return rows.reduce((sum, row) => {
     const value = row.credit_captured_usd ?? row.amount_usd ?? 0;
@@ -227,17 +237,77 @@ function sumPaid(rows: any[]) {
   }, 0);
 }
 
+function dailyMonitoringRows({
+  requests,
+  topUps,
+  wallet,
+  now = new Date(),
+}: {
+  requests: any[];
+  topUps: any[];
+  wallet: any;
+  now?: Date;
+}) {
+  const rows = new Map(
+    lastThirtyDayKeys(now).map((day) => [
+      day,
+      {
+        day,
+        requests: { success: 0, failed: 0, total: 0 },
+        agentkit: { uses: 0, registrations: 0 },
+        stripe_sessions: { completed: 0, all: 0 },
+      },
+    ]),
+  );
+
+  for (const request of requests) {
+    const day = request?.ts ? dayKey(new Date(request.ts)) : "";
+    const row = rows.get(day);
+    if (!row) continue;
+    row.requests.total += 1;
+    if (isErrorRequest(request)) row.requests.failed += 1;
+    else row.requests.success += 1;
+    if (isAgentKitUse(request) && !isErrorRequest(request)) {
+      row.agentkit.uses += 1;
+    }
+  }
+
+  for (const topUp of topUps) {
+    const day = topUp?.created_at ? dayKey(new Date(topUp.created_at)) : "";
+    const row = rows.get(day);
+    if (!row) continue;
+    row.stripe_sessions.all += 1;
+    if (isCompletedStripeSession(topUp)) row.stripe_sessions.completed += 1;
+  }
+
+  const verifiedAt = wallet?.agentkit_verified
+    ? wallet?.agentkit_verified_at
+    : null;
+  const registrationDay = verifiedAt ? dayKey(new Date(verifiedAt)) : "";
+  const registrationRow = rows.get(registrationDay);
+  if (registrationRow) registrationRow.agentkit.registrations += 1;
+
+  return [...rows.values()];
+}
+
 async function monitoringPayload(store: any, user_id: string) {
   const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
   const since30d = new Date(Date.now() - THIRTY_DAYS_MS).toISOString();
-  const [requests24h, requests30d, statuses, checks24h] = await Promise.all([
-    store.listRequests({ user_id, since: since24h, limit: 500 }),
-    store.listRequests({ user_id, since: since30d, limit: 500 }),
-    store.listEndpointStatus(),
-    typeof store.listHealthChecks === "function"
-      ? store.listHealthChecks({ since: since24h, limit: 5000 })
-      : [],
-  ]);
+  const [requests24h, requests30d, statuses, checks24h, topUps30d, wallet] =
+    await Promise.all([
+      store.listRequests({ user_id, since: since24h, limit: 500 }),
+      store.listRequests({ user_id, since: since30d, limit: 500 }),
+      store.listEndpointStatus(),
+      typeof store.listHealthChecks === "function"
+        ? store.listHealthChecks({ since: since24h, limit: 5000 })
+        : [],
+      typeof store.listCreditPurchases === "function"
+        ? store.listCreditPurchases({ user_id, since: since30d, limit: 500 })
+        : [],
+      typeof store.getWalletAccount === "function"
+        ? store.getWalletAccount({ user_id })
+        : null,
+    ]);
   const errorRows = requests24h.filter(isErrorRequest);
   const statusByEndpoint = new Map<string, any>(
     statuses.map((status: any) => [status.endpoint_id, status]),
@@ -289,6 +359,11 @@ async function monitoringPayload(store: any, user_id: string) {
       errors: requests30d.filter(isErrorRequest).length,
       paid_usd: sumPaid(requests30d),
     },
+    daily_activity: dailyMonitoringRows({
+      requests: requests30d,
+      topUps: topUps30d,
+      wallet,
+    }),
     endpoint_health: {
       total: endpointStatuses.length,
       healthy: healthyEndpoints,

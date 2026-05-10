@@ -86,8 +86,8 @@ export default function SetupPage() {
             <div>
               <h2 className="mkt-display">First query</h2>
               <p>
-                This query uses a one-cent cap and should create a trace showing the AgentKit path if the account is
-                registered, with paid fallback only when required.
+                After the MCP server is loaded, this verifies discovery and execution by making the agent inspect
+                ToolRouter categories, call a concrete endpoint, and return the request id from the trace.
               </p>
             </div>
             <pre className="landing-code"><code>{firstQueryPrompt}</code></pre>

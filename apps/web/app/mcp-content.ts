@@ -11,7 +11,9 @@ const routerMcpJson = `{
   }
 }`;
 
-export const firstQueryPrompt = `Use ToolRouter to search for the top sushi places in San Francisco.
+export const firstQueryPrompt = `Use ToolRouter through MCP.
+
+First list the available ToolRouter tool categories. Then use the recommended search endpoint to find the top sushi places in San Francisco.
 
 Summarize the best 5 options and include the ToolRouter request id.`;
 
@@ -65,8 +67,9 @@ ${routerMcpJson}`,
   {
     id: "hermes",
     label: "Hermes",
-    detail: "Export TOOLROUTER_API_KEY, add this under Hermes mcp_servers, then reload MCP.",
-    code: `mcp_servers:
+    detail: "Add this under ~/.hermes/config.yaml, then run hermes mcp test toolrouter and use /reload-mcp or start Hermes.",
+    code: `# ~/.hermes/config.yaml
+mcp_servers:
   toolrouter:
     command: "npm"
     args: ["--silent", "--prefix", "/path/to/toolrouter", "run", "start:mcp"]
@@ -77,7 +80,7 @@ ${routerMcpJson}`,
   {
     id: "openclaw",
     label: "OpenClaw",
-    detail: "Add this server entry to OpenClaw, then restart the gateway.",
+    detail: "Add this server entry to OpenClaw, then reload MCP or open a fresh client session if required.",
     code: `~/.openclaw/openclaw.json
 
 ${routerMcpJson}`,
