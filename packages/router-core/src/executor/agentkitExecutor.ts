@@ -21,6 +21,60 @@ function effectivePaymentMaxUsd(maxUsd) {
   return atomicToUsdString(requestedMax < emergencyMax ? requestedMax : emergencyMax);
 }
 
+function normalizedTimeoutMs(value) {
+  if (value === undefined || value === null || value === "") return null;
+  const timeoutMs = Number(value);
+  return Number.isFinite(timeoutMs) && timeoutMs > 0 ? Math.floor(timeoutMs) : null;
+}
+
+function timeoutMessage(timeoutMs) {
+  return `provider timed out after ${timeoutMs}ms`;
+}
+
+function createTimeoutController(timeoutMs) {
+  const normalized = normalizedTimeoutMs(timeoutMs);
+  if (!normalized) return { timeoutMs: null, signal: null, clear: () => undefined };
+  const controller = new AbortController();
+  const timer = setTimeout(() => {
+    controller.abort(new Error(timeoutMessage(normalized)));
+  }, normalized);
+  timer.unref?.();
+  return {
+    timeoutMs: normalized,
+    signal: controller.signal,
+    clear: () => clearTimeout(timer),
+  };
+}
+
+function throwIfTimedOut(signal) {
+  if (!signal?.aborted) return;
+  throw signal.reason || new Error("provider request aborted");
+}
+
+function isTimeoutError(error, signal) {
+  return Boolean(signal?.aborted);
+}
+
+function timeoutResult({ endpoint, request, traceId, started, timeoutMs, path }) {
+  return {
+    trace_id: traceId,
+    endpoint_id: endpoint.id,
+    status_code: 504,
+    ok: false,
+    path: path || "timeout",
+    charged: false,
+    estimated_usd: request.estimated_usd || request.estimatedUsd || null,
+    amount_usd: null,
+    currency: null,
+    payment_reference: null,
+    payment_network: null,
+    payment_error: null,
+    latency_ms: Math.min(Date.now() - started, timeoutMs),
+    error: timeoutMessage(timeoutMs),
+    body: null,
+  };
+}
+
 function allowedHosts() {
   return new Set(
     (process.env.X402_ALLOWED_HOSTS || "api.exa.ai,x402.browserbase.com")
@@ -51,13 +105,15 @@ function assertAllowedRequest(request) {
   }
 }
 
-function buildInit(request) {
+function buildInit(request, signal = null) {
   const headers = new Headers(request.headers || {});
+  const base: any = { method: request.method || "POST", headers };
+  if (signal) base.signal = signal;
   if (request.json !== undefined) {
     headers.set("content-type", "application/json");
-    return { method: request.method || "POST", headers, body: JSON.stringify(request.json) };
+    return { ...base, body: JSON.stringify(request.json) };
   }
-  return { method: request.method || "GET", headers, body: request.body };
+  return { ...base, method: request.method || "GET", body: request.body };
 }
 
 function usesAgentKitProofHeader(endpoint) {
@@ -87,8 +143,8 @@ async function buildAgentKitProofHeader({ deps, account, request }) {
   return Buffer.from(JSON.stringify({ ...info, address: account.address, signature })).toString("base64");
 }
 
-async function buildPaymentInit({ endpoint, deps, account, request }) {
-  const init = buildInit(request);
+async function buildPaymentInit({ endpoint, deps, account, request, signal = null }) {
+  const init = buildInit(request, signal);
   if (!usesAgentKitProofHeader(endpoint)) return init;
   const headers = new Headers(init.headers);
   headers.set("agentkit", await buildAgentKitProofHeader({ deps, account, request }));
@@ -293,76 +349,98 @@ async function executeDev({ endpoint, request, traceId }) {
   };
 }
 
-export async function executeEndpoint({ endpoint, request, maxUsd, traceId, paymentMode, paymentDeps, fetchImpl, paymentSigner }: any) {
+export async function executeEndpoint({ endpoint, request, maxUsd, traceId, paymentMode, paymentDeps, fetchImpl, paymentSigner, timeoutMs }: any) {
   const started = Date.now();
   if (process.env.ROUTER_DEV_MODE === "true") return executeDev({ endpoint, request, traceId });
+  const timeout = createTimeoutController(timeoutMs);
 
-  const paymentMaxUsd = effectivePaymentMaxUsd(maxUsd);
-  const selectedPaymentMode = normalizePaymentMode(paymentMode, endpoint);
-  assertAllowedRequest(request);
-  const deps = paymentDeps || (await loadPaymentDeps());
-  const account = createAccount(deps, paymentSigner);
-  const events = [];
-  const init = buildInit(request);
   let response;
   let path;
+  try {
+    const paymentMaxUsd = effectivePaymentMaxUsd(maxUsd);
+    const selectedPaymentMode = normalizePaymentMode(paymentMode, endpoint);
+    assertAllowedRequest(request);
+    throwIfTimedOut(timeout.signal);
+    const deps = paymentDeps || (await loadPaymentDeps());
+    throwIfTimedOut(timeout.signal);
+    const account = createAccount(deps, paymentSigner);
+    const events = [];
+    const init = buildInit(request, timeout.signal);
 
-  if (selectedPaymentMode === "x402_only" || usesAgentKitProofHeader(endpoint)) {
-    const fetchWithPayment = createPaymentFetch({
-      ...deps,
-      account,
-      maxUsd: paymentMaxUsd,
-      events,
-      baseFetch: fetchImpl || fetch,
-    });
-    response = await fetchWithPayment(request.url, await buildPaymentInit({ endpoint, deps, account, request }));
-    path = usesAgentKitProofHeader(endpoint) ? "agentkit_to_x402" : "x402";
-  } else {
-    const baseFetch = fetchImpl || fetch;
-    const agentkit = deps.createAgentkitClient({
-      signer: {
-        address: account.address,
-        chainId: process.env.AGENTKIT_CHAIN_ID || "eip155:480",
-        type: "eip191",
-        signMessage: (message) => account.signMessage({ message }),
-      },
-    });
-
-    response = await agentkit.fetch(request.url, init);
-    path = "agentkit";
-    if (response.status === 402) {
-      response = await retryWithAgentKitHeader({
-        response,
-        request,
-        init,
-        agentkit,
-        baseFetch,
-      });
-    }
-    if (response.status === 402) {
+    if (selectedPaymentMode === "x402_only" || usesAgentKitProofHeader(endpoint)) {
+      path = usesAgentKitProofHeader(endpoint) ? "agentkit_to_x402" : "x402";
       const fetchWithPayment = createPaymentFetch({
         ...deps,
         account,
         maxUsd: paymentMaxUsd,
         events,
-        baseFetch,
+        baseFetch: fetchImpl || fetch,
       });
-      response = await fetchWithPayment(request.url, init);
-      path = "agentkit_to_x402";
-    }
-  }
+      response = await fetchWithPayment(
+        request.url,
+        await buildPaymentInit({ endpoint, deps, account, request, signal: timeout.signal }),
+      );
+    } else {
+      const baseFetch = fetchImpl || fetch;
+      const agentkit = deps.createAgentkitClient({
+        signer: {
+          address: account.address,
+          chainId: process.env.AGENTKIT_CHAIN_ID || "eip155:480",
+          type: "eip191",
+          signMessage: (message) => account.signMessage({ message }),
+        },
+      });
 
-  const receipt = receiptFromResponse(response, events);
-  return {
-    trace_id: traceId,
-    endpoint_id: endpoint.id,
-    status_code: response.status,
-    ok: response.ok,
-    path,
-    charged: chargedFrom({ path, receipt, events, response }),
-    estimated_usd: request.estimated_usd || request.estimatedUsd || null,
-    ...receipt,
-    latency_ms: Date.now() - started,
-    body: await readResponseBody(response),
-  };
+      path = "agentkit";
+      response = await agentkit.fetch(request.url, init);
+      if (response.status === 402) {
+        response = await retryWithAgentKitHeader({
+          response,
+          request,
+          init,
+          agentkit,
+          baseFetch,
+        });
+      }
+      if (response.status === 402) {
+        path = "agentkit_to_x402";
+        const fetchWithPayment = createPaymentFetch({
+          ...deps,
+          account,
+          maxUsd: paymentMaxUsd,
+          events,
+          baseFetch,
+        });
+        response = await fetchWithPayment(request.url, init);
+      }
+    }
+
+    const receipt = receiptFromResponse(response, events);
+    return {
+      trace_id: traceId,
+      endpoint_id: endpoint.id,
+      status_code: response.status,
+      ok: response.ok,
+      path,
+      charged: chargedFrom({ path, receipt, events, response }),
+      estimated_usd: request.estimated_usd || request.estimatedUsd || null,
+      ...receipt,
+      latency_ms: Date.now() - started,
+      body: await readResponseBody(response),
+    };
+  } catch (error) {
+    if (timeout.timeoutMs && isTimeoutError(error, timeout.signal)) {
+      return timeoutResult({
+        endpoint,
+        request,
+        traceId,
+        started,
+        timeoutMs: timeout.timeoutMs,
+        path,
+      });
+    }
+    throw error;
+  } finally {
+    timeout.clear();
+  }
 }

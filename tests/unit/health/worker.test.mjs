@@ -106,6 +106,93 @@ describe("endpoint health worker", () => {
     assert.equal(db.insertedHealthChecks[0].path, "agentkit");
   });
 
+  it("passes the default health probe timeout to the executor", async () => {
+    const previousTimeout = process.env.TOOLROUTER_HEALTH_PROBE_TIMEOUT_MS;
+    delete process.env.TOOLROUTER_HEALTH_PROBE_TIMEOUT_MS;
+    const endpoint = getEndpoint("exa.search");
+    const db = createDb();
+    let timeoutMs;
+
+    try {
+      await runEndpointHealthCheck({
+        endpoint,
+        db,
+        executor: async (payload) => {
+          timeoutMs = payload.timeoutMs;
+          return {
+            ok: true,
+            status_code: 200,
+            path: "agentkit",
+            charged: false,
+            latency_ms: 40,
+          };
+        },
+        now: () => new Date("2026-05-09T11:00:00.000Z"),
+        useRecentRequests: false,
+      });
+      assert.equal(timeoutMs, 5_000);
+    } finally {
+      if (previousTimeout === undefined) delete process.env.TOOLROUTER_HEALTH_PROBE_TIMEOUT_MS;
+      else process.env.TOOLROUTER_HEALTH_PROBE_TIMEOUT_MS = previousTimeout;
+    }
+  });
+
+  it("marks slow successful probes above the endpoint latency budget as degraded", async () => {
+    const endpoint = getEndpoint("exa.search");
+    const db = createDb();
+
+    const result = await runEndpointHealthCheck({
+      endpoint,
+      db,
+      executor: async () => ({
+        ok: true,
+        status_code: 200,
+        path: "agentkit",
+        charged: false,
+        latency_ms: 2_501,
+      }),
+      now: () => new Date("2026-05-09T11:00:00.000Z"),
+      useRecentRequests: false,
+    });
+
+    assert.equal(result.status, "degraded");
+    assert.equal(db.insertedHealthChecks[0].latency_ms, 2_501);
+    assert.equal(db.upsertedStatuses[0].status, "degraded");
+  });
+
+  it("marks reused recent requests above the endpoint latency budget as degraded", async () => {
+    const endpoint = getEndpoint("exa.search");
+    const db = createDb([
+      {
+        id: "req_recent_slow_agentkit",
+        ts: "2026-05-09T10:00:00.000Z",
+        endpoint_id: "exa.search",
+        status_code: 200,
+        ok: true,
+        path: "agentkit",
+        charged: false,
+        latency_ms: 3_000,
+        error: null,
+      },
+    ]);
+    let executed = false;
+
+    const result = await runEndpointHealthCheck({
+      endpoint,
+      db,
+      executor: async () => {
+        executed = true;
+        return { ok: true, status_code: 200, path: "agentkit" };
+      },
+      now: () => new Date("2026-05-09T11:00:00.000Z"),
+      recentRequestWindowMs: 12 * 60 * 60 * 1000,
+    });
+
+    assert.equal(executed, false);
+    assert.equal(result.status, "degraded");
+    assert.equal(db.insertedHealthChecks[0].latency_ms, 3_000);
+  });
+
   it("does not reuse a paid fallback as free-trial AgentKit evidence", async () => {
     const endpoint = getEndpoint("exa.search");
     const db = createDb([

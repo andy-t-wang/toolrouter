@@ -1712,6 +1712,7 @@ code {
   position: absolute;
   top: calc(50% - 29px);
   width: 58px;
+  z-index: 2;
 }
 
 .vp-human-mark img {
@@ -1720,23 +1721,28 @@ code {
   width: 34px;
 }
 
-.vp-human-boost::before,
-.vp-human-boost::after {
+.vp-boost-line {
   background: var(--line-strong);
-  content: "";
   height: 1px;
-  left: 28%;
+  left: 50%;
   position: absolute;
-  right: 28%;
   top: 50%;
+  transform-origin: left center;
+  width: 18%;
+  z-index: 1;
 }
 
-.vp-human-boost::before {
-  transform: rotate(-28deg);
+.vp-boost-line.free {
+  transform: rotate(210deg);
 }
 
-.vp-human-boost::after {
-  transform: rotate(28deg);
+.vp-boost-line.access {
+  transform: rotate(-30deg);
+}
+
+.vp-boost-line.discount {
+  transform: rotate(90deg);
+  width: 14%;
 }
 
 .vp-boost-node {
@@ -1751,6 +1757,7 @@ code {
   padding: 10px 12px;
   position: absolute;
   white-space: nowrap;
+  z-index: 2;
 }
 
 .vp-boost-node.free {

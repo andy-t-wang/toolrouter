@@ -5,11 +5,13 @@ import { readFileSync } from "node:fs";
 const landingPage = readFileSync(new URL("../../../apps/web/app/page.tsx", import.meta.url), "utf8");
 const agentationDev = readFileSync(new URL("../../../apps/web/app/agentation-dev.tsx", import.meta.url), "utf8");
 const setupPage = readFileSync(new URL("../../../apps/web/app/setup/page.tsx", import.meta.url), "utf8");
+const docsPage = readFileSync(new URL("../../../apps/web/app/docs/page.tsx", import.meta.url), "utf8");
 const mcpClientTabs = readFileSync(new URL("../../../apps/web/app/mcp-client-tabs.tsx", import.meta.url), "utf8");
 const mcpContent = readFileSync(new URL("../../../apps/web/app/mcp-content.ts", import.meta.url), "utf8");
 const dashboardPage = readFileSync(new URL("../../../apps/web/app/dashboard/page.tsx", import.meta.url), "utf8");
 const dashboardLedger = readFileSync(new URL("../../../apps/web/app/dashboard-ledger.ts", import.meta.url), "utf8");
 const layout = readFileSync(new URL("../../../apps/web/app/layout.tsx", import.meta.url), "utf8");
+const ogRoute = readFileSync(new URL("../../../apps/web/app/og/route.tsx", import.meta.url), "utf8");
 const authConfirmRoute = readFileSync(new URL("../../../apps/web/app/auth/confirm/route.ts", import.meta.url), "utf8");
 const confirmationTemplate = readFileSync(new URL("../../../supabase/email-templates/confirmation.html", import.meta.url), "utf8");
 const magicLinkTemplate = readFileSync(new URL("../../../supabase/email-templates/magic-link.html", import.meta.url), "utf8");
@@ -207,5 +209,24 @@ describe("web dashboard static wiring", () => {
     assert.doesNotMatch(css, /\.endpoint-cell\s*\{[^}]*display:\s*grid/);
     assert.match(layout, /rel="icon"/);
     assert.match(layout, /\/toolrouter-mark\.svg/);
+  });
+
+  it("serves path-specific OpenGraph images for public pages", () => {
+    assert.match(layout, /metadataBase:\s*new URL\(appUrl\)/);
+    assert.match(layout, /openGraph:/);
+    assert.match(layout, /twitter:/);
+    assert.match(layout, /\/og\?path=\//);
+    assert.match(setupPage, /export const metadata/);
+    assert.match(setupPage, /\/og\?path=\/setup/);
+    assert.match(setupPage, /Connect any MCP-capable agent\./);
+    assert.match(docsPage, /export const metadata/);
+    assert.match(docsPage, /\/og\?path=\/docs/);
+    assert.match(docsPage, /Ship endpoints agents can trust\./);
+    assert.match(ogRoute, /ImageResponse/);
+    assert.match(ogRoute, /routeCards/);
+    assert.match(ogRoute, /"\/setup"/);
+    assert.match(ogRoute, /"\/docs"/);
+    assert.match(ogRoute, /width:\s*1200/);
+    assert.match(ogRoute, /height:\s*630/);
   });
 });

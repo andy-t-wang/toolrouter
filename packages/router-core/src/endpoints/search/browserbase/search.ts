@@ -26,6 +26,7 @@ export const browserbaseSearchEndpointDefinition = Object.freeze({
     mode: "challenge",
     payment_mode: "agentkit_first",
     max_usd: "0.02",
+    latency_budget_ms: 2500,
     input: {
       query: "ToolRouter Browserbase health check",
     },

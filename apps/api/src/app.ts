@@ -69,12 +69,37 @@ function publicTopUp(purchase: any) {
 }
 
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+const DEFAULT_REQUEST_TIMEOUT_MS = 8_000;
 const STATUS_RANK: Record<string, number> = {
   healthy: 0,
   degraded: 1,
   unverified: 2,
   failing: 3,
 };
+
+function envMs(name: string, fallback: number) {
+  const value = Number(process.env[name]);
+  return Number.isFinite(value) && value > 0 ? Math.floor(value) : fallback;
+}
+
+function timedOut(result: any) {
+  return String(result?.error || "").includes("timed out after");
+}
+
+function logEndpointRequest(request: any, endpoint: any, result: any) {
+  request.log?.info?.(
+    {
+      endpoint_id: endpoint.id,
+      status_code: result.status_code ?? null,
+      path: result.path ?? null,
+      charged: Boolean(result.charged),
+      latency_ms: result.latency_ms ?? null,
+      timeout: timedOut(result),
+      error: result.error || null,
+    },
+    "endpoint request completed",
+  );
+}
 
 function statusRank(status: string) {
   return STATUS_RANK[status] ?? STATUS_RANK.unverified;
@@ -1201,7 +1226,9 @@ export function createApiApp({
         paymentMode,
         traceId,
         paymentSigner: await paymentSignerForRequest(store, crossmint, auth),
+        timeoutMs: envMs("TOOLROUTER_REQUEST_TIMEOUT_MS", DEFAULT_REQUEST_TIMEOUT_MS),
       });
+      logEndpointRequest(request, endpoint, result);
       const credit = await finalizeCreditReservation({
         store,
         reservation,

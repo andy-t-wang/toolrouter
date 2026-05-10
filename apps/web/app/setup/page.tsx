@@ -2,6 +2,32 @@ import { AgentationDev } from "../agentation-dev.tsx";
 import { McpClientTabs } from "../mcp-client-tabs.tsx";
 import { firstQueryPrompt } from "../mcp-content.ts";
 
+const setupDescription =
+  "Use one ToolRouter API key with the MCP adapter. Hermes, OpenClaw, OpenJarvis, ZeroClaw, Codex, Claude Code, Cursor, and other MCP clients can call the same named tools.";
+const setupOgImage = {
+  url: "/og?path=/setup",
+  width: 1200,
+  height: 630,
+  alt: "ToolRouter setup",
+};
+
+export const metadata = {
+  title: "ToolRouter Setup",
+  description: setupDescription,
+  openGraph: {
+    title: "Connect any MCP-capable agent.",
+    description: setupDescription,
+    url: "/setup",
+    images: [setupOgImage],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Connect any MCP-capable agent.",
+    description: setupDescription,
+    images: [setupOgImage],
+  },
+};
+
 export default function SetupPage() {
   return (
     <>

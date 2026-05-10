@@ -70,6 +70,7 @@ function materializeEndpoint(definition) {
       ...definition.health_probe,
       maxUsd,
       paymentMode: definition.health_probe.payment_mode || definition.default_payment_mode || "agentkit_first",
+      latencyBudgetMs: definition.health_probe.latency_budget_ms ?? definition.health_probe.latencyBudgetMs,
     }),
     liveSmoke: Object.freeze({
       ...definition.live_smoke,

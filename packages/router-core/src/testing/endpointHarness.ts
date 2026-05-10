@@ -78,6 +78,12 @@ export function validateEndpointConfig(endpoint) {
     if (endpoint.healthProbe.paymentMode !== "agentkit_first") {
       errors.push("healthProbe.paymentMode must be agentkit_first");
     }
+    if (
+      endpoint.healthProbe.latencyBudgetMs !== undefined &&
+      (!Number.isFinite(endpoint.healthProbe.latencyBudgetMs) || endpoint.healthProbe.latencyBudgetMs <= 0)
+    ) {
+      errors.push("healthProbe.latencyBudgetMs must be a positive number");
+    }
   }
 
   if (!isPlainObject(endpoint.fixture)) {

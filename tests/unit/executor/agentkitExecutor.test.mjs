@@ -132,7 +132,9 @@ function fakePaymentDeps({ captures, agentkitResponse, x402Response, selectedReq
         },
         async fetch(url, init) {
           captures.agentkitCalls.push({ url, init });
-          return agentkitResponse;
+          return typeof agentkitResponse === "function"
+            ? agentkitResponse(url, init)
+            : agentkitResponse;
         },
       };
     },
@@ -157,7 +159,9 @@ function fakePaymentDeps({ captures, agentkitResponse, x402Response, selectedReq
             scheme: "exact",
           },
         });
-        return x402Response;
+        return typeof x402Response === "function"
+          ? x402Response(url, init)
+          : x402Response;
       };
     },
     privateKeyToAccount() {
@@ -301,6 +305,44 @@ describe("AgentKit/x402 executor", () => {
     assert.equal(result.payment_reference, null);
   });
 
+  it("returns an uncharged timeout result when the provider fetch is too slow", async () => {
+    const seen = captures();
+    const result = await executeEndpoint({
+      endpoint: baseEndpoint(),
+      request: providerRequest(),
+      maxUsd: "0.01",
+      traceId: "trace_timeout",
+      timeoutMs: 25,
+      paymentDeps: fakePaymentDeps({
+        captures: seen,
+        agentkitResponse: (_url, init) =>
+          new Promise((resolve, reject) => {
+            const timer = setTimeout(() => resolve(jsonResponse({ late: true })), 250);
+            init.signal.addEventListener(
+              "abort",
+              () => {
+                clearTimeout(timer);
+                reject(init.signal.reason);
+              },
+              { once: true },
+            );
+          }),
+        x402Response: paymentResponse(),
+      }),
+    });
+
+    assert.equal(result.status_code, 504);
+    assert.equal(result.ok, false);
+    assert.equal(result.path, "agentkit");
+    assert.equal(result.charged, false);
+    assert.equal(result.amount_usd, null);
+    assert.equal(result.payment_reference, null);
+    assert.equal(result.error, "provider timed out after 25ms");
+    assert.ok(result.latency_ms <= 25);
+    assert.equal(seen.agentkitCalls.length, 1);
+    assert.equal(seen.agentkitCalls[0].init.signal.aborted, true);
+  });
+
   it("supports x402-only mode for paid live smoke tests", async () => {
     const seen = captures();
     const result = await executeEndpoint({
@@ -341,6 +383,7 @@ describe("AgentKit/x402 executor", () => {
       },
       maxUsd: "0.02",
       traceId: "trace_browserbase_agentkit_header",
+      timeoutMs: 8_000,
       paymentDeps: fakePaymentDeps({
         captures: seen,
         agentkitResponse: jsonResponse({ shouldNotBeUsed: true }),
@@ -358,6 +401,7 @@ describe("AgentKit/x402 executor", () => {
     assert.equal(result.amount_usd, "0.007");
     assert.equal(seen.agentkitCalls.length, 0);
     assert.equal(seen.x402Calls.length, 1);
+    assert.ok(seen.x402Calls[0].init.signal instanceof AbortSignal);
     const encoded = seen.x402Calls[0].init.headers.get("agentkit");
     assert.ok(encoded);
     const proof = JSON.parse(Buffer.from(encoded, "base64").toString("utf8"));

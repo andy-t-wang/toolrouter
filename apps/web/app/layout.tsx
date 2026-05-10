@@ -1,8 +1,35 @@
 import "./globals.css";
 
-export const metadata = {
+import type { Metadata } from "next";
+
+const appUrl = process.env.NEXT_PUBLIC_TOOLROUTER_APP_URL || "https://toolrouter.world";
+const defaultDescription =
+  "ToolRouter is an MCP server your agent connects to once. Every endpoint behind it is verified, paid through AgentKit, and traced end-to-end.";
+const defaultOgImage = {
+  url: "/og?path=/",
+  width: 1200,
+  height: 630,
+  alt: "ToolRouter",
+};
+
+export const metadata: Metadata = {
+  metadataBase: new URL(appUrl),
   title: "ToolRouter",
-  description: "AgentKit-first x402 tool router dashboard",
+  description: defaultDescription,
+  openGraph: {
+    title: "ToolRouter",
+    description: defaultDescription,
+    url: "/",
+    siteName: "ToolRouter",
+    type: "website",
+    images: [defaultOgImage],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "ToolRouter",
+    description: defaultDescription,
+    images: [defaultOgImage],
+  },
   icons: {
     icon: [
       { url: "/toolrouter-mark.svg", type: "image/svg+xml" },

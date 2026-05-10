@@ -379,6 +379,9 @@ function BillingArt() {
 function HumanBoostArt() {
   return (
     <div className="vp-human-boost" aria-hidden="true">
+      <span className="vp-boost-line free" />
+      <span className="vp-boost-line access" />
+      <span className="vp-boost-line discount" />
       <div className="vp-human-mark">
         <img src="/human.svg" alt="" />
       </div>

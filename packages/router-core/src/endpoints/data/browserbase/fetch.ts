@@ -26,6 +26,7 @@ export const browserbaseFetchEndpointDefinition = Object.freeze({
     mode: "challenge",
     payment_mode: "agentkit_first",
     max_usd: "0.02",
+    latency_budget_ms: 5000,
     input: {
       url: "https://example.com",
     },

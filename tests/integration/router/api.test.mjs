@@ -658,6 +658,70 @@ describe("router API", () => {
     }
   });
 
+  it("passes the default request timeout and records timed-out requests", async () => {
+    const previousTimeout = process.env.TOOLROUTER_REQUEST_TIMEOUT_MS;
+    delete process.env.TOOLROUTER_REQUEST_TIMEOUT_MS;
+    const executorCalls = [];
+    const isolatedStore = new LocalStore({
+      path: join(mkdtempSync(join(tmpdir(), "toolrouter-request-timeout-")), "store.json"),
+    });
+    const isolatedApp = createApiApp({
+      logger: false,
+      cache: new MemoryCache(),
+      store: isolatedStore,
+      executor: async (payload) => {
+        executorCalls.push(payload);
+        return {
+          trace_id: payload.traceId,
+          endpoint_id: payload.endpoint.id,
+          status_code: 504,
+          ok: false,
+          path: "agentkit",
+          charged: false,
+          estimated_usd: payload.request.estimatedUsd,
+          amount_usd: null,
+          currency: null,
+          payment_reference: null,
+          payment_network: null,
+          payment_error: null,
+          latency_ms: payload.timeoutMs,
+          error: `provider timed out after ${payload.timeoutMs}ms`,
+          body: null,
+        };
+      },
+    });
+    await isolatedApp.listen({ port: 0, host: "127.0.0.1" });
+    const isolatedBaseUrl = `http://127.0.0.1:${isolatedApp.server.address().port}`;
+    try {
+      const response = await fetch(`${isolatedBaseUrl}/v1/requests`, {
+        method: "POST",
+        headers: authHeaders(),
+        body: JSON.stringify({
+          endpoint_id: "exa.search",
+          input: { query: "AgentKit", search_type: "fast", num_results: 1 },
+          maxUsd: "0.02",
+        }),
+      });
+      assert.equal(response.status, 200);
+      const created = await response.json();
+      assert.equal(created.status_code, 504);
+      assert.equal(created.charged, false);
+      assert.equal(created.credit_captured_usd, "0");
+      assert.equal(created.credit_released_usd, "0.02");
+      assert.equal(executorCalls[0].timeoutMs, 8_000);
+
+      const listResponse = await fetch(`${isolatedBaseUrl}/v1/requests`, { headers: authHeaders() });
+      const listed = await listResponse.json();
+      assert.equal(listed.requests[0].status_code, 504);
+      assert.equal(listed.requests[0].latency_ms, 8_000);
+      assert.equal(listed.requests[0].error, "provider timed out after 8000ms");
+    } finally {
+      await isolatedApp.close();
+      if (previousTimeout === undefined) delete process.env.TOOLROUTER_REQUEST_TIMEOUT_MS;
+      else process.env.TOOLROUTER_REQUEST_TIMEOUT_MS = previousTimeout;
+    }
+  });
+
   it("summarizes Supabase-backed monitoring data for dashboard health", async () => {
     const response = await fetch(`${baseUrl}/v1/dashboard/monitoring`, { headers: sessionHeaders() });
     assert.equal(response.status, 200);

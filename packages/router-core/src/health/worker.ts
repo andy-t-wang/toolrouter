@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { endpointRegistry } from "../endpoints/registry.ts";
 
 export const DEFAULT_HEALTH_CHECK_INTERVAL_MS = 12 * 60 * 60 * 1000;
+export const DEFAULT_HEALTH_PROBE_TIMEOUT_MS = 5_000;
 
 export const HEALTH_STATUSES = Object.freeze(["healthy", "degraded", "failing", "unverified"]);
 const AGENTKIT_HEALTH_PATHS = new Set(["agentkit", "agentkit_to_x402"]);
@@ -17,6 +18,25 @@ function maybeNumber(value) {
 function maybeString(value) {
   if (value === undefined || value === null || value === "") return null;
   return String(value);
+}
+
+function envMs(name, fallback) {
+  const value = Number(process.env[name]);
+  return Number.isFinite(value) && value > 0 ? Math.floor(value) : fallback;
+}
+
+function healthProbeTimeoutMs(value) {
+  const timeoutMs = maybeNumber(value);
+  return timeoutMs && timeoutMs > 0
+    ? Math.floor(timeoutMs)
+    : envMs("TOOLROUTER_HEALTH_PROBE_TIMEOUT_MS", DEFAULT_HEALTH_PROBE_TIMEOUT_MS);
+}
+
+function latencyBudgetMs(endpoint) {
+  const budgetMs = maybeNumber(
+    endpoint?.healthProbe?.latencyBudgetMs ?? endpoint?.healthProbe?.latency_budget_ms,
+  );
+  return budgetMs && budgetMs > 0 ? budgetMs : 10_000;
 }
 
 function pick(result, snakeName, camelName) {
@@ -69,7 +89,7 @@ function agentKitValueRealized(endpoint, row) {
 function statusFromResult(result, endpoint) {
   if (result.payment_error) return "degraded";
   if (result.ok) {
-    if (result.latency_ms > 10_000) return "degraded";
+    if (result.latency_ms > latencyBudgetMs(endpoint)) return "degraded";
     if (!freeTrialValueRealized(endpoint, result)) return "degraded";
     return "healthy";
   }
@@ -220,6 +240,7 @@ export async function runEndpointHealthCheck({
   now = () => new Date(),
   recentRequestWindowMs = DEFAULT_HEALTH_CHECK_INTERVAL_MS,
   useRecentRequests = true,
+  timeoutMs,
 }) {
   if (!endpoint) throw new TypeError("endpoint is required");
   const checkedAt = now();
@@ -267,6 +288,7 @@ export async function runEndpointHealthCheck({
           maxUsd: endpoint.healthProbe.maxUsd,
           paymentMode: endpoint.healthProbe.paymentMode || endpoint.defaultPaymentMode || "agentkit_first",
           traceId,
+          timeoutMs: healthProbeTimeoutMs(timeoutMs),
         });
         const normalized = normalizeExecutionResult(result, Date.now() - started);
         healthCheckRow = {
@@ -308,6 +330,7 @@ export async function runEndpointHealthChecks({
   now = () => new Date(),
   recentRequestWindowMs = DEFAULT_HEALTH_CHECK_INTERVAL_MS,
   useRecentRequests = true,
+  timeoutMs,
   logger,
 }: any = {}) {
   const results = [];
@@ -319,11 +342,18 @@ export async function runEndpointHealthChecks({
       now,
       recentRequestWindowMs,
       useRecentRequests,
+      timeoutMs,
     });
     results.push(result);
     logger?.info?.("endpoint health check completed", {
       endpoint_id: result.endpoint_id,
       status: result.status,
+      status_code: result.healthCheck?.status_code ?? null,
+      path: result.healthCheck?.path ?? null,
+      charged: Boolean(result.healthCheck?.charged),
+      latency_ms: result.healthCheck?.latency_ms ?? null,
+      timeout: String(result.healthCheck?.error || "").includes("timed out after"),
+      error: result.healthCheck?.error ?? null,
     });
   }
   return results;

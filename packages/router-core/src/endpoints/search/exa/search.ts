@@ -27,6 +27,7 @@ export const exaSearchEndpointDefinition = Object.freeze({
     mode: "challenge",
     payment_mode: "agentkit_first",
     max_usd: "0.01",
+    latency_budget_ms: 2500,
     input: {
       query: "ToolRouter health check",
       search_type: "fast",

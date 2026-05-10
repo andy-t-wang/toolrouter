@@ -1,5 +1,31 @@
 import { AgentationDev } from "../agentation-dev.tsx";
 
+const docsDescription =
+  "ToolRouter lists endpoints that behave predictably through AgentKit first, x402 fallback, typed input validation, capped health probes, and traceable payment metadata.";
+const docsOgImage = {
+  url: "/og?path=/docs",
+  width: 1200,
+  height: 630,
+  alt: "ToolRouter endpoint docs",
+};
+
+export const metadata = {
+  title: "ToolRouter Endpoint Docs",
+  description: docsDescription,
+  openGraph: {
+    title: "Ship endpoints agents can trust.",
+    description: docsDescription,
+    url: "/docs",
+    images: [docsOgImage],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Ship endpoints agents can trust.",
+    description: docsDescription,
+    images: [docsOgImage],
+  },
+};
+
 const endpointExample = `export const providerEndpointDefinition = Object.freeze({
   id: "provider.endpoint",
   provider: "provider",
