@@ -27,6 +27,7 @@ import {
 import { createCrossmintClient } from "./crossmint.ts";
 import { createStripeClient } from "./stripe.ts";
 import { createAlertClient } from "./alerts.ts";
+import { createDatadogClient } from "./datadog.ts";
 import {
   agentBookRegistrationService,
   buildAgentKitVerificationRequest,
@@ -99,6 +100,30 @@ function logEndpointRequest(request: any, endpoint: any, result: any) {
     },
     "endpoint request completed",
   );
+}
+
+function requestMetricStatus(row: any) {
+  return isErrorRequest(row) ? "fail" : "success";
+}
+
+function recordRequestMetrics(datadog: any, row: any) {
+  datadog?.increment?.("toolrouter.requests.count", {
+    status: requestMetricStatus(row),
+    endpoint: row.endpoint_id,
+    path: row.path || "unknown",
+  }).catch(() => undefined);
+  if (!isErrorRequest(row) && isAgentKitUse(row)) {
+    datadog?.increment?.("toolrouter.agentkit.uses.count", {
+      endpoint: row.endpoint_id,
+      path: row.path || "unknown",
+    }).catch(() => undefined);
+  }
+}
+
+function recordStripeSessionMetric(datadog: any, status: string) {
+  datadog?.increment?.("toolrouter.stripe.sessions.count", {
+    status,
+  }).catch(() => undefined);
 }
 
 function statusRank(status: string) {
@@ -1016,6 +1041,7 @@ export function createApiApp({
   crossmint = createCrossmintClient(),
   stripe = createStripeClient(),
   alerts = createAlertClient(),
+  datadog = createDatadogClient(),
   agentBookVerifier = null,
   agentBookRegistration = null,
   logger = true,
@@ -1164,7 +1190,7 @@ export function createApiApp({
 
   app.post("/v1/agentkit/registration/complete", async (request: any) => {
     const user = await authenticateSupabaseUser(request.headers);
-    return completeAgentKitRegistration({
+    const result = await completeAgentKitRegistration({
       store,
       crossmint,
       user,
@@ -1172,6 +1198,12 @@ export function createApiApp({
       agentBookVerifier,
       agentBookRegistration,
     });
+    if (result?.registration?.tx_hash) {
+      datadog?.increment?.("toolrouter.agentkit.registrations.count", {
+        status: "completed",
+      }).catch(() => undefined);
+    }
+    return result;
   });
 
   app.post("/v1/wallet/agentkit-verification", async (request: any) => {
@@ -1232,6 +1264,7 @@ export function createApiApp({
       purchase,
       checkout,
     });
+    recordStripeSessionMetric(datadog, "created");
     reply.status(201);
     return {
       top_up: {
@@ -1324,6 +1357,7 @@ export function createApiApp({
         credit,
       });
       await store.insertRequest(row);
+      recordRequestMetrics(datadog, row);
       return {
         id: row.id,
         trace_id: traceId,
@@ -1363,16 +1397,25 @@ export function createApiApp({
         session,
         event,
       });
+      recordStripeSessionMetric(
+        datadog,
+        result?.ok === false ? "failed" : "completed",
+      );
       if (result?.ok === false) reply.status(500);
       return result;
     }
 
     if (event?.type === "checkout.session.expired" || event?.type === "checkout.session.async_payment_failed") {
-      return processStripeCheckoutFailed({
+      const result = await processStripeCheckoutFailed({
         store,
         session,
         event,
       });
+      recordStripeSessionMetric(
+        datadog,
+        event?.type === "checkout.session.expired" ? "expired" : "failed",
+      );
+      return result;
     }
 
     return {

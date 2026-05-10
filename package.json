@@ -26,6 +26,7 @@
     "crossmint:signer": "node scripts/crossmint-signer-env.mjs",
     "crossmint:check": "node --env-file-if-exists=.env --import tsx scripts/crossmint-production-check.mjs",
     "billing:retry-funding": "node --env-file-if-exists=.env --import tsx scripts/retry-failed-funding.mjs",
+    "datadog:dashboard": "node --env-file-if-exists=.env scripts/datadog-dashboard.mjs",
     "supabase:auth-config": "node scripts/apply-supabase-auth-config.mjs",
     "supabase:auth-email": "node scripts/apply-supabase-auth-email-template.mjs",
     "stripe:local-e2e": "node --env-file-if-exists=.env --import tsx scripts/stripe-local-e2e.mjs",
