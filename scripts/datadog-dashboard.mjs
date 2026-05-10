@@ -65,16 +65,16 @@ const dashboard = {
   layout_type: "ordered",
   widgets: [
     timeseries("Requests per day by status", [
-      query("sum:toolrouter.requests.count{*} by {status}.as_count().rollup(sum, 86400)"),
+      query("sum:toolrouter.requests.count{env:production,source:toolrouter} by {status}.as_count().rollup(sum, 86400)"),
     ]),
     timeseries("AgentKit uses per day", [
-      query("sum:toolrouter.agentkit.uses.count{*}.as_count().rollup(sum, 86400)"),
+      query("sum:toolrouter.agentkit.uses.count{env:production,source:toolrouter}.as_count().rollup(sum, 86400)"),
     ]),
     timeseries("AgentKit registrations per day", [
-      query("sum:toolrouter.agentkit.registrations.count{status:completed}.as_count().rollup(sum, 86400)"),
+      query("sum:toolrouter.agentkit.registrations.count{env:production,source:toolrouter,status:completed}.as_count().rollup(sum, 86400)"),
     ]),
     timeseries("Stripe sessions per day", [
-      query("sum:toolrouter.stripe.sessions.count{*} by {status}.as_count().rollup(sum, 86400)"),
+      query("sum:toolrouter.stripe.sessions.count{env:production,source:toolrouter} by {status}.as_count().rollup(sum, 86400)"),
     ]),
   ],
 };
