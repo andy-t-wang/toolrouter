@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 
+import { realpathSync } from "node:fs";
 import { stdin, stdout } from "node:process";
+import { fileURLToPath } from "node:url";
 
 const PROTOCOL_VERSION = "2025-11-25";
 const SERVER_INFO = Object.freeze({ name: "toolrouter-mcp", version: "0.1.0" });
@@ -360,7 +362,12 @@ export function startStdioServer({ input = stdin, output = stdout, env = process
   });
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+function isCliEntrypoint() {
+  if (!process.argv[1]) return false;
+  return realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url));
+}
+
+if (isCliEntrypoint()) {
   if (process.env.TOOLROUTER_MCP_LOG === "true") {
     process.stderr.write("ToolRouter MCP ready\n");
   }
