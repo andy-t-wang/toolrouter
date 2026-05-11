@@ -802,7 +802,6 @@ code {
 }
 
 .recent-calls-card .table-scroll {
-  max-height: 520px;
   overflow: auto;
 }
 
@@ -814,7 +813,7 @@ code {
 }
 
 .recent-calls-table {
-  min-width: 760px;
+  min-width: 840px;
   table-layout: fixed;
 }
 
@@ -855,7 +854,7 @@ code {
 
 .recent-calls-table th:nth-child(1),
 .recent-calls-table td:nth-child(1) {
-  width: 94px;
+  width: 150px;
 }
 
 .recent-calls-table th:nth-child(2),
@@ -895,6 +894,20 @@ code {
   text-overflow: ellipsis;
   vertical-align: middle;
   width: fit-content;
+}
+
+.table-pager {
+  align-items: center;
+  border-top: 1px solid var(--line);
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+  padding: 12px 16px;
+}
+
+.pager-actions {
+  display: flex;
+  gap: 8px;
 }
 
 .endpoint-cell {
@@ -1782,8 +1795,12 @@ code {
 }
 
 .vp-human-boost {
+  align-items: center;
+  display: flex;
+  gap: 22px;
   height: 100%;
-  position: relative;
+  justify-content: center;
+  padding: 20px;
   width: 100%;
 }
 
@@ -1793,43 +1810,21 @@ code {
   border-radius: 999px;
   box-shadow: var(--shadow-sm);
   display: grid;
-  height: 58px;
-  left: calc(50% - 29px);
+  flex: none;
+  height: 72px;
   place-items: center;
-  position: absolute;
-  top: calc(50% - 29px);
-  width: 58px;
-  z-index: 2;
+  width: 72px;
 }
 
 .vp-human-mark img {
   display: block;
-  height: 34px;
-  width: 34px;
+  height: 42px;
+  width: 42px;
 }
 
-.vp-boost-line {
-  background: var(--line-strong);
-  height: 1px;
-  left: 50%;
-  position: absolute;
-  top: 50%;
-  transform-origin: left center;
-  width: 18%;
-  z-index: 1;
-}
-
-.vp-boost-line.free {
-  transform: rotate(210deg);
-}
-
-.vp-boost-line.access {
-  transform: rotate(-30deg);
-}
-
-.vp-boost-line.discount {
-  transform: rotate(90deg);
-  width: 14%;
+.vp-boost-list {
+  display: grid;
+  gap: 10px;
 }
 
 .vp-boost-node {
@@ -1842,25 +1837,8 @@ code {
   font-weight: 600;
   line-height: 1;
   padding: 10px 12px;
-  position: absolute;
+  text-align: center;
   white-space: nowrap;
-  z-index: 2;
-}
-
-.vp-boost-node.free {
-  left: 8%;
-  top: 20%;
-}
-
-.vp-boost-node.access {
-  right: 8%;
-  top: 20%;
-}
-
-.vp-boost-node.discount {
-  bottom: 16%;
-  left: 50%;
-  transform: translateX(-50%);
 }
 
 .vp-fallback svg {
@@ -2672,12 +2650,12 @@ code {
 
   .recent-calls-table th:nth-child(1),
   .recent-calls-table td:nth-child(1) {
-    width: 18%;
+    width: 24%;
   }
 
   .recent-calls-table th:nth-child(2),
   .recent-calls-table td:nth-child(2) {
-    width: 22%;
+    width: 20%;
   }
 
   .recent-calls-table th:nth-child(3),
@@ -2687,7 +2665,16 @@ code {
 
   .recent-calls-table th:nth-child(4),
   .recent-calls-table td:nth-child(4) {
-    width: 17%;
+    width: 15%;
+  }
+
+  .table-pager {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .pager-actions .button {
+    flex: 1;
   }
 
   .recent-calls-table th:nth-child(5),

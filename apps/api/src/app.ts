@@ -35,6 +35,7 @@ import {
 } from "./agentkitRegistration.ts";
 
 function requestFilters(query: any) {
+  const cursor = decodeRequestCursor(query.cursor);
   return {
     endpoint_id: query.endpoint_id || undefined,
     api_key_id: query.api_key_id || undefined,
@@ -42,7 +43,41 @@ function requestFilters(query: any) {
     charged: query.charged || undefined,
     since: query.since || undefined,
     limit: query.limit || undefined,
+    before_ts: cursor?.ts,
+    before_id: cursor?.id,
   } as any;
+}
+
+function requestPageLimit(value: any) {
+  const limit = Number(value || 100);
+  return Number.isFinite(limit) ? Math.max(1, Math.min(Math.floor(limit), 500)) : 100;
+}
+
+function encodeRequestCursor(row: any) {
+  if (!row?.ts || !row?.id) return null;
+  return Buffer.from(JSON.stringify({ ts: row.ts, id: row.id }), "utf8").toString("base64url");
+}
+
+function decodeRequestCursor(value: any) {
+  if (!value) return null;
+  try {
+    const parsed = JSON.parse(Buffer.from(String(value), "base64url").toString("utf8"));
+    if (!parsed?.ts || !parsed?.id) return null;
+    return { ts: String(parsed.ts), id: String(parsed.id) };
+  } catch {
+    return null;
+  }
+}
+
+async function requestPage(store: any, filters: any) {
+  const limit = requestPageLimit(filters.limit);
+  const rows = await store.listRequests({ ...filters, limit: limit + 1 });
+  const requests = rows.slice(0, limit);
+  return {
+    requests,
+    next_cursor: rows.length > limit ? encodeRequestCursor(requests[requests.length - 1]) : null,
+    has_more: rows.length > limit,
+  };
 }
 
 function publicEndpoint(endpoint: any, statusByEndpoint: Map<string, any>) {
@@ -1141,14 +1176,14 @@ export function createApiApp({
     const auth = await authenticateApiKey(request.headers, store);
     const filters = requestFilters(request.query || {});
     if (!filters.api_key_id) filters.api_key_id = auth.api_key_id;
-    return { requests: await store.listRequests(filters) };
+    return requestPage(store, filters);
   });
 
   app.get("/v1/dashboard/requests", async (request: any) => {
     const user = await authenticateSupabaseUser(request.headers);
     const filters = requestFilters(request.query || {});
     filters.user_id = user.user_id;
-    return { requests: await store.listRequests(filters) };
+    return requestPage(store, filters);
   });
 
   app.get("/v1/dashboard/monitoring", async (request: any) => {

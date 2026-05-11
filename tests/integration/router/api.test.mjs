@@ -492,6 +492,62 @@ describe("router API", () => {
     assert.equal(detail.request.endpoint_id, "exa.search");
   });
 
+  it("paginates dashboard request rows with a cursor", async () => {
+    const isolatedStore = new LocalStore({
+      path: join(mkdtempSync(join(tmpdir(), "toolrouter-request-pages-")), "store.json"),
+    });
+    const isolatedApp = createApiApp({
+      logger: false,
+      cache: new MemoryCache(),
+      store: isolatedStore,
+    });
+    await isolatedApp.listen({ port: 0, host: "127.0.0.1" });
+    const isolatedBaseUrl = `http://127.0.0.1:${isolatedApp.server.address().port}`;
+    try {
+      for (const index of [0, 1, 2]) {
+        await isolatedStore.insertRequest({
+          id: `req_page_${index}`,
+          trace_id: `trace_page_${index}`,
+          user_id: process.env.TOOLROUTER_DEV_USER_ID,
+          api_key_id: "key_dev",
+          endpoint_id: "exa.search",
+          ts: `2026-05-09T10:00:0${index}.000Z`,
+          status_code: 200,
+          path: "agentkit",
+          charged: false,
+        });
+      }
+
+      const firstResponse = await fetch(
+        `${isolatedBaseUrl}/v1/dashboard/requests?limit=2`,
+        { headers: sessionHeaders() },
+      );
+      assert.equal(firstResponse.status, 200);
+      const firstPage = await firstResponse.json();
+      assert.deepEqual(
+        firstPage.requests.map((row) => row.id),
+        ["req_page_2", "req_page_1"],
+      );
+      assert.equal(firstPage.has_more, true);
+      assert.ok(firstPage.next_cursor);
+
+      const secondResponse = await fetch(
+        `${isolatedBaseUrl}/v1/dashboard/requests?limit=2&cursor=${encodeURIComponent(firstPage.next_cursor)}`,
+        { headers: sessionHeaders() },
+      );
+      assert.equal(secondResponse.status, 200);
+      const secondPage = await secondResponse.json();
+      assert.deepEqual(
+        secondPage.requests.map((row) => row.id),
+        ["req_page_0"],
+      );
+      assert.equal(secondPage.has_more, false);
+      assert.equal(secondPage.next_cursor, null);
+    } finally {
+      await isolatedApp.close();
+    }
+  });
+
   it("stores AgentKit value only when the request actually realized it", async () => {
     const isolatedStore = new LocalStore({
       path: join(mkdtempSync(join(tmpdir(), "toolrouter-agentkit-value-")), "store.json"),

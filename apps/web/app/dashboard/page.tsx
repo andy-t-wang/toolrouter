@@ -23,6 +23,8 @@ const devAuthEnabled = process.env.NEXT_PUBLIC_TOOLROUTER_DEV_AUTH === "true";
 const unverifiedAgentKitStatus = ["Not", "Verified"].join(" ");
 const recentCheckoutWindowMs = 15 * 60 * 1000;
 const x402ChallengeWindowMs = 2 * 60 * 1000;
+const recentCallsPageSize = 20;
+const dashboardApiKeyStorageKey = "toolrouter.dashboard.apiKeys.v1";
 const supabase =
   supabaseUrl && supabaseAnonKey
     ? createClient(supabaseUrl, supabaseAnonKey)
@@ -52,6 +54,26 @@ function allowLocalDevSession() {
     window.location.hostname === "127.0.0.1" ||
     window.location.hostname === "localhost";
   return localHost && (!supabase || devAuthEnabled);
+}
+
+function readStoredDashboardApiKeys() {
+  if (typeof window === "undefined") return {};
+  try {
+    const parsed = JSON.parse(
+      window.localStorage.getItem(dashboardApiKeyStorageKey) || "{}",
+    );
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function writeStoredDashboardApiKeys(keysById: Record<string, string>) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(
+    dashboardApiKeyStorageKey,
+    JSON.stringify(keysById),
+  );
 }
 
 function isActiveTopUp(topUp: any) {
@@ -146,6 +168,7 @@ function money(value: unknown) {
 }
 
 function ledgerMoney(entry: any) {
+  if (String(entry?.type || "") === "top_up_failed") return "—";
   const value = Number(entry?.amount_usd);
   const formatted = money(Number.isFinite(value) ? Math.abs(value) : entry?.amount_usd);
   if (formatted === "-") return formatted;
@@ -183,6 +206,20 @@ function formatTime(value: string | null | undefined) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
   return date.toLocaleTimeString(undefined, {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  });
+}
+
+function formatDateTime(value: string | null | undefined) {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
     hour: "2-digit",
     minute: "2-digit",
     second: "2-digit",
@@ -246,6 +283,15 @@ function endpointCell(endpointId: unknown) {
       <span>{meta.name}</span>
     </span>
   );
+}
+
+function ledgerSourceCell(entry: any) {
+  if (String(entry?.source || "").toLowerCase() === "request") {
+    return entry?.metadata?.endpoint_id
+      ? endpointCell(entry.metadata.endpoint_id)
+      : "Request";
+  }
+  return sourceLabel(entry?.source);
 }
 
 function keyStatus(active: boolean) {
@@ -459,6 +505,9 @@ export default function DashboardPage() {
   const [sessionToken, setSessionToken] = useState("");
   const [banner, setBanner] = useState("");
   const [requests, setRequests] = useState<any[]>([]);
+  const [requestCursor, setRequestCursor] = useState("");
+  const [requestCursorStack, setRequestCursorStack] = useState<string[]>([]);
+  const [nextRequestCursor, setNextRequestCursor] = useState("");
   const [monthRequests, setMonthRequests] = useState<any[]>([]);
   const [keys, setKeys] = useState<any[]>([]);
   const [balance, setBalance] = useState<any>(null);
@@ -466,6 +515,9 @@ export default function DashboardPage() {
   const [topUps, setTopUps] = useState<any[]>([]);
   const [callerId, setCallerId] = useState("default");
   const [revealedKey, setRevealedKey] = useState("");
+  const [storedApiKeys, setStoredApiKeys] = useState<Record<string, string>>(
+    {},
+  );
   const [copiedKey, setCopiedKey] = useState(false);
   const [topUpAmount, setTopUpAmount] = useState("5");
   const [verificationChecking, setVerificationChecking] = useState(false);
@@ -490,6 +542,10 @@ export default function DashboardPage() {
   }, []);
 
   useEffect(() => {
+    setStoredApiKeys(readStoredDashboardApiKeys());
+  }, []);
+
+  useEffect(() => {
     if (!copiedKey) return;
     const timer = window.setTimeout(() => setCopiedKey(false), 1800);
     return () => window.clearTimeout(timer);
@@ -510,6 +566,11 @@ export default function DashboardPage() {
   }, [monthRequests, requests]);
   const recentRequests = useMemo(() => compactRecentRequests(requests), [requests]);
   const ledgerRows = useMemo(() => compactLedgerEntries(ledger), [ledger]);
+  const quickstartApiKey = useMemo(() => {
+    if (revealedKey) return revealedKey;
+    const activeKey = keys.find((key) => !key.disabled_at && storedApiKeys[key.id]);
+    return activeKey ? storedApiKeys[activeKey.id] : "";
+  }, [keys, revealedKey, storedApiKeys]);
   const agentKitVerified = Boolean(balance?.agentkit_verification?.verified);
   const agentKitCheckMeta = [
     balance?.agentkit_verification?.last_checked_at
@@ -533,7 +594,15 @@ export default function DashboardPage() {
           : "Verify with AgentKit";
   const activeTopUps = topUps.filter(isActiveTopUp);
 
-  async function refresh(token = sessionToken) {
+  function dashboardRequestsPath(cursor = "") {
+    const params = new URLSearchParams({
+      limit: String(recentCallsPageSize),
+    });
+    if (cursor) params.set("cursor", cursor);
+    return `/v1/dashboard/requests?${params.toString()}`;
+  }
+
+  async function refresh(token = sessionToken, cursor = requestCursor) {
     if (!token) return;
     const [
       requestBody,
@@ -544,7 +613,7 @@ export default function DashboardPage() {
       topUpBody,
     ] =
       await Promise.all([
-        jsonFetch("/v1/dashboard/requests?limit=100", { token }),
+        jsonFetch(dashboardRequestsPath(cursor), { token }),
         jsonFetch(
           `/v1/dashboard/requests?limit=500&since=${encodeURIComponent(monthStartIso())}`,
           { token },
@@ -555,11 +624,40 @@ export default function DashboardPage() {
         jsonFetch("/v1/top-ups?limit=10", { token }),
       ]);
     setRequests(requestBody.requests || []);
+    setNextRequestCursor(requestBody.next_cursor || "");
     setMonthRequests(monthRequestBody.requests || []);
     setKeys(keyBody.api_keys || []);
     setBalance(balanceBody.balance || null);
     setLedger(ledgerBody.entries || []);
     setTopUps(topUpBody.top_ups || []);
+  }
+
+  async function loadRequestsPage(
+    cursor: string,
+    stackForPage: (stack: string[]) => string[],
+  ) {
+    if (!sessionToken) return;
+    const body = await jsonFetch(dashboardRequestsPath(cursor), {
+      token: sessionToken,
+    });
+    setRequests(body.requests || []);
+    setNextRequestCursor(body.next_cursor || "");
+    setRequestCursor(cursor);
+    setRequestCursorStack(stackForPage);
+  }
+
+  async function nextRequestsPage() {
+    if (!nextRequestCursor) return;
+    const currentCursor = requestCursor;
+    await loadRequestsPage(nextRequestCursor, (stack) => [
+      ...stack,
+      currentCursor,
+    ]);
+  }
+
+  async function previousRequestsPage() {
+    const previousCursor = requestCursorStack[requestCursorStack.length - 1];
+    await loadRequestsPage(previousCursor || "", (stack) => stack.slice(0, -1));
   }
 
   useEffect(() => {
@@ -637,6 +735,14 @@ export default function DashboardPage() {
       body: JSON.stringify({ caller_id: callerId }),
     });
     setRevealedKey(body.api_key);
+    const keyId = body.record?.id;
+    if (keyId && body.api_key) {
+      setStoredApiKeys((current) => {
+        const next = { ...current, [keyId]: body.api_key };
+        writeStoredDashboardApiKeys(next);
+        return next;
+      });
+    }
     setCopiedKey(false);
     await refresh();
   }
@@ -650,6 +756,12 @@ export default function DashboardPage() {
     await jsonFetch(`/v1/api-keys/${encodeURIComponent(id)}`, {
       token: sessionToken,
       method: "DELETE",
+    });
+    setStoredApiKeys((current) => {
+      const next = { ...current };
+      delete next[id];
+      writeStoredDashboardApiKeys(next);
+      return next;
     });
     await refresh();
   }
@@ -975,7 +1087,7 @@ export default function DashboardPage() {
                     <table className="tbl recent-calls-table">
                       <thead>
                         <tr>
-                          <th>Time</th>
+                          <th>Date / time</th>
                           <th>Endpoint</th>
                           <th>Protocol</th>
                           <th>Benefit</th>
@@ -992,7 +1104,7 @@ export default function DashboardPage() {
                               key={row.id}
                             >
                               <td className="mono muted">
-                                {formatTime(row.ts)}
+                                {formatDateTime(row.ts)}
                               </td>
                               <td>{endpointCell(row.endpoint_id)}</td>
                               <td>{protocolChip(row)}</td>
@@ -1019,6 +1131,38 @@ export default function DashboardPage() {
                         )}
                       </tbody>
                     </table>
+                  </div>
+                  <div className="table-pager">
+                    <span className="muted">
+                      Page {requestCursorStack.length + 1} · Showing up to{" "}
+                      {recentCallsPageSize} calls
+                    </span>
+                    <div className="pager-actions">
+                      <button
+                        className="button ghost compact"
+                        type="button"
+                        disabled={!requestCursorStack.length}
+                        onClick={() =>
+                          previousRequestsPage().catch((error) =>
+                            setBanner(error.message),
+                          )
+                        }
+                      >
+                        Previous
+                      </button>
+                      <button
+                        className="button ghost compact"
+                        type="button"
+                        disabled={!nextRequestCursor}
+                        onClick={() =>
+                          nextRequestsPage().catch((error) =>
+                            setBanner(error.message),
+                          )
+                        }
+                      >
+                        Next
+                      </button>
+                    </div>
                   </div>
                 </section>
               </section>
@@ -1193,7 +1337,7 @@ export default function DashboardPage() {
                     <table className="tbl ledger-table">
                       <thead>
                         <tr>
-                          <th>Time</th>
+                          <th>Date / time</th>
                           <th>Type</th>
                           <th>Source</th>
                           <th>Reference</th>
@@ -1205,10 +1349,10 @@ export default function DashboardPage() {
                           ledgerRows.map((entry) => (
                             <tr key={entry.id}>
                               <td className="mono muted">
-                                {formatTime(entry.ts)}
+                                {formatDateTime(entry.ts)}
                               </td>
                               <td>{ledgerTypeLabel(entry.type)}</td>
-                              <td>{sourceLabel(entry.source)}</td>
+                              <td>{ledgerSourceCell(entry)}</td>
                               <td className="mono muted clip">
                                 {entry.reference_id || "-"}
                               </td>
@@ -1377,7 +1521,7 @@ export default function DashboardPage() {
                     </a>
                   </div>
                   <div className="quickstart-mcp-body">
-                    <McpClientTabs compact />
+                    <McpClientTabs apiKey={quickstartApiKey} compact />
                   </div>
                 </section>
                 <section className="card quickstart-card">

@@ -77,6 +77,12 @@ function matchesFilters(row: any, filters: any) {
   if (filters.status && String(row.status_code) !== String(filters.status)) return false;
   if (filters.charged !== undefined && String(Boolean(row.charged)) !== String(filters.charged)) return false;
   if (filters.since && Date.parse(row.ts) < Date.parse(filters.since)) return false;
+  if (filters.before_ts && filters.before_id) {
+    const rowTs = String(row.ts || "");
+    const beforeTs = String(filters.before_ts);
+    if (rowTs > beforeTs) return false;
+    if (rowTs === beforeTs && String(row.id || "") >= String(filters.before_id)) return false;
+  }
   return true;
 }
 
@@ -166,8 +172,15 @@ export class LocalStore {
   }
 
   async listRequests(filters: any = {}) {
-    const limit = Math.max(1, Math.min(Number(filters.limit || 100), 500));
-    return this.read().requests.filter((row: any) => matchesFilters(row, filters)).slice(0, limit);
+    const limit = Math.max(1, Math.min(Number(filters.limit || 100), 501));
+    return this.read().requests
+      .filter((row: any) => matchesFilters(row, filters))
+      .sort((a: any, b: any) => {
+        const ts = String(b.ts || "").localeCompare(String(a.ts || ""));
+        if (ts !== 0) return ts;
+        return String(b.id || "").localeCompare(String(a.id || ""));
+      })
+      .slice(0, limit);
   }
 
   async getRequest(id: string) {
@@ -424,7 +437,7 @@ export class SupabaseStore {
   async listRequests(filters: any = {}) {
     const params: any = {
       select: "*",
-      order: "ts.desc",
+      order: "ts.desc,id.desc",
       limit: filters.limit || 100,
     };
     if (filters.endpoint_id) params.endpoint_id = `eq.${filters.endpoint_id}`;
@@ -433,6 +446,9 @@ export class SupabaseStore {
     if (filters.status) params.status_code = `eq.${filters.status}`;
     if (filters.charged !== undefined) params.charged = `eq.${filters.charged}`;
     if (filters.since) params.ts = `gte.${filters.since}`;
+    if (filters.before_ts && filters.before_id) {
+      params.or = `(ts.lt.${filters.before_ts},and(ts.eq.${filters.before_ts},id.lt.${filters.before_id}))`;
+    }
     return this.request(`/requests?${qs(params)}`);
   }
 

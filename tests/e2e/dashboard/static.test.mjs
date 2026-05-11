@@ -27,7 +27,8 @@ describe("web dashboard static wiring", () => {
     assert.match(landingPage, /Verified human boosts/);
     assert.match(landingPage, /free trials,\s+discounts,\s+or access paths/);
     assert.match(landingPage, /Get an API key/);
-    assert.match(landingPage, /View console/);
+    assert.doesNotMatch(landingPage, /View console/);
+    assert.doesNotMatch(landingPage, /Sign in/);
     assert.match(landingPage, /\/setup/);
     assert.match(landingPage, /\/docs/);
     assert.match(landingPage, /Hermes/);
@@ -185,7 +186,9 @@ describe("web dashboard static wiring", () => {
     assert.match(dashboardPage, /\/v1\/agentkit\/account-verification/);
     assert.match(dashboardPage, /\/v1\/top-ups/);
     assert.match(mcpContent, /https:\/\/toolrouter\.world/);
-    assert.match(dashboardPage, /<McpClientTabs compact \/>/);
+    assert.match(dashboardPage, /<McpClientTabs apiKey=\{quickstartApiKey\} compact \/>/);
+    assert.match(dashboardPage, /toolrouter\.dashboard\.apiKeys\.v1/);
+    assert.match(mcpClientTabs, /selectedCode/);
     assert.match(dashboardPage, /Set up MCP/);
     assert.match(dashboardPage, /First query/);
     assert.match(mcpContent, /top sushi places in San Francisco/);

@@ -383,15 +383,14 @@ function BillingArt() {
 function HumanBoostArt() {
   return (
     <div className="vp-human-boost" aria-hidden="true">
-      <span className="vp-boost-line free" />
-      <span className="vp-boost-line access" />
-      <span className="vp-boost-line discount" />
       <div className="vp-human-mark">
         <img src="/human.svg" alt="" />
       </div>
-      <span className="vp-boost-node free">Free trial</span>
-      <span className="vp-boost-node access">Access</span>
-      <span className="vp-boost-node discount">Discount</span>
+      <div className="vp-boost-list">
+        <span className="vp-boost-node">Free Trial</span>
+        <span className="vp-boost-node">Access</span>
+        <span className="vp-boost-node">Discount</span>
+      </div>
     </div>
   );
 }
@@ -428,9 +427,6 @@ export default async function LandingPage() {
               <a className="mkt-btn ghost sm" href="/docs">
                 Docs
               </a>
-              <a className="mkt-btn ghost sm" href="/dashboard">
-                Sign in
-              </a>
               <a className="mkt-btn sm" href="/dashboard">
                 Get an API key
               </a>
@@ -463,9 +459,6 @@ export default async function LandingPage() {
             <div className="mkt-actions">
               <a className="mkt-btn" href="/dashboard">
                 Get an API key
-              </a>
-              <a className="mkt-btn ghost" href="/dashboard">
-                View console
               </a>
             </div>
           </div>
