@@ -1479,6 +1479,25 @@ code {
   padding: 10px 18px 0;
 }
 
+.mcp-key-state {
+  align-items: center;
+  background: var(--bone-2);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--mute);
+  display: inline-flex;
+  flex: 0 0 auto;
+  font-family: var(--mono);
+  gap: 7px;
+  padding: 6px 10px;
+}
+
+.mcp-key-state.ready {
+  background: #eef8f0;
+  border-color: #b7ddc0;
+  color: var(--green);
+}
+
 .mcp-copy-button {
   background: transparent;
   border: 0;

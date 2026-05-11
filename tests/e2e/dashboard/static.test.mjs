@@ -199,6 +199,9 @@ describe("web dashboard static wiring", () => {
     assert.match(dashboardPage, /toolrouter\.dashboard\.apiKeys\.v1/);
     assert.match(dashboardPage, /toolrouter\.dashboard\.quickstartSeen\.v1/);
     assert.match(mcpClientTabs, /selectedCode/);
+    assert.match(mcpClientTabs, /API key injected/);
+    assert.match(mcpClientTabs, /API key needed/);
+    assert.match(mcpClientTabs, /mcp-key-state/);
     assert.match(dashboardPage, /Set up MCP/);
     assert.match(dashboardPage, /Verify World ID/);
     assert.match(dashboardPage, /Generate an API key/);

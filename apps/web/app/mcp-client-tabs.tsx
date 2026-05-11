@@ -18,6 +18,7 @@ function codeWithApiKey(code: string, apiKey?: string) {
 export function McpClientTabs({ apiKey = "", compact = false }: McpClientTabsProps) {
   const [selectedId, setSelectedId] = useState(mcpClients[0].id);
   const [copied, setCopied] = useState(false);
+  const hasInjectedKey = Boolean(apiKey.trim());
   const selected = useMemo(() => mcpClients.find((client) => client.id === selectedId) || mcpClients[0], [selectedId]);
   const selectedCode = useMemo(() => codeWithApiKey(selected.code, apiKey), [apiKey, selected.code]);
 
@@ -32,7 +33,7 @@ export function McpClientTabs({ apiKey = "", compact = false }: McpClientTabsPro
     <div className={`mcp-connect${compact ? " compact" : ""}`}>
       <div className="mcp-connect-head">
         <h2>Connect your client</h2>
-        {apiKey ? (
+        {hasInjectedKey ? (
           <p>
             Your API key is filled in. These snippets run the published{" "}
             <code>@worldcoin/toolrouter</code> MCP package with npx.
@@ -76,6 +77,10 @@ export function McpClientTabs({ apiKey = "", compact = false }: McpClientTabsPro
       >
         <div className="mcp-panel-actions">
           <span>{selected.detail}</span>
+          <span className={`mcp-key-state ${hasInjectedKey ? "ready" : ""}`}>
+            <span className={`dot ${hasInjectedKey ? "good" : ""}`} />
+            {hasInjectedKey ? "API key injected" : "API key needed"}
+          </span>
           <button className="mcp-copy-button" onClick={copySelected} type="button">
             {copied ? "Copied" : "Copy"}
           </button>
