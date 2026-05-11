@@ -82,8 +82,8 @@ describe("web dashboard static wiring", () => {
     assert.match(setupSurface, /OpenClaw/);
     assert.match(setupSurface, /@worldcoin\/toolrouter/);
     assert.match(setupSurface, /npx -y @worldcoin\/toolrouter/);
-    assert.match(setupSurface, /published\s+<code>@worldcoin\/toolrouter<\/code>/);
-    assert.match(setupSurface, /do not need a local ToolRouter repo path/);
+    assert.match(setupSurface, /Generate an API key, then replace/);
+    assert.doesNotMatch(setupSurface, /do not need a local ToolRouter repo path/);
     assert.match(setupSurface, /~\/\.openclaw\/openclaw\.json/);
     assert.match(setupSurface, /\/reload-mcp/);
     assert.match(setupSurface, /hermes mcp test toolrouter/);

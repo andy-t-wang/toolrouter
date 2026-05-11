@@ -42,9 +42,7 @@ export function McpClientTabs({ apiKey = "", compact = false }: McpClientTabsPro
           </p>
         ) : (
           <p>
-            Generate an API key, then replace <code>tr_...</code>. These
-            snippets run the published <code>@worldcoin/toolrouter</code>{" "}
-            package, so you do not need a local ToolRouter repo path.
+            Generate an API key, then replace <code>tr_...</code>.
           </p>
         )}
       </div>
