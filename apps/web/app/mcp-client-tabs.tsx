@@ -34,15 +34,16 @@ export function McpClientTabs({ apiKey = "", compact = false }: McpClientTabsPro
         <h2>Connect your client</h2>
         {apiKey ? (
           <p>
-            Your API key is already filled into the setup snippet. After
-            updating MCP config, reload MCP from your client or start a fresh
-            session so the new server is discovered.
+            Your API key is filled in. These snippets run the published{" "}
+            <code>@worldcoin/toolrouter</code> MCP package with npx.
+            After updating MCP config, reload MCP from your client or start a
+            fresh session.
           </p>
         ) : (
           <p>
-            Replace <code>tr_...</code> with the API key you copied from
-            ToolRouter. After updating MCP config, reload MCP from your client
-            or start a fresh session so the new server is discovered.
+            Generate an API key, then replace <code>tr_...</code>. These
+            snippets run the published <code>@worldcoin/toolrouter</code>{" "}
+            package, so you do not need a local ToolRouter repo path.
           </p>
         )}
       </div>

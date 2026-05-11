@@ -1,6 +1,6 @@
-import { stdin, stdout } from "node:process";
+#!/usr/bin/env node
 
-import { listEndpoints } from "@toolrouter/router-core";
+import { stdin, stdout } from "node:process";
 
 const PROTOCOL_VERSION = "2025-11-25";
 const SERVER_INFO = Object.freeze({ name: "toolrouter-mcp", version: "0.1.0" });
@@ -83,7 +83,7 @@ export function tools(): McpTool[] {
       title: "Call ToolRouter endpoint",
       description: "Call any named ToolRouter endpoint through POST /v1/requests.",
       inputSchema: jsonSchema({
-        endpoint_id: { type: "string", description: "Endpoint id, such as exa.search or browserbase.search." },
+        endpoint_id: { type: "string", description: "Endpoint id, such as exa.search or browserbase.session." },
         input: { type: "object", description: "Endpoint-specific input object." },
         maxUsd: { type: "string", description: "Optional caller spend cap in USD decimal form." },
         payment_mode: { type: "string", enum: ["agentkit_first", "x402_only"], description: "Optional execution path override for explicit smoke tests." },
@@ -134,26 +134,6 @@ export function tools(): McpTool[] {
       }, ["query"]),
     },
     {
-      name: "browserbase_search",
-      title: "Browserbase search",
-      description: "Run Browserbase x402 search through ToolRouter.",
-      inputSchema: jsonSchema({
-        query: { type: "string" },
-        maxUsd: { type: "string" },
-        payment_mode: { type: "string", enum: ["agentkit_first", "x402_only"] },
-      }, ["query"]),
-    },
-    {
-      name: "browserbase_fetch",
-      title: "Browserbase fetch",
-      description: "Fetch a page through Browserbase x402 via ToolRouter.",
-      inputSchema: jsonSchema({
-        url: { type: "string" },
-        maxUsd: { type: "string" },
-        payment_mode: { type: "string", enum: ["agentkit_first", "x402_only"] },
-      }, ["url"]),
-    },
-    {
       name: "browserbase_session_create",
       title: "Browserbase session",
       description: "Create a paid Browserbase browser session through ToolRouter.",
@@ -186,22 +166,6 @@ function endpointPayload(name: string, args: any) {
         include_summary: Boolean(args.include_summary),
       },
       maxUsd: args.maxUsd || "0.01",
-      ...(paymentMode ? { payment_mode: paymentMode } : {}),
-    };
-  }
-  if (name === "browserbase_search") {
-    return {
-      endpoint_id: "browserbase.search",
-      input: { query: args.query },
-      maxUsd: args.maxUsd || "0.02",
-      ...(paymentMode ? { payment_mode: paymentMode } : {}),
-    };
-  }
-  if (name === "browserbase_fetch") {
-    return {
-      endpoint_id: "browserbase.fetch",
-      input: { url: args.url },
-      maxUsd: args.maxUsd || "0.02",
       ...(paymentMode ? { payment_mode: paymentMode } : {}),
     };
   }
@@ -397,9 +361,8 @@ export function startStdioServer({ input = stdin, output = stdout, env = process
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
-  const registered = listEndpoints().map((endpoint) => endpoint.id);
   if (process.env.TOOLROUTER_MCP_LOG === "true") {
-    process.stderr.write(`ToolRouter MCP ready: ${registered.join(", ")}\n`);
+    process.stderr.write("ToolRouter MCP ready\n");
   }
   startStdioServer();
 }

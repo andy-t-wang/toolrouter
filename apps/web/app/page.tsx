@@ -41,38 +41,12 @@ type LandingStatus = {
 const fallbackStatus: LandingStatus = {
   status: "unverified",
   summary: {
-    endpoint_count: 4,
+    endpoint_count: 2,
     operational_count: 0,
     uptime_30d: null,
     last_checked_at: null,
   },
   endpoints: [
-    {
-      id: "browserbase.fetch",
-      provider: "browserbase",
-      category: "data",
-      name: "Browserbase Fetch",
-      status: "unverified",
-      last_checked_at: null,
-      latency_ms: null,
-      p50_latency_ms: null,
-      uptime_30d: null,
-      sparkline_30d: [],
-      health_check_count_30d: 0,
-    },
-    {
-      id: "browserbase.search",
-      provider: "browserbase",
-      category: "search",
-      name: "Browserbase Search",
-      status: "unverified",
-      last_checked_at: null,
-      latency_ms: null,
-      p50_latency_ms: null,
-      uptime_30d: null,
-      sparkline_30d: [],
-      health_check_count_30d: 0,
-    },
     {
       id: "browserbase.session",
       provider: "browserbase",
@@ -540,7 +514,7 @@ export default async function LandingPage() {
                 <div className="vp-art">
                   <HumanBoostArt />
                 </div>
-                <h3>Verified human boosts</h3>
+                <h3>Human boosts</h3>
                 <p>
                   Verified AgentKit accounts can unlock provider benefits for
                   delegated work: free trials, discounts, or access paths. Your

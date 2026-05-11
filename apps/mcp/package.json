@@ -1,15 +1,28 @@
 {
-  "name": "@toolrouter/mcp",
+  "name": "@worldcoin/toolrouter",
   "version": "0.1.0",
-  "private": true,
+  "private": false,
+  "description": "ToolRouter MCP adapter for AgentKit-first x402 tools.",
   "type": "module",
+  "bin": {
+    "toolrouter": "dist/server.js"
+  },
+  "exports": {
+    ".": "./dist/server.js"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
+    "build": "tsc -p tsconfig.build.json",
     "dev": "node --env-file-if-exists=../../.env --import tsx src/server.ts",
     "start": "node --env-file-if-exists=../../.env --import tsx src/server.ts",
-    "check": "tsc -p ../../tsconfig.json --noEmit"
+    "check": "tsc -p ../../tsconfig.json --noEmit",
+    "prepack": "npm run build"
   },
-  "dependencies": {
-    "@toolrouter/router-core": "file:../../packages/router-core",
-    "tsx": "^4.21.0"
-  }
+  "dependencies": {}
 }

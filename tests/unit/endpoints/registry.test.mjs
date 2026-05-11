@@ -21,7 +21,7 @@ describe("endpoint registry", () => {
     assert.equal(validateRegistry(), true);
     assert.deepEqual(
       listEndpoints().map((endpoint) => endpoint.id),
-      ["browserbase.fetch", "browserbase.search", "browserbase.session", "exa.search"],
+      ["browserbase.session", "exa.search"],
     );
     assertValidEndpointRegistry(endpointRegistry);
     for (const endpoint of endpointRegistry) {
@@ -34,13 +34,13 @@ describe("endpoint registry", () => {
     const categories = listCategories();
     assert.deepEqual(
       categories.map((category) => category.id),
-      ["search", "data", "browser_usage"],
+      ["search", "browser_usage"],
     );
 
     const search = categories.find((category) => category.id === "search");
     assert.equal(search.name, "Search");
     assert.equal(search.recommended_endpoint_id, "exa.search");
-    assert.deepEqual(search.endpoints.map((endpoint) => endpoint.id), ["browserbase.search", "exa.search"]);
+    assert.deepEqual(search.endpoints.map((endpoint) => endpoint.id), ["exa.search"]);
 
     const browserUse = recommendEndpoint("browser_usage");
     assert.equal(browserUse.id, "browserbase.session");
@@ -77,19 +77,7 @@ describe("endpoint registry", () => {
     assert.equal(probe.maxUsd, "0.01");
   });
 
-  it("builds Browserbase AgentKit-access requests from typed input", () => {
-    const search = buildEndpointRequest("browserbase.search", {
-      query: "top sushi places in San Francisco",
-    });
-    assert.equal(search.url, "https://x402.browserbase.com/search");
-    assert.deepEqual(search.json, { query: "top sushi places in San Francisco" });
-    assert.equal(search.estimatedUsd, "0.01");
-
-    const fetch = buildEndpointRequest("browserbase.fetch", { url: "https://example.com" });
-    assert.equal(fetch.url, "https://x402.browserbase.com/fetch");
-    assert.deepEqual(fetch.json, { url: "https://example.com/" });
-    assert.equal(fetch.estimatedUsd, "0.01");
-
+  it("builds Browserbase AgentKit-access session requests from typed input", () => {
     assert.throws(
       () => buildEndpointRequest("browserbase.session", { estimated_minutes: 1 }),
       /estimatedMinutes must be between 5 and 120/,

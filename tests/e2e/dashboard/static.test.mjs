@@ -24,7 +24,7 @@ describe("web dashboard static wiring", () => {
     assert.match(landingPage, /Tools your agent/);
     assert.match(landingPage, /Simplified billing/);
     assert.match(landingPage, /no\s+stablecoin\s+top-ups/);
-    assert.match(landingPage, /Verified human boosts/);
+    assert.match(landingPage, /Human boosts/);
     assert.match(landingPage, /free trials,\s+discounts,\s+or access paths/);
     assert.match(landingPage, /Get an API key/);
     assert.doesNotMatch(landingPage, /View console/);
@@ -80,7 +80,11 @@ describe("web dashboard static wiring", () => {
     assert.match(setupSurface, /VS Code/);
     assert.match(setupSurface, /Hermes/);
     assert.match(setupSurface, /OpenClaw/);
-    assert.match(setupSurface, /start:mcp/);
+    assert.match(setupSurface, /@worldcoin\/toolrouter/);
+    assert.match(setupSurface, /npx -y @worldcoin\/toolrouter/);
+    assert.match(setupSurface, /published\s+<code>@worldcoin\/toolrouter<\/code>/);
+    assert.match(setupSurface, /do not need a local ToolRouter repo path/);
+    assert.match(setupSurface, /~\/\.openclaw\/openclaw\.json/);
     assert.match(setupSurface, /\/reload-mcp/);
     assert.match(setupSurface, /hermes mcp test toolrouter/);
     assert.match(setupSurface, /role="tab"/);
@@ -193,9 +197,14 @@ describe("web dashboard static wiring", () => {
     assert.match(mcpContent, /https:\/\/toolrouter\.world/);
     assert.match(dashboardPage, /<McpClientTabs apiKey=\{quickstartApiKey\} compact \/>/);
     assert.match(dashboardPage, /toolrouter\.dashboard\.apiKeys\.v1/);
+    assert.match(dashboardPage, /toolrouter\.dashboard\.quickstartSeen\.v1/);
     assert.match(mcpClientTabs, /selectedCode/);
     assert.match(dashboardPage, /Set up MCP/);
-    assert.match(dashboardPage, /First query/);
+    assert.match(dashboardPage, /Verify World ID/);
+    assert.match(dashboardPage, /Generate an API key/);
+    assert.match(dashboardPage, /Copy prompt/);
+    assert.match(dashboardPage, /maybeRouteFirstRun/);
+    assert.match(dashboardPage, /#quickstart/);
     assert.match(mcpContent, /top sushi places in San Francisco/);
     assert.doesNotMatch(mcpContent, /toolrouter_search/);
     assert.doesNotMatch(dashboardPage, /AgentKit examples/);

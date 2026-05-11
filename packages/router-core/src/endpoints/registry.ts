@@ -1,12 +1,8 @@
 import { ENDPOINT_CATEGORY_DEFINITIONS, isEndpointCategory } from "./categories.ts";
 import { browserbaseSessionEndpointDefinition } from "./browser_usage/browserbase/session.ts";
-import { browserbaseFetchEndpointDefinition } from "./data/browserbase/fetch.ts";
-import { browserbaseSearchEndpointDefinition } from "./search/browserbase/search.ts";
 import { exaSearchEndpointDefinition } from "./search/exa/search.ts";
 
 const ENDPOINT_DEFINITIONS = Object.freeze([
-  browserbaseFetchEndpointDefinition,
-  browserbaseSearchEndpointDefinition,
   browserbaseSessionEndpointDefinition,
   exaSearchEndpointDefinition,
 ]);

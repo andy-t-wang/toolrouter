@@ -98,7 +98,7 @@ describe("router API", () => {
     const body = await response.json();
     assert.deepEqual(
       body.endpoints.map((endpoint) => endpoint.id),
-      ["browserbase.search", "exa.search"],
+      ["exa.search"],
     );
     assert.ok(body.endpoints.every((endpoint) => endpoint.status));
 
@@ -106,7 +106,7 @@ describe("router API", () => {
     assert.equal(dashboardResponse.status, 200);
     assert.deepEqual(
       (await dashboardResponse.json()).endpoints.map((endpoint) => endpoint.id),
-      ["browserbase.fetch", "browserbase.search", "browserbase.session", "exa.search"],
+      ["browserbase.session", "exa.search"],
     );
   });
 
@@ -114,7 +114,7 @@ describe("router API", () => {
     const response = await fetch(`${baseUrl}/v1/categories`, { headers: authHeaders() });
     assert.equal(response.status, 200);
     const body = await response.json();
-    assert.deepEqual(body.categories.map((category) => category.id), ["search", "data", "browser_usage"]);
+    assert.deepEqual(body.categories.map((category) => category.id), ["search", "browser_usage"]);
     const search = body.categories.find((category) => category.id === "search");
     assert.equal(search.recommended_endpoint_id, "exa.search");
     assert.equal(search.recommended_endpoint.id, "exa.search");
@@ -170,11 +170,11 @@ describe("router API", () => {
     assert.equal(response.status, 200);
     const body = await response.json();
     assert.equal(body.status, "unverified");
-    assert.equal(body.summary.endpoint_count, 4);
+    assert.equal(body.summary.endpoint_count, 2);
     assert.equal(body.summary.operational_count, 1);
     assert.deepEqual(
       body.endpoints.map((endpoint) => endpoint.id).sort(),
-      ["browserbase.fetch", "browserbase.search", "browserbase.session", "exa.search"].sort(),
+      ["browserbase.session", "exa.search"].sort(),
     );
     const exa = body.endpoints.find((endpoint) => endpoint.id === "exa.search");
     assert.equal(exa.status, "healthy");
@@ -607,7 +607,7 @@ describe("router API", () => {
       cache: new MemoryCache(),
       store: isolatedStore,
       executor: async (payload) => {
-        const isBrowserbase = payload.endpoint.id === "browserbase.search";
+        const isBrowserbase = payload.endpoint.id === "browserbase.session";
         return {
           trace_id: payload.traceId,
           endpoint_id: payload.endpoint.id,
@@ -644,8 +644,8 @@ describe("router API", () => {
         method: "POST",
         headers: authHeaders(),
         body: JSON.stringify({
-          endpoint_id: "browserbase.search",
-          input: { query: "AgentKit" },
+          endpoint_id: "browserbase.session",
+          input: { estimated_minutes: 5 },
           maxUsd: "0.02",
         }),
       });
@@ -654,7 +654,7 @@ describe("router API", () => {
       const listResponse = await fetch(`${isolatedBaseUrl}/v1/requests`, { headers: authHeaders() });
       const listed = await listResponse.json();
       const exa = listed.requests.find((row) => row.endpoint_id === "exa.search");
-      const browserbase = listed.requests.find((row) => row.endpoint_id === "browserbase.search");
+      const browserbase = listed.requests.find((row) => row.endpoint_id === "browserbase.session");
       assert.equal(exa.agentkit_value_type, "free_trial");
       assert.equal(exa.agentkit_value_label, "AgentKit-Free Trial");
       assert.equal(browserbase.agentkit_value_type, "access");
@@ -784,8 +784,8 @@ describe("router API", () => {
     const body = await response.json();
     assert.ok(body.monitoring.requests_24h.total >= 1);
     assert.equal(body.monitoring.requests_24h.errors, 0);
-    assert.equal(body.monitoring.endpoint_health.total, 4);
-    assert.equal(body.monitoring.endpoint_health.unverified, 3);
+    assert.equal(body.monitoring.endpoint_health.total, 2);
+    assert.equal(body.monitoring.endpoint_health.unverified, 1);
     assert.ok("error_rate" in body.monitoring.requests_24h);
   });
 

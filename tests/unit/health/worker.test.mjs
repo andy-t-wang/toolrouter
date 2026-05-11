@@ -103,16 +103,16 @@ describe("endpoint health worker", () => {
   });
 
   it("retries failed endpoints on the first backoff interval instead of waiting for the healthy cadence", async () => {
-    const endpoint = getEndpoint("browserbase.search");
+    const endpoint = getEndpoint("browserbase.session");
     const db = createDb();
     db.endpointStatuses.push({
-      endpoint_id: "browserbase.search",
+      endpoint_id: "browserbase.session",
       status: "failing",
       last_checked_at: "2026-05-09T10:00:00.000Z",
       status_code: 500,
     });
     db.healthChecks.push({
-      endpoint_id: "browserbase.search",
+      endpoint_id: "browserbase.session",
       status: "failing",
       checked_at: "2026-05-09T10:00:00.000Z",
     });
@@ -143,22 +143,22 @@ describe("endpoint health worker", () => {
   });
 
   it("skips failed endpoints until their exponential backoff interval elapses", async () => {
-    const endpoint = getEndpoint("browserbase.search");
+    const endpoint = getEndpoint("browserbase.session");
     const db = createDb();
     db.endpointStatuses.push({
-      endpoint_id: "browserbase.search",
+      endpoint_id: "browserbase.session",
       status: "failing",
       last_checked_at: "2026-05-09T10:00:00.000Z",
       status_code: 500,
     });
     db.healthChecks.push(
       {
-        endpoint_id: "browserbase.search",
+        endpoint_id: "browserbase.session",
         status: "failing",
         checked_at: "2026-05-09T10:00:00.000Z",
       },
       {
-        endpoint_id: "browserbase.search",
+        endpoint_id: "browserbase.session",
         status: "failing",
         checked_at: "2026-05-09T09:44:00.000Z",
       },
@@ -449,7 +449,7 @@ describe("endpoint health worker", () => {
   });
 
   it("allows AgentKit access endpoints to be healthy when they use x402 with AgentKit proof", async () => {
-    const endpoint = getEndpoint("browserbase.search");
+    const endpoint = getEndpoint("browserbase.session");
     const db = createDb();
 
     const result = await runEndpointHealthCheck({
@@ -473,7 +473,7 @@ describe("endpoint health worker", () => {
   });
 
   it("persists safe provider body errors for failed health probes", async () => {
-    const endpoint = getEndpoint("browserbase.fetch");
+    const endpoint = getEndpoint("browserbase.session");
     const db = createDb();
 
     const result = await runEndpointHealthCheck({

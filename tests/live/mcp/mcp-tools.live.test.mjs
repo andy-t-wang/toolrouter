@@ -47,12 +47,6 @@ function paidArgsFor(endpointId) {
       num_results: smoke.input.num_results,
     };
   }
-  if (endpointId === "browserbase.search") {
-    return { ...base, query: smoke.input.query };
-  }
-  if (endpointId === "browserbase.fetch") {
-    return { ...base, url: smoke.input.url };
-  }
   if (endpointId === "browserbase.session") {
     return { ...base, estimated_minutes: smoke.input.estimated_minutes };
   }
@@ -81,7 +75,7 @@ describe("ToolRouter MCP live e2e", () => {
     );
     assert.deepEqual(
       endpointList.endpoints.map((endpoint) => endpoint.id).sort(),
-      ["browserbase.fetch", "browserbase.search", "browserbase.session", "exa.search"].sort(),
+      ["browserbase.session", "exa.search"].sort(),
     );
 
     const categories = assertToolOk(
@@ -100,8 +94,6 @@ describe("ToolRouter MCP live e2e", () => {
   it("executes paid endpoint tools through MCP and can read the resulting trace", { skip: runPaid ? false : "live paid MCP smoke disabled" }, async () => {
     const calls = [
       ["exa_search", paidArgsFor("exa.search")],
-      ["browserbase_search", paidArgsFor("browserbase.search")],
-      ["browserbase_fetch", paidArgsFor("browserbase.fetch")],
       ["browserbase_session_create", paidArgsFor("browserbase.session")],
     ];
     let lastRequestId = null;

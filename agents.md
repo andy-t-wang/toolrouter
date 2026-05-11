@@ -9,7 +9,7 @@ These are durable project decisions for future agents working in this repo.
 - Agents call named endpoints explicitly through `POST /v1/requests`; do not add intent routing until the product has enough real endpoint volume to justify it.
 - Categories are the agent-facing discovery layer, not hidden intent routing. Agents can ask for generic categories like `search`, `browser_usage`, or `data`, inspect the recommended endpoint, then call the selected endpoint explicitly so traces and billing stay concrete.
 - Category discovery is exposed through `GET /v1/categories` and MCP tools like `toolrouter_list_categories` and `toolrouter_recommend_endpoint`.
-- The launch registry should stay small and reliable. As of this note, public endpoints are `exa.search`, `browserbase.search`, `browserbase.fetch`, and `browserbase.session`.
+- The launch registry should stay small and reliable. As of this note, active public endpoints are `exa.search` and `browserbase.session`. `browserbase.search` and `browserbase.fetch` are parked until Browserbase's x402 payment-intent/minimum-charge failure is resolved.
 
 ## Endpoint Template
 
@@ -48,7 +48,7 @@ These are durable project decisions for future agents working in this repo.
 ## Browserbase Endpoint Decisions
 
 - Browserbase endpoints use `https://x402.browserbase.com`.
-- Registered Browserbase endpoints are `browserbase.search` (`POST /search`, about `$0.01`), `browserbase.fetch` (`POST /fetch`, about `$0.01`), and `browserbase.session` (`POST /browser/session/create`, about `$0.12/hour`).
+- Active Browserbase endpoint is `browserbase.session` (`POST /browser/session/create`, about `$0.12/hour`). `browserbase.search` (`POST /search`, about `$0.01`) and `browserbase.fetch` (`POST /fetch`, about `$0.01`) remain module templates only until Browserbase's x402 payment-intent/minimum-charge failure is resolved.
 - Browserbase is an AgentKit-verified access path, not a free-trial path. Its endpoint metadata should use `agentkit_value_type: "access"` and label `AgentKit-Access`.
 - Dashboard tables should distinguish AgentKit value labels: `AgentKit-Free Trial`, `AgentKit-Discount`, and `AgentKit-Access`.
 
@@ -69,7 +69,7 @@ These are durable project decisions for future agents working in this repo.
 
 ## MCP Server
 
-- The ToolRouter MCP server lives in `apps/mcp` and runs with `npm run start:mcp`.
+- The ToolRouter MCP server lives in `apps/mcp`, publishes as `@worldcoin/toolrouter`, and runs for users with `npx -y @worldcoin/toolrouter`.
 - It reads `TOOLROUTER_API_URL` and `TOOLROUTER_API_KEY` from its environment and calls ToolRouter through `POST /v1/requests`.
 - MCP tools should remain thin wrappers over named endpoints plus generic category/list/trace tools. The MCP process must not load wallet private keys, Crossmint signer secrets, Supabase service role keys, or provider API keys.
 - Generic MCP tools such as `toolrouter_search` and `toolrouter_browser_use` are convenience wrappers over the current recommended endpoint for that category. They should still submit a concrete `endpoint_id` to the API.

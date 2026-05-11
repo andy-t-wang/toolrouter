@@ -24,7 +24,7 @@ export const ENDPOINT_CATEGORY_DEFINITIONS = Object.freeze([
     id: "data",
     name: "Data fetch",
     description: "Fetch and normalize page, document, API, or structured data content.",
-    recommended_endpoint_id: "browserbase.fetch",
+    recommended_endpoint_id: null,
     use_cases: ["page fetch", "metadata extraction", "content ingestion"],
   },
   {

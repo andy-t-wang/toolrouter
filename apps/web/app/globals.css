@@ -1321,6 +1321,85 @@ code {
   border-bottom: 1px solid var(--line);
 }
 
+.quickstart-steps {
+  display: grid;
+  gap: 14px;
+}
+
+.quickstart-step {
+  display: grid;
+  gap: 18px;
+  grid-template-columns: 44px minmax(0, 1fr);
+  padding: 18px var(--pad);
+}
+
+.quickstart-step.done .quickstart-step-index {
+  background: var(--ink);
+  color: var(--bone);
+}
+
+.quickstart-step.locked {
+  opacity: 0.68;
+}
+
+.quickstart-step-index {
+  align-items: center;
+  background: var(--bone-2);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  display: inline-flex;
+  font-family: var(--mono);
+  font-size: 16px;
+  font-weight: 600;
+  height: 36px;
+  justify-content: center;
+  width: 36px;
+}
+
+.quickstart-step-index .icon {
+  height: 18px;
+  width: 18px;
+}
+
+.quickstart-step-body {
+  min-width: 0;
+}
+
+.hd.inline {
+  align-items: flex-start;
+  border-bottom: 0;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+  padding: 0;
+}
+
+.hd.inline p {
+  margin: 7px 0 0;
+}
+
+.quickstart-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.quickstart-key-row {
+  margin-top: 16px;
+}
+
+.quickstart-copy-panel {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  margin-top: 16px;
+}
+
+.verification-qr.compact {
+  margin-top: 0;
+}
+
 .quickstart-mcp-body {
   padding: 22px var(--pad) var(--pad);
 }

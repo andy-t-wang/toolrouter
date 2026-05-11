@@ -25,6 +25,7 @@ const recentCheckoutWindowMs = 15 * 60 * 1000;
 const x402ChallengeWindowMs = 2 * 60 * 1000;
 const recentCallsPageSize = 20;
 const dashboardApiKeyStorageKey = "toolrouter.dashboard.apiKeys.v1";
+const dashboardQuickstartSeenKey = "toolrouter.dashboard.quickstartSeen.v1";
 const supabase =
   supabaseUrl && supabaseAnonKey
     ? createClient(supabaseUrl, supabaseAnonKey)
@@ -98,7 +99,7 @@ async function sessionFromUrlHash() {
   window.history.replaceState(
     null,
     "",
-    `${window.location.pathname}#dashboard`,
+    window.location.pathname,
   );
   return data.session?.access_token || accessToken;
 }
@@ -519,6 +520,7 @@ export default function DashboardPage() {
     {},
   );
   const [copiedKey, setCopiedKey] = useState(false);
+  const [copiedPrompt, setCopiedPrompt] = useState(false);
   const [topUpAmount, setTopUpAmount] = useState("5");
   const [verificationChecking, setVerificationChecking] = useState(false);
   const [registrationState, setRegistrationState] = useState("idle");
@@ -551,6 +553,12 @@ export default function DashboardPage() {
     return () => window.clearTimeout(timer);
   }, [copiedKey]);
 
+  useEffect(() => {
+    if (!copiedPrompt) return;
+    const timer = window.setTimeout(() => setCopiedPrompt(false), 1800);
+    return () => window.clearTimeout(timer);
+  }, [copiedPrompt]);
+
   const keyStats = useMemo(() => {
     const byKey = new Map<string, any[]>();
     for (const row of requests) {
@@ -571,6 +579,7 @@ export default function DashboardPage() {
     const activeKey = keys.find((key) => !key.disabled_at && storedApiKeys[key.id]);
     return activeKey ? storedApiKeys[activeKey.id] : "";
   }, [keys, revealedKey, storedApiKeys]);
+  const hasActiveApiKey = keys.some((key) => !key.disabled_at);
   const agentKitVerified = Boolean(balance?.agentkit_verification?.verified);
   const agentKitCheckMeta = [
     balance?.agentkit_verification?.last_checked_at
@@ -602,6 +611,18 @@ export default function DashboardPage() {
     return `/v1/dashboard/requests?${params.toString()}`;
   }
 
+  function maybeRouteFirstRun(keyRows: any[], balanceBody: any) {
+    if (typeof window === "undefined") return;
+    if (window.location.hash) return;
+    if (window.localStorage.getItem(dashboardQuickstartSeenKey) === "1") return;
+    const activeKeys = keyRows.filter((key) => !key.disabled_at);
+    const verified = Boolean(balanceBody?.balance?.agentkit_verification?.verified);
+    if (activeKeys.length && verified) return;
+    window.localStorage.setItem(dashboardQuickstartSeenKey, "1");
+    window.history.replaceState(null, "", `${window.location.pathname}#quickstart`);
+    setPage("quickstart");
+  }
+
   async function refresh(token = sessionToken, cursor = requestCursor) {
     if (!token) return;
     const [
@@ -630,6 +651,7 @@ export default function DashboardPage() {
     setBalance(balanceBody.balance || null);
     setLedger(ledgerBody.entries || []);
     setTopUps(topUpBody.top_ups || []);
+    maybeRouteFirstRun(keyBody.api_keys || [], balanceBody);
   }
 
   async function loadRequestsPage(
@@ -750,6 +772,11 @@ export default function DashboardPage() {
   async function copyRevealedKey() {
     await copyText(revealedKey);
     setCopiedKey(true);
+  }
+
+  async function copyFirstQueryPrompt() {
+    await copyText(firstQueryPrompt);
+    setCopiedPrompt(true);
   }
 
   async function disableKey(id: string) {
@@ -1509,10 +1536,157 @@ export default function DashboardPage() {
                   <div>
                     <h1 className="display">Quickstart</h1>
                     <p className="sub">
-                      Create one key, connect MCP, run one query.
+                      Verify World ID, generate an API key, then copy the prompt.
                     </p>
                   </div>
                 </div>
+
+                <section className="quickstart-steps">
+                  <section className={`card quickstart-step ${agentKitVerified ? "done" : ""}`}>
+                    <div className="quickstart-step-index">
+                      {agentKitVerified ? <Icon name="check" /> : "1"}
+                    </div>
+                    <div className="quickstart-step-body">
+                      <div className="hd inline">
+                        <div>
+                          <h2>Verify World ID</h2>
+                          <p className="muted">
+                            Unlock AgentKit benefits for delegated tool calls.
+                          </p>
+                        </div>
+                        {agentKitVerified ? humanBadge() : null}
+                      </div>
+                      {!agentKitVerified ? (
+                        <div className="quickstart-actions">
+                          {registrationUrl ? (
+                            <div className="verification-qr compact">
+                              <div className="verification-qr-code">
+                                <QRCodeSVG
+                                  value={registrationUrl}
+                                  size={128}
+                                  level="M"
+                                  marginSize={1}
+                                />
+                              </div>
+                              <div>
+                                <strong>Scan with World App</strong>
+                                <a
+                                  className="verification-link"
+                                  href={registrationUrl}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                >
+                                  Open verification link
+                                </a>
+                              </div>
+                            </div>
+                          ) : null}
+                          {registrationError ? (
+                            <span className="metric-hint error-text">
+                              {registrationError}
+                            </span>
+                          ) : null}
+                          <button
+                            className="button primary compact"
+                            type="button"
+                            disabled={registrationBusy}
+                            onClick={() =>
+                              registerAgentKitAccount().catch((error) =>
+                                setBanner(error.message),
+                              )
+                            }
+                          >
+                            {registrationButtonLabel}
+                          </button>
+                        </div>
+                      ) : (
+                        <p className="metric-hint">AgentKit verification is complete.</p>
+                      )}
+                    </div>
+                  </section>
+
+                  <section className={`card quickstart-step ${quickstartApiKey ? "done" : ""}`}>
+                    <div className="quickstart-step-index">
+                      {quickstartApiKey ? <Icon name="check" /> : "2"}
+                    </div>
+                    <div className="quickstart-step-body">
+                      <div className="hd inline">
+                        <div>
+                          <h2>Generate an API key</h2>
+                          <p className="muted">
+                            The key is inserted into the setup snippets below.
+                          </p>
+                        </div>
+                      </div>
+                      {quickstartApiKey ? (
+                        <div className="key-token-row quickstart-key-row">
+                          <code className="key-token">{quickstartApiKey}</code>
+                          <button
+                            className={`button ghost compact copy-key-button${copiedKey ? " copied" : ""}`}
+                            type="button"
+                            onClick={() =>
+                              copyText(quickstartApiKey)
+                                .then(() => setCopiedKey(true))
+                                .catch((error) => setBanner(error.message))
+                            }
+                          >
+                            <Icon name={copiedKey ? "check" : "copy"} />
+                            {copiedKey ? "Copied" : "Copy"}
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="quickstart-actions">
+                          <button
+                            className="button primary compact"
+                            type="button"
+                            onClick={() =>
+                              createKey().catch((error) => setBanner(error.message))
+                            }
+                          >
+                            <Icon name="key" />
+                            {hasActiveApiKey ? "Create setup key" : "Generate API key"}
+                          </button>
+                          {hasActiveApiKey ? (
+                            <span className="metric-hint">
+                              Existing keys cannot be revealed again, so create a fresh setup key.
+                            </span>
+                          ) : null}
+                        </div>
+                      )}
+                    </div>
+                  </section>
+
+                  <section className={`card quickstart-step ${quickstartApiKey ? "" : "locked"}`}>
+                    <div className="quickstart-step-index">3</div>
+                    <div className="quickstart-step-body">
+                      <div className="hd inline">
+                        <div>
+                          <h2>Copy the prompt</h2>
+                          <p className="muted">
+                            Paste this into your agent after adding the MCP server.
+                          </p>
+                        </div>
+                        <button
+                          className="button primary compact"
+                          type="button"
+                          disabled={!quickstartApiKey}
+                          onClick={() =>
+                            copyFirstQueryPrompt().catch((error) =>
+                              setBanner(error.message),
+                            )
+                          }
+                        >
+                          <Icon name={copiedPrompt ? "check" : "copy"} />
+                          {copiedPrompt ? "Copied" : "Copy prompt"}
+                        </button>
+                      </div>
+                      <pre className="code-block quickstart-copy-panel">
+                        <code>{firstQueryPrompt}</code>
+                      </pre>
+                    </div>
+                  </section>
+                </section>
+
                 <section className="card quickstart-card">
                   <div className="hd">
                     <h2>Set up MCP</h2>
@@ -1523,14 +1697,6 @@ export default function DashboardPage() {
                   <div className="quickstart-mcp-body">
                     <McpClientTabs apiKey={quickstartApiKey} compact />
                   </div>
-                </section>
-                <section className="card quickstart-card">
-                  <div className="hd">
-                    <h2>First query</h2>
-                  </div>
-                  <pre className="code-block">
-                    <code>{firstQueryPrompt}</code>
-                  </pre>
                 </section>
               </section>
             ) : null}

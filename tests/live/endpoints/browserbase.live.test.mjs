@@ -63,10 +63,10 @@ async function runSmoke({ endpointId, smoke, traceId }) {
 }
 
 describe("Browserbase live AgentKit/x402 smoke", () => {
-  it("can call Browserbase search with AgentKit access and a strict cap", { skip: runLive ? false : "live Browserbase smoke disabled" }, async () => {
-    const endpoint = getEndpoint("browserbase.search");
+  it("can call Browserbase session with AgentKit access and a strict cap", { skip: runLive ? false : "live Browserbase smoke disabled" }, async () => {
+    const endpoint = getEndpoint("browserbase.session");
     const result = await runSmoke({
-      endpointId: "browserbase.search",
+      endpointId: "browserbase.session",
       smoke: endpoint.liveSmoke.default_path,
       traceId: `live_browserbase_agentkit_${Date.now()}`,
     });
@@ -78,7 +78,7 @@ describe("Browserbase live AgentKit/x402 smoke", () => {
   });
 
   it("can force capped Browserbase x402 payments for each paid access endpoint", { skip: runPaid ? false : "paid Browserbase smoke disabled" }, async () => {
-    for (const endpointId of ["browserbase.search", "browserbase.fetch", "browserbase.session"]) {
+    for (const endpointId of ["browserbase.session"]) {
       const endpoint = getEndpoint(endpointId);
       const result = await runSmoke({
         endpointId,

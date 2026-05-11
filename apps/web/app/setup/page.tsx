@@ -82,22 +82,13 @@ export default function SetupPage() {
             <div className="doc-list tool-list">
               <div>
                 <strong>search</strong>
-                <span>
-                  Recommended: Exa Search. Also includes Browserbase Search for
-                  rendered web results.
-                </span>
+                <span>Recommended: Exa Search for fresh web results.</span>
               </div>
               <div>
                 <strong>browser use</strong>
                 <span>
                   Recommended: Browserbase Session for interactive browser
                   workflows.
-                </span>
-              </div>
-              <div>
-                <strong>data fetch</strong>
-                <span>
-                  Recommended: Browserbase Fetch for page content and metadata.
                 </span>
               </div>
               <div>

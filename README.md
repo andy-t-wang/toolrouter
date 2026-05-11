@@ -86,10 +86,10 @@ npm run billing:retry-funding
 Run the MCP server for Hermes, Codex, Claude, and other MCP-capable agents:
 
 ```sh
-TOOLROUTER_API_URL=http://127.0.0.1:9402 TOOLROUTER_API_KEY=tr_... npm run start:mcp
+TOOLROUTER_API_URL=http://127.0.0.1:9402 TOOLROUTER_API_KEY=tr_... npx -y @worldcoin/toolrouter
 ```
 
-The MCP server exposes `exa_search`, Browserbase tools, a generic endpoint call tool, endpoint listing, and trace lookup. It calls ToolRouter through `POST /v1/requests`; it does not load wallet secrets.
+The MCP server exposes `exa_search`, Browserbase session, a generic endpoint call tool, endpoint listing, and trace lookup. It calls ToolRouter through `POST /v1/requests`; it does not load wallet secrets.
 
 ## Deployment
 
