@@ -268,7 +268,7 @@ function agentKitBenefit(provider: LandingEndpoint) {
   }
   if (type.includes("access")) {
     return {
-      label: "Access unlock",
+      label: "Access",
     };
   }
   return {
