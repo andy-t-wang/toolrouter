@@ -52,6 +52,43 @@ function timeseries(title, requests) {
   };
 }
 
+function queryTable(title, queryString) {
+  return {
+    definition: {
+      type: "query_table",
+      title,
+      requests: [
+        {
+          response_format: "scalar",
+          queries: [
+            {
+              data_source: "metrics",
+              name: "request_count",
+              query: queryString,
+              aggregator: "sum",
+            },
+          ],
+          formulas: [
+            {
+              formula: "request_count",
+            },
+          ],
+          sort: {
+            count: 100,
+            order_by: [
+              {
+                type: "formula",
+                index: 0,
+                order: "desc",
+              },
+            ],
+          },
+        },
+      ],
+    },
+  };
+}
+
 function query(q, displayType = "bars") {
   return {
     display_type: displayType,
@@ -64,17 +101,21 @@ const dashboard = {
   description: "Product-wide ToolRouter operations metrics from API-emitted Datadog count metrics.",
   layout_type: "ordered",
   widgets: [
-    timeseries("Requests per day by status", [
-      query("sum:toolrouter.requests.count{env:production,source:toolrouter} by {status}.as_count().rollup(sum, 86400)"),
+    timeseries("Requests per hour by status", [
+      query("sum:toolrouter.requests.count{env:production,source:toolrouter} by {status}.as_count().rollup(sum, 3600)"),
     ]),
-    timeseries("AgentKit uses per day", [
-      query("sum:toolrouter.agentkit.uses.count{env:production,source:toolrouter}.as_count().rollup(sum, 86400)"),
+    queryTable(
+      "Recent requests by id",
+      "sum:toolrouter.requests.count{env:production,source:toolrouter} by {request_id,trace_id,endpoint,status,status_code,path}.as_count().rollup(sum, 60)",
+    ),
+    timeseries("AgentKit uses per hour", [
+      query("sum:toolrouter.agentkit.uses.count{env:production,source:toolrouter}.as_count().rollup(sum, 3600)"),
     ]),
-    timeseries("AgentKit registrations per day", [
-      query("sum:toolrouter.agentkit.registrations.count{env:production,source:toolrouter,status:completed}.as_count().rollup(sum, 86400)"),
+    timeseries("AgentKit registrations per hour", [
+      query("sum:toolrouter.agentkit.registrations.count{env:production,source:toolrouter,status:completed}.as_count().rollup(sum, 3600)"),
     ]),
-    timeseries("Stripe sessions per day", [
-      query("sum:toolrouter.stripe.sessions.count{env:production,source:toolrouter} by {status}.as_count().rollup(sum, 86400)"),
+    timeseries("Stripe sessions per hour", [
+      query("sum:toolrouter.stripe.sessions.count{env:production,source:toolrouter} by {status}.as_count().rollup(sum, 3600)"),
     ]),
   ],
 };

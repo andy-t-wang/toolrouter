@@ -1942,12 +1942,11 @@ code {
   border-bottom: 1px solid var(--line);
   display: grid;
   gap: 20px;
-  grid-template-columns: 2.2fr 1.1fr 1.1fr 1fr 0.7fr;
+  grid-template-columns: 2.2fr 1.4fr 1fr;
   padding: 14px var(--pad);
 }
 
-.mkt-uptime-grid > :nth-child(4),
-.mkt-uptime-grid > :nth-child(5) {
+.mkt-uptime-grid > :nth-child(3) {
   text-align: right;
 }
 
@@ -2000,6 +1999,14 @@ code {
 
 .status-dot-label span:last-child {
   font-size: 13px;
+}
+
+.status-reason {
+  color: var(--mute);
+  display: block;
+  font-size: 12px;
+  line-height: 1.35;
+  margin-top: 4px;
 }
 
 .prov-mark {
@@ -2879,7 +2886,7 @@ code {
 
   .mkt-uptime-grid {
     gap: 10px;
-    grid-template-columns: minmax(0, 1.35fr) minmax(82px, 0.8fr) minmax(82px, 0.75fr) 54px;
+    grid-template-columns: minmax(0, 1.3fr) minmax(94px, 0.9fr) minmax(76px, 0.7fr);
     padding-left: 10px;
     padding-right: 10px;
   }

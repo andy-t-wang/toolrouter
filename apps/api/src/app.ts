@@ -146,6 +146,9 @@ function recordRequestMetrics(datadog: any, row: any) {
     status: requestMetricStatus(row),
     endpoint: row.endpoint_id,
     path: row.path || "unknown",
+    status_code: row.status_code || "unknown",
+    request_id: row.id,
+    trace_id: row.trace_id,
   }).catch(() => undefined);
   if (!isErrorRequest(row) && isAgentKitUse(row)) {
     datadog?.increment?.("toolrouter.agentkit.uses.count", {

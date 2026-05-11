@@ -14,6 +14,7 @@ type LandingEndpoint = {
   agentkit_last_checked_at?: string | null;
   agentkit_path?: string | null;
   status: string;
+  status_code?: number | null;
   last_checked_at?: string | null;
   latency_ms?: number | null;
   p50_latency_ms?: number | null;
@@ -249,17 +250,6 @@ function displayEndpointId(provider: LandingEndpoint) {
     : provider.id;
 }
 
-function paymentPathLabel(provider: LandingEndpoint) {
-  if (!provider.path) return "Awaiting check";
-  if (provider.path === "agentkit" && !provider.charged) return "AgentKit free";
-  if (provider.path === "agentkit_to_x402") {
-    return provider.charged ? "AgentKit + x402" : "AgentKit checked";
-  }
-  if (provider.path === "x402") return provider.charged ? "x402 paid" : "x402";
-  if (provider.path === "timeout") return "Timed out";
-  return provider.path;
-}
-
 function ProviderMark({ provider }: { provider: LandingEndpoint }) {
   const src = providerLogoSrc(provider.provider);
   const label = titleCase(provider.provider);
@@ -270,8 +260,21 @@ function ProviderMark({ provider }: { provider: LandingEndpoint }) {
   );
 }
 
+function statusReason(provider: LandingEndpoint) {
+  const status = publicEndpointStatus(provider);
+  if (status === "healthy") return "Latest check passed";
+  const error = String(provider.last_error || "");
+  if (error.includes("timed out")) return "Provider timed out";
+  if (error.includes("minimum charge amount")) return "Provider payment error";
+  if (status === "degraded" && Number(provider.status_code) === 200) {
+    return "Latest check was slow";
+  }
+  if (Number(provider.status_code) >= 500) return "Provider error";
+  if (status === "unverified") return "Awaiting first check";
+  return "Needs recovery check";
+}
+
 function UptimeRow({ provider }: { provider: LandingEndpoint }) {
-  const latency = provider.p50_latency_ms ?? provider.latency_ms;
   return (
     <div className="mkt-uptime-grid mkt-uptime-row">
       <div>
@@ -289,13 +292,10 @@ function UptimeRow({ provider }: { provider: LandingEndpoint }) {
       </div>
       <div>
         <StatusDot status={publicEndpointStatus(provider)} />
+        <span className="status-reason">{statusReason(provider)}</span>
       </div>
       <div className="mono muted check-age">
         {formatProbeAge(provider.last_checked_at)}
-      </div>
-      <div className="mono muted hide-md">{paymentPathLabel(provider)}</div>
-      <div className="num mono muted">
-        {typeof latency === "number" ? `${latency}ms` : "—"}
       </div>
     </div>
   );
@@ -633,8 +633,6 @@ export default async function LandingPage() {
                 <div>Endpoint</div>
                 <div>Status</div>
                 <div>Last check</div>
-                <div className="hide-md">Path</div>
-                <div>Latency</div>
               </div>
               {providers.map((provider) => (
                 <UptimeRow key={provider.id} provider={provider} />
