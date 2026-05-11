@@ -52,6 +52,8 @@ const fallbackStatus: LandingStatus = {
       provider: "browserbase",
       category: "browser_usage",
       name: "Browserbase Session",
+      agentkit_value_type: "access",
+      agentkit_value_label: "AgentKit-Access",
       status: "unverified",
       last_checked_at: null,
       latency_ms: null,
@@ -65,6 +67,8 @@ const fallbackStatus: LandingStatus = {
       provider: "exa",
       category: "search",
       name: "Exa Search",
+      agentkit_value_type: "free_trial",
+      agentkit_value_label: "AgentKit-Free Trial",
       status: "unverified",
       last_checked_at: null,
       latency_ms: null,
@@ -248,6 +252,47 @@ function statusReason(provider: LandingEndpoint) {
   return "Needs recovery check";
 }
 
+function agentKitBenefit(provider: LandingEndpoint) {
+  const type = String(
+    provider.agentkit_value_type || provider.agentkit_value_label || "",
+  ).toLowerCase();
+  if (type.includes("free")) {
+    return {
+      label: "Free trial",
+      detail: "No credits required",
+    };
+  }
+  if (type.includes("discount")) {
+    return {
+      label: "Discount",
+      detail: "Lower provider price",
+    };
+  }
+  if (type.includes("access")) {
+    return {
+      label: "Access unlock",
+      detail: "Verified-human path",
+    };
+  }
+  return {
+    label: "AgentKit",
+    detail: "Benefit verified",
+  };
+}
+
+function AgentKitBenefit({ provider }: { provider: LandingEndpoint }) {
+  const benefit = agentKitBenefit(provider);
+  return (
+    <div className="agentkit-status-benefit">
+      <span className="agentkit-status-pill">
+        <img src="/human.svg" alt="" aria-hidden="true" />
+        {benefit.label}
+      </span>
+      <span className="agentkit-status-detail">{benefit.detail}</span>
+    </div>
+  );
+}
+
 function UptimeRow({ provider }: { provider: LandingEndpoint }) {
   return (
     <div className="mkt-uptime-grid mkt-uptime-row">
@@ -264,6 +309,7 @@ function UptimeRow({ provider }: { provider: LandingEndpoint }) {
           </span>
         </div>
       </div>
+      <AgentKitBenefit provider={provider} />
       <div>
         <StatusDot status={publicEndpointStatus(provider)} />
         <span className="status-reason">{statusReason(provider)}</span>
@@ -605,6 +651,7 @@ export default async function LandingPage() {
             <div className="mkt-uptime-card">
               <div className="mkt-uptime-grid uptime-grid-head">
                 <div>Endpoint</div>
+                <div>Benefit</div>
                 <div>Status</div>
                 <div>Last check</div>
               </div>

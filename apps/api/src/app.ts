@@ -594,6 +594,14 @@ function agentKitValueForRequest(endpoint: any, result: any) {
   };
 }
 
+function canTryAgentKitFreeTrialWithoutCredits(endpoint: any, paymentMode: any) {
+  return endpoint?.agentkit_value_type === "free_trial" && paymentMode !== "x402_only";
+}
+
+function isInsufficientCreditsError(error: any) {
+  return error?.code === "insufficient_credits";
+}
+
 function createRequestRow({
   traceId,
   endpoint,
@@ -1259,6 +1267,7 @@ export function createApiApp({
       entries: await store.listCreditLedgerEntries({
         user_id: user.user_id,
         limit,
+        source_not: request.query?.activity_only === "true" ? "request" : undefined,
       }),
     };
   });
@@ -1352,40 +1361,54 @@ export function createApiApp({
         estimatedUsd: providerRequest.estimatedUsd,
         maxUsd,
       });
-      reservation = await reserveCredits({
-        store,
-        user_id: auth.user_id,
-        api_key_id: auth.api_key_id,
-        trace_id: traceId,
-        endpoint_id: endpoint.id,
-        amountUsd: String(
-          maxUsd ||
-            providerRequest.estimatedUsd ||
-            process.env.X402_MAX_USD_PER_REQUEST ||
-            "0.05",
-        ),
-      });
+      let executorPaymentMode = paymentMode;
+      try {
+        reservation = await reserveCredits({
+          store,
+          user_id: auth.user_id,
+          api_key_id: auth.api_key_id,
+          trace_id: traceId,
+          endpoint_id: endpoint.id,
+          amountUsd: String(
+            maxUsd ||
+              providerRequest.estimatedUsd ||
+              process.env.X402_MAX_USD_PER_REQUEST ||
+              "0.05",
+          ),
+        });
+      } catch (error: any) {
+        if (
+          !isInsufficientCreditsError(error) ||
+          !canTryAgentKitFreeTrialWithoutCredits(endpoint, paymentMode)
+        ) {
+          throw error;
+        }
+        executorPaymentMode = "agentkit_only";
+      }
       const result = await executor({
         endpoint,
         request: providerRequest,
         maxUsd,
-        paymentMode,
+        paymentMode: executorPaymentMode,
         traceId,
         paymentSigner: await paymentSignerForRequest(store, crossmint, auth),
         timeoutMs: envMs("TOOLROUTER_REQUEST_TIMEOUT_MS", DEFAULT_REQUEST_TIMEOUT_MS),
       });
       logEndpointRequest(request, endpoint, result);
-      const credit = await finalizeCreditReservation({
-        store,
-        reservation,
-        amountUsd:
-          result.amount_usd || (result.charged ? reservation.amount_usd : "0"),
-        paymentReference: result.payment_reference,
-        metadata: {
-          path: result.path,
-          status_code: result.status_code,
-        },
-      });
+      const credit = reservation
+        ? await finalizeCreditReservation({
+            store,
+            reservation,
+            amountUsd: String(
+              result.amount_usd || (result.charged ? reservation.amount_usd : "0"),
+            ),
+            paymentReference: result.payment_reference,
+            metadata: {
+              path: result.path,
+              status_code: result.status_code,
+            },
+          })
+        : null;
       const row = createRequestRow({
         traceId,
         endpoint,

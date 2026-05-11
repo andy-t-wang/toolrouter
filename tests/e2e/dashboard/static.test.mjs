@@ -41,6 +41,12 @@ describe("web dashboard static wiring", () => {
     assert.match(landingPage, /\/v1\/status/);
     assert.match(landingPage, /publicEndpointStatus\(provider\)/);
     assert.match(landingPage, /statusReason\(provider\)/);
+    assert.match(landingPage, /agentKitBenefit\(provider\)/);
+    assert.match(landingPage, /Free trial/);
+    assert.match(landingPage, /No credits required/);
+    assert.match(landingPage, /Access unlock/);
+    assert.match(landingPage, /Verified-human path/);
+    assert.match(landingPage, /<div>Benefit<\/div>/);
     assert.match(landingPage, /Last check/);
     assert.match(landingPage, /Checked at least once/);
     assert.doesNotMatch(landingPage, /Fleet uptime/);

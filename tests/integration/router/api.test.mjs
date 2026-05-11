@@ -297,6 +297,25 @@ describe("router API", () => {
     const ledger = await ledgerResponse.json();
     assert.ok(ledger.entries.some((entry) => entry.type === "top_up_settled"));
 
+    for (let index = 0; index < 60; index += 1) {
+      await store.insertCreditLedgerEntry({
+        id: `cle_request_noise_${index}`,
+        user_id: process.env.TOOLROUTER_DEV_USER_ID,
+        ts: new Date(Date.parse("2026-05-11T00:00:00.000Z") + index).toISOString(),
+        type: "reserve",
+        amount_usd: "0.01",
+        source: "request",
+        reference_id: `crr_noise_${index}`,
+        metadata: {},
+      });
+    }
+    const activityResponse = await fetch(`${baseUrl}/v1/ledger?limit=50&activity_only=true`, {
+      headers: sessionHeaders(),
+    });
+    const activity = await activityResponse.json();
+    assert.ok(activity.entries.some((entry) => entry.type === "top_up_settled"));
+    assert.ok(activity.entries.every((entry) => entry.source !== "request"));
+
     const settledTopUpsResponse = await fetch(`${baseUrl}/v1/top-ups`, { headers: sessionHeaders() });
     const settledTopUps = await settledTopUpsResponse.json();
     assert.equal(settledTopUps.top_ups[0].id, topUp.id);
@@ -593,6 +612,72 @@ describe("router API", () => {
       assert.equal(listed.requests[0].charged, true);
       assert.equal(listed.requests[0].agentkit_value_type, null);
       assert.equal(listed.requests[0].agentkit_value_label, null);
+    } finally {
+      await isolatedApp.close();
+    }
+  });
+
+  it("allows Exa AgentKit free trial requests without available credits", async () => {
+    const executorCalls = [];
+    const isolatedStore = new LocalStore({
+      path: join(mkdtempSync(join(tmpdir(), "toolrouter-free-trial-no-credits-")), "store.json"),
+    });
+    await isolatedStore.upsertCreditAccount({
+      user_id: process.env.TOOLROUTER_DEV_USER_ID,
+      available_usd: "0",
+      pending_usd: "0",
+      reserved_usd: "0",
+      currency: "USD",
+    });
+    const isolatedApp = createApiApp({
+      logger: false,
+      cache: new MemoryCache(),
+      store: isolatedStore,
+      executor: async (payload) => {
+        executorCalls.push(payload);
+        return {
+          trace_id: payload.traceId,
+          endpoint_id: payload.endpoint.id,
+          status_code: 200,
+          ok: true,
+          path: "agentkit",
+          charged: false,
+          estimated_usd: payload.request.estimatedUsd,
+          amount_usd: "0",
+          currency: null,
+          payment_reference: null,
+          payment_network: null,
+          payment_error: null,
+          latency_ms: 1,
+          body: { results: [] },
+        };
+      },
+    });
+    await isolatedApp.listen({ port: 0, host: "127.0.0.1" });
+    const isolatedBaseUrl = `http://127.0.0.1:${isolatedApp.server.address().port}`;
+    try {
+      const response = await fetch(`${isolatedBaseUrl}/v1/requests`, {
+        method: "POST",
+        headers: authHeaders(),
+        body: JSON.stringify({
+          endpoint_id: "exa.search",
+          input: { query: "AgentKit", search_type: "fast", num_results: 1 },
+          maxUsd: "0.02",
+        }),
+      });
+      assert.equal(response.status, 200);
+      const created = await response.json();
+      assert.equal(created.path, "agentkit");
+      assert.equal(created.charged, false);
+      assert.equal(created.credit_reserved_usd, null);
+      assert.equal(created.credit_captured_usd, null);
+      assert.equal(created.credit_released_usd, null);
+      assert.equal(executorCalls[0].paymentMode, "agentkit_only");
+
+      const listResponse = await fetch(`${isolatedBaseUrl}/v1/requests`, { headers: authHeaders() });
+      const listed = await listResponse.json();
+      assert.equal(listed.requests[0].agentkit_value_type, "free_trial");
+      assert.equal(listed.requests[0].agentkit_value_label, "AgentKit-Free Trial");
     } finally {
       await isolatedApp.close();
     }

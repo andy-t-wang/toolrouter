@@ -222,7 +222,7 @@ function receiptFromResponse(response, events) {
 
 function normalizePaymentMode(paymentMode, endpoint) {
   const resolved = paymentMode || endpoint?.defaultPaymentMode || "agentkit_first";
-  if (!["agentkit_first", "x402_only"].includes(resolved)) {
+  if (!["agentkit_first", "agentkit_only", "x402_only"].includes(resolved)) {
     throw new Error(`unsupported payment mode: ${resolved}`);
   }
   return resolved;
@@ -367,7 +367,10 @@ export async function executeEndpoint({ endpoint, request, maxUsd, traceId, paym
     const events = [];
     const init = buildInit(request, timeout.signal);
 
-    if (selectedPaymentMode === "x402_only" || usesAgentKitProofHeader(endpoint)) {
+    if (
+      selectedPaymentMode === "x402_only" ||
+      (usesAgentKitProofHeader(endpoint) && selectedPaymentMode !== "agentkit_only")
+    ) {
       path = usesAgentKitProofHeader(endpoint) ? "agentkit_to_x402" : "x402";
       const fetchWithPayment = createPaymentFetch({
         ...deps,
@@ -402,7 +405,7 @@ export async function executeEndpoint({ endpoint, request, maxUsd, traceId, paym
           baseFetch,
         });
       }
-      if (response.status === 402) {
+      if (response.status === 402 && selectedPaymentMode !== "agentkit_only") {
         path = "agentkit_to_x402";
         const fetchWithPayment = createPaymentFetch({
           ...deps,

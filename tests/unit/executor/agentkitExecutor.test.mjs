@@ -250,6 +250,30 @@ describe("AgentKit/x402 executor", () => {
     assert.deepEqual(seen.v1Networks, ["base"]);
   });
 
+  it("does not fall back to x402 in AgentKit-only mode", async () => {
+    const seen = captures();
+    const result = await executeEndpoint({
+      endpoint: baseEndpoint(),
+      request: providerRequest(),
+      maxUsd: "0.01",
+      paymentMode: "agentkit_only",
+      traceId: "trace_agentkit_only",
+      paymentDeps: fakePaymentDeps({
+        captures: seen,
+        agentkitResponse: new Response("", { status: 402 }),
+        x402Response: paymentResponse({ results: [{ url: "https://example.com" }] }),
+      }),
+    });
+
+    assert.equal(result.path, "agentkit");
+    assert.equal(result.status_code, 402);
+    assert.equal(result.ok, false);
+    assert.equal(result.charged, false);
+    assert.equal(result.amount_usd, null);
+    assert.equal(seen.agentkitCalls.length, 1);
+    assert.equal(seen.x402Calls.length, 0);
+  });
+
   it("signs Exa's AgentKit challenge from the payment-required response header", async () => {
     const seen = captures();
     const retryCalls = [];

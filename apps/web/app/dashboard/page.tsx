@@ -618,7 +618,7 @@ export default function DashboardPage() {
         ),
         jsonFetch("/v1/api-keys", { token }),
         jsonFetch("/v1/balance", { token }),
-        jsonFetch("/v1/ledger?limit=50", { token }),
+        jsonFetch("/v1/ledger?limit=50&activity_only=true", { token }),
         jsonFetch("/v1/top-ups?limit=10", { token }),
       ]);
     setRequests(requestBody.requests || []);

@@ -256,9 +256,11 @@ export class LocalStore {
     return row;
   }
 
-  async listCreditLedgerEntries({ user_id, limit = 100 }: { user_id: string; limit?: number }) {
+  async listCreditLedgerEntries({ user_id, limit = 100, source_not }: { user_id: string; limit?: number; source_not?: string }) {
     return this.read().credit_ledger_entries
       .filter((row: any) => row.user_id === user_id)
+      .filter((row: any) => !source_not || row.source !== source_not)
+      .sort((a: any, b: any) => Date.parse(b.ts || "") - Date.parse(a.ts || ""))
       .slice(0, Math.max(1, Math.min(Number(limit || 100), 500)));
   }
 
@@ -519,14 +521,16 @@ export class SupabaseStore {
     }))?.[0] || row;
   }
 
-  async listCreditLedgerEntries({ user_id, limit = 100 }: { user_id: string; limit?: number }) {
+  async listCreditLedgerEntries({ user_id, limit = 100, source_not }: { user_id: string; limit?: number; source_not?: string }) {
+    const params: any = {
+      user_id: `eq.${user_id}`,
+      select: "*",
+      order: "ts.desc",
+      limit,
+    };
+    if (source_not) params.source = `neq.${source_not}`;
     return this.request(
-      `/credit_ledger_entries?${qs({
-        user_id: `eq.${user_id}`,
-        select: "*",
-        order: "ts.desc",
-        limit,
-      })}`,
+      `/credit_ledger_entries?${qs(params)}`,
     );
   }
 
