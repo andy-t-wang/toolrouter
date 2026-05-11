@@ -106,8 +106,8 @@ services:
         value: api.exa.ai,x402.browserbase.com
       - key: X402_MAX_USD_PER_REQUEST
         value: "0.05"
-      - key: TOOLROUTER_DAILY_USD_BUDGET
-        value: "2.00"
+      - key: TOOLROUTER_AGENTKIT_PREFLIGHT_TIMEOUT_MS
+        value: "10000"
       - key: TOOLROUTER_MAX_TOP_UP_USD
         value: "5"
       - key: STRIPE_SECRET_KEY

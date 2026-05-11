@@ -106,7 +106,7 @@ function publicTopUp(purchase: any) {
 
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 const DEFAULT_REQUEST_TIMEOUT_MS = 8_000;
-const DEFAULT_AGENTKIT_PREFLIGHT_TIMEOUT_MS = 6_000;
+const DEFAULT_AGENTKIT_PREFLIGHT_TIMEOUT_MS = 10_000;
 const STATUS_RANK: Record<string, number> = {
   healthy: 0,
   degraded: 1,
@@ -119,12 +119,12 @@ function envMs(name: string, fallback: number) {
   return Number.isFinite(value) && value > 0 ? Math.floor(value) : fallback;
 }
 
-function agentKitPreflightTimeoutMs(requestTimeoutMs: number) {
+function agentKitPreflightTimeoutMs() {
   const configured = envMs(
     "TOOLROUTER_AGENTKIT_PREFLIGHT_TIMEOUT_MS",
     DEFAULT_AGENTKIT_PREFLIGHT_TIMEOUT_MS,
   );
-  return Math.max(1, Math.min(configured, requestTimeoutMs));
+  return Math.max(1, configured);
 }
 
 function timedOut(result: any) {
@@ -143,6 +143,29 @@ function logEndpointRequest(request: any, endpoint: any, result: any) {
       error: result.error || null,
     },
     "endpoint request completed",
+  );
+}
+
+function logAgentKitPreflight(
+  request: any,
+  endpoint: any,
+  result: any,
+  options: { realized_free_trial: boolean; will_fallback: boolean },
+) {
+  request.log?.info?.(
+    {
+      endpoint_id: endpoint.id,
+      preflight_status_code: result?.status_code ?? null,
+      preflight_ok: Boolean(result?.ok),
+      preflight_path: result?.path ?? null,
+      preflight_charged: Boolean(result?.charged),
+      preflight_latency_ms: result?.latency_ms ?? null,
+      preflight_timeout: timedOut(result),
+      preflight_error: result?.error || null,
+      realized_free_trial: options.realized_free_trial,
+      will_fallback: options.will_fallback,
+    },
+    "agentkit preflight completed",
   );
 }
 
@@ -1415,7 +1438,12 @@ export function createApiApp({
           paymentMode: "agentkit_only",
           traceId,
           paymentSigner,
-          timeoutMs: agentKitPreflightTimeoutMs(timeoutMs),
+          timeoutMs: agentKitPreflightTimeoutMs(),
+        });
+        const freeTrialRealized = realizedFreeTrial(endpoint, result);
+        logAgentKitPreflight(request, endpoint, result, {
+          realized_free_trial: freeTrialRealized,
+          will_fallback: !freeTrialRealized && paymentMode !== "agentkit_only",
         });
       }
 

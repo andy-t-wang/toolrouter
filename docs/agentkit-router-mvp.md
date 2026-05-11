@@ -396,7 +396,7 @@ When a caller uses `POST /v1/requests`, the router:
 2. Builds the provider request from that endpoint's typed input schema.
 3. Sends the request through official `@worldcoin/agentkit`.
 4. If AgentKit succeeds, returns the response with `path=agentkit`.
-5. If the provider still returns `402`, enforces per-request and daily budget limits.
+5. If the provider still returns `402`, enforces per-request limits.
 6. Pays through x402 fallback.
 7. Writes a usage event and trace.
 

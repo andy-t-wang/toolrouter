@@ -45,14 +45,4 @@ describe("request policy", () => {
     );
   });
 
-  it("does not apply product-level daily spend budgets yet", async () => {
-    process.env.TOOLROUTER_DAILY_USD_BUDGET = "0.001";
-    const result = await enforceRequestPolicy({
-      cache: new MemoryCache(),
-      auth: { api_key_id: "key_1", user_id: "user_1" },
-      estimatedUsd: "0.03",
-    });
-    assert.equal(result.estimated_usd, 0.03);
-    assert.equal(result.requested_max_usd, null);
-  });
 });

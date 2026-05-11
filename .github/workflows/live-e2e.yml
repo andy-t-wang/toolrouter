@@ -22,7 +22,6 @@ jobs:
       X402_ALLOWED_HOSTS: "api.exa.ai"
       X402_ALLOWED_CHAINS: "eip155:8453,eip155:480"
       X402_MAX_USD_PER_REQUEST: "0.01"
-      TOOLROUTER_DAILY_USD_BUDGET: "0.10"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
