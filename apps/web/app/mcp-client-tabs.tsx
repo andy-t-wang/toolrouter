@@ -32,7 +32,13 @@ export function McpClientTabs({ apiKey = "", compact = false }: McpClientTabsPro
   return (
     <div className={`mcp-connect${compact ? " compact" : ""}`}>
       <div className="mcp-connect-head">
-        <h2>Connect your client</h2>
+        <div className="mcp-connect-title-row">
+          <h2>Connect your client</h2>
+          <span className={`mcp-key-state ${hasInjectedKey ? "ready" : ""}`}>
+            <span className={`dot ${hasInjectedKey ? "good" : ""}`} />
+            {hasInjectedKey ? "API key injected" : "API key needed"}
+          </span>
+        </div>
         {hasInjectedKey ? (
           <p>
             Your API key is filled in. These snippets run the published{" "}
@@ -75,10 +81,6 @@ export function McpClientTabs({ apiKey = "", compact = false }: McpClientTabsPro
       >
         <div className="mcp-panel-actions">
           <span>{selected.detail}</span>
-          <span className={`mcp-key-state ${hasInjectedKey ? "ready" : ""}`}>
-            <span className={`dot ${hasInjectedKey ? "good" : ""}`} />
-            {hasInjectedKey ? "API key injected" : "API key needed"}
-          </span>
           <button className="mcp-copy-button" onClick={copySelected} type="button">
             {copied ? "Copied" : "Copy"}
           </button>

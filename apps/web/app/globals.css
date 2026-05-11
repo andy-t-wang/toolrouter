@@ -1412,6 +1412,13 @@ code {
   min-width: 0;
 }
 
+.mcp-connect-title-row {
+  align-items: center;
+  display: flex;
+  gap: 14px;
+  justify-content: space-between;
+}
+
 .mcp-connect-head h2 {
   font-size: 34px;
   font-weight: 500;
@@ -1523,6 +1530,10 @@ code {
 
 .mcp-connect.compact .mcp-connect-head h2 {
   display: none;
+}
+
+.mcp-connect.compact .mcp-connect-title-row {
+  justify-content: flex-end;
 }
 
 .mcp-connect.compact .mcp-connect-head p {
