@@ -673,7 +673,7 @@ describe("router API", () => {
       assert.equal(created.credit_captured_usd, null);
       assert.equal(created.credit_released_usd, null);
       assert.equal(executorCalls[0].paymentMode, "agentkit_only");
-      assert.equal(executorCalls[0].timeoutMs, 2_500);
+      assert.equal(executorCalls[0].timeoutMs, 6_000);
 
       const listResponse = await fetch(`${isolatedBaseUrl}/v1/requests`, { headers: authHeaders() });
       const listed = await listResponse.json();
@@ -759,7 +759,7 @@ describe("router API", () => {
       assert.equal(created.credit_released_usd, "0.013");
       assert.equal(executorCalls.length, 2);
       assert.equal(executorCalls[0].paymentMode, "agentkit_only");
-      assert.equal(executorCalls[0].timeoutMs, 2_500);
+      assert.equal(executorCalls[0].timeoutMs, 6_000);
       assert.equal(executorCalls[1].paymentMode, "x402_only");
       assert.equal(executorCalls[1].timeoutMs, 8_000);
 
@@ -999,7 +999,7 @@ describe("router API", () => {
       assert.equal(created.credit_released_usd, "0.02");
       assert.equal(executorCalls.length, 2);
       assert.equal(executorCalls[0].paymentMode, "agentkit_only");
-      assert.equal(executorCalls[0].timeoutMs, 2_500);
+      assert.equal(executorCalls[0].timeoutMs, 6_000);
       assert.equal(executorCalls[1].paymentMode, "x402_only");
       assert.equal(executorCalls[1].timeoutMs, 8_000);
 

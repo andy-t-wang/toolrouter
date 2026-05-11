@@ -106,7 +106,7 @@ function publicTopUp(purchase: any) {
 
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 const DEFAULT_REQUEST_TIMEOUT_MS = 8_000;
-const DEFAULT_AGENTKIT_PREFLIGHT_TIMEOUT_MS = 2_500;
+const DEFAULT_AGENTKIT_PREFLIGHT_TIMEOUT_MS = 6_000;
 const STATUS_RANK: Record<string, number> = {
   healthy: 0,
   degraded: 1,

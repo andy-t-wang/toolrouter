@@ -134,25 +134,27 @@ function query(q, displayType = "bars") {
   };
 }
 
+const THIRTY_MINUTES_SECONDS = 1800;
+
 const dashboard = {
   title: dashboardTitle,
   description: "Product-wide ToolRouter operations metrics from API-emitted Datadog count metrics.",
   layout_type: "ordered",
   widgets: [
-    timeseries("Requests per hour by status", [
-      query("sum:toolrouter.requests.count{env:production,source:toolrouter,status:success}.as_count().rollup(sum, 3600)"),
-      query("sum:toolrouter.requests.count{env:production,source:toolrouter,status:fail,!status_code:402}.as_count().rollup(sum, 3600)"),
-      query("sum:toolrouter.requests.count{env:production,source:toolrouter,status_code:402}.as_count().rollup(sum, 3600)"),
+    timeseries("Requests per 30 min by status", [
+      query(`sum:toolrouter.requests.count{env:production,source:toolrouter,status:success}.as_count().rollup(sum, ${THIRTY_MINUTES_SECONDS})`),
+      query(`sum:toolrouter.requests.count{env:production,source:toolrouter,status:fail,!status_code:402}.as_count().rollup(sum, ${THIRTY_MINUTES_SECONDS})`),
+      query(`sum:toolrouter.requests.count{env:production,source:toolrouter,status_code:402}.as_count().rollup(sum, ${THIRTY_MINUTES_SECONDS})`),
     ]),
     recentRequestsTable(),
-    timeseries("AgentKit uses per hour", [
-      query("sum:toolrouter.agentkit.uses.count{env:production,source:toolrouter}.as_count().rollup(sum, 3600)"),
+    timeseries("AgentKit uses per 30 min", [
+      query(`sum:toolrouter.agentkit.uses.count{env:production,source:toolrouter}.as_count().rollup(sum, ${THIRTY_MINUTES_SECONDS})`),
     ]),
-    timeseries("AgentKit registrations per hour", [
-      query("sum:toolrouter.agentkit.registrations.count{env:production,source:toolrouter,status:completed}.as_count().rollup(sum, 3600)"),
+    timeseries("AgentKit registrations per 30 min", [
+      query(`sum:toolrouter.agentkit.registrations.count{env:production,source:toolrouter,status:completed}.as_count().rollup(sum, ${THIRTY_MINUTES_SECONDS})`),
     ]),
-    timeseries("Stripe sessions per hour", [
-      query("sum:toolrouter.stripe.sessions.count{env:production,source:toolrouter} by {status}.as_count().rollup(sum, 3600)"),
+    timeseries("Stripe sessions per 30 min", [
+      query(`sum:toolrouter.stripe.sessions.count{env:production,source:toolrouter} by {status}.as_count().rollup(sum, ${THIRTY_MINUTES_SECONDS})`),
     ]),
   ],
 };

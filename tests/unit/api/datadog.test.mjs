@@ -90,9 +90,12 @@ describe("Datadog metrics helper", () => {
     assert.match(datadogDashboardScript, /type: "group",\s+name: "request_time",\s+order: "desc"/);
   });
 
-  it("keeps 402 responses out of the hourly failure series", () => {
+  it("keeps 402 responses out of the 30-minute failure series", () => {
     assert.match(datadogDashboardScript, /status:fail,!status_code:402/);
     assert.match(datadogDashboardScript, /status_code:402/);
+    assert.match(datadogDashboardScript, /THIRTY_MINUTES_SECONDS = 1800/);
+    assert.match(datadogDashboardScript, /Requests per 30 min by status/);
+    assert.doesNotMatch(datadogDashboardScript, /rollup\(sum, 3600\)/);
     assert.doesNotMatch(
       datadogDashboardScript,
       /toolrouter\.requests\.count\{env:production,source:toolrouter\} by \{status\}/,
