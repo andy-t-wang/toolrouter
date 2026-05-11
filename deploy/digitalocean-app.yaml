@@ -145,6 +145,17 @@ services:
         value: "120"
       - key: TOOLROUTER_CORS_ORIGIN
         value: https://toolrouter.world
+      - key: DD_API_KEY
+        value: SET_IN_APP_PLATFORM
+        type: SECRET
+      - key: DD_SITE
+        value: datadoghq.com
+      - key: DD_ENV
+        value: production
+      - key: DD_SERVICE
+        value: toolrouter-api
+      - key: DD_SOURCE
+        value: toolrouter
 
   - name: web
     github:

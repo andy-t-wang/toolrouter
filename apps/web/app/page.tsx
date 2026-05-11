@@ -113,16 +113,20 @@ function average(values: number[]) {
 }
 
 function publicEndpointStatus(endpoint: Pick<LandingEndpoint, "status">) {
-  return endpoint.status && endpoint.status !== "unverified"
-    ? "healthy"
-    : "unverified";
+  return endpoint.status || "unverified";
 }
 
-function publicEndpointUptime(endpoint: Pick<LandingEndpoint, "status">) {
+function publicEndpointUptime(
+  endpoint: Pick<LandingEndpoint, "status" | "uptime_30d">,
+) {
+  if (typeof endpoint.uptime_30d === "number") return endpoint.uptime_30d;
   return publicEndpointStatus(endpoint) === "healthy" ? 100 : null;
 }
 
-function publicEndpointSparkline(endpoint: Pick<LandingEndpoint, "status">) {
+function publicEndpointSparkline(
+  endpoint: Pick<LandingEndpoint, "status" | "uptime_30d" | "sparkline_30d">,
+) {
+  if (Array.isArray(endpoint.sparkline_30d)) return endpoint.sparkline_30d;
   const uptime = publicEndpointUptime(endpoint);
   return typeof uptime === "number" ? [uptime] : [];
 }

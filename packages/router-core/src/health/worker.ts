@@ -370,7 +370,6 @@ export function createHealthWorker(options) {
           options?.logger?.error?.("endpoint health check failed", { error });
         });
       }, options?.intervalMs ?? DEFAULT_HEALTH_CHECK_INTERVAL_MS);
-      timer.unref?.();
       return timer;
     },
     stop() {
