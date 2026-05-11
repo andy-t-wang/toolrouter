@@ -1404,6 +1404,10 @@ code {
   padding: 22px var(--pad) var(--pad);
 }
 
+.quickstart-mcp-body.inline {
+  padding: 16px 0 0;
+}
+
 .mcp-connect {
   min-width: 0;
 }

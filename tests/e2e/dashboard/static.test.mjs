@@ -202,7 +202,9 @@ describe("web dashboard static wiring", () => {
     assert.match(dashboardPage, /Set up MCP/);
     assert.match(dashboardPage, /Verify World ID/);
     assert.match(dashboardPage, /Generate an API key/);
+    assert.match(dashboardPage, /Try it out/);
     assert.match(dashboardPage, /Copy prompt/);
+    assert.doesNotMatch(dashboardPage, /Copy the prompt/);
     assert.match(dashboardPage, /maybeRouteFirstRun/);
     assert.match(dashboardPage, /#quickstart/);
     assert.match(mcpContent, /top sushi places in San Francisco/);

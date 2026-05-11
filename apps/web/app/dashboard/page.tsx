@@ -1536,7 +1536,7 @@ export default function DashboardPage() {
                   <div>
                     <h1 className="display">Quickstart</h1>
                     <p className="sub">
-                      Verify World ID, generate an API key, then copy the prompt.
+                      Verify World ID, generate an API key, set up MCP, then try it out.
                     </p>
                   </div>
                 </div>
@@ -1661,9 +1661,26 @@ export default function DashboardPage() {
                     <div className="quickstart-step-body">
                       <div className="hd inline">
                         <div>
-                          <h2>Copy the prompt</h2>
+                          <h2>Set up MCP</h2>
                           <p className="muted">
-                            Paste this into your agent after adding the MCP server.
+                            Add ToolRouter to your MCP client with the generated key.
+                          </p>
+                        </div>
+                      </div>
+                      <div className="quickstart-mcp-body inline">
+                        <McpClientTabs apiKey={quickstartApiKey} compact />
+                      </div>
+                    </div>
+                  </section>
+
+                  <section className={`card quickstart-step ${quickstartApiKey ? "" : "locked"}`}>
+                    <div className="quickstart-step-index">4</div>
+                    <div className="quickstart-step-body">
+                      <div className="hd inline">
+                        <div>
+                          <h2>Try it out</h2>
+                          <p className="muted">
+                            Paste this into your agent after MCP is loaded.
                           </p>
                         </div>
                         <button
@@ -1685,18 +1702,6 @@ export default function DashboardPage() {
                       </pre>
                     </div>
                   </section>
-                </section>
-
-                <section className="card quickstart-card">
-                  <div className="hd">
-                    <h2>Set up MCP</h2>
-                    <a className="link-button" href="/setup">
-                      Client setup
-                    </a>
-                  </div>
-                  <div className="quickstart-mcp-body">
-                    <McpClientTabs apiKey={quickstartApiKey} compact />
-                  </div>
                 </section>
               </section>
             ) : null}
