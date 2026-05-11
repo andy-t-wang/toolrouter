@@ -81,4 +81,21 @@ describe("AgentKit registration helpers", () => {
       },
     );
   });
+
+  it("treats an already-registered relay response as idempotent", async () => {
+    const result = await parseAgentKitRelayResponse(
+      new Response(
+        JSON.stringify({
+          error: "This agent address is already registered on World Chain.",
+        }),
+        {
+          status: 409,
+          headers: { "content-type": "application/json" },
+        },
+      ),
+    );
+
+    assert.equal(result.already_registered, true);
+    assert.match(result.message, /already registered on World Chain/);
+  });
 });

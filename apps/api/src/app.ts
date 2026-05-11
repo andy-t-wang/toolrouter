@@ -841,6 +841,7 @@ async function completeAgentKitRegistration({
   return {
     registration: {
       tx_hash: result?.txHash || result?.transactionHash || null,
+      already_registered: Boolean(result?.already_registered),
     },
     ...verification,
   };

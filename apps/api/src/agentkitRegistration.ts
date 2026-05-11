@@ -21,6 +21,22 @@ const AGENT_BOOK_ABI = [
   },
 ] as const;
 
+function relayMessage(body: any, response: any) {
+  return (
+    body?.error?.message ||
+    body?.error ||
+    body?.message ||
+    `relay returned ${response.status}`
+  );
+}
+
+function relayAlreadyRegistered(message: string, response: any) {
+  return (
+    response.status === 409 &&
+    /already registered on World Chain/i.test(message)
+  );
+}
+
 function relayError(message: string, response: any, contentType: string) {
   return Object.assign(new Error(message), {
     statusCode: 502,
@@ -51,11 +67,13 @@ export async function parseAgentKitRelayResponse(response: any) {
     }
   }
   if (!response.ok) {
-    const message =
-      body?.error?.message ||
-      body?.error ||
-      body?.message ||
-      `relay returned ${response.status}`;
+    const message = relayMessage(body, response);
+    if (relayAlreadyRegistered(message, response)) {
+      return {
+        already_registered: true,
+        message,
+      };
+    }
     throw relayError(`AgentKit registration failed: ${message}`, response, contentType);
   }
   return body || {};

@@ -25,7 +25,7 @@ export const mcpClients = [
     code: `claude mcp add --scope user \\
   -e TOOLROUTER_API_URL=https://toolrouter.world \\
   -e TOOLROUTER_API_KEY=tr_... \\
-  toolrouter -- npx -y @worldcoin/toolrouter`,
+  -- toolrouter npx -y @worldcoin/toolrouter`,
   },
   {
     id: "codex",
@@ -34,7 +34,7 @@ export const mcpClients = [
     code: `codex mcp add \\
   --env TOOLROUTER_API_URL=https://toolrouter.world \\
   --env TOOLROUTER_API_KEY=tr_... \\
-  toolrouter -- npx -y @worldcoin/toolrouter`,
+  -- toolrouter npx -y @worldcoin/toolrouter`,
   },
   {
     id: "cursor",

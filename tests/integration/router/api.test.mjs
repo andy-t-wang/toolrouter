@@ -480,6 +480,50 @@ describe("router API", () => {
     assert.equal(agentBookRegistrations.at(-1).proof.length, 8);
   });
 
+  it("treats already-registered AgentKit relay responses as a completed verification check", async () => {
+    const isolatedStore = new LocalStore({
+      path: join(mkdtempSync(join(tmpdir(), "toolrouter-agentkit-already-registered-")), "store.json"),
+    });
+    const isolatedApp = createApiApp({
+      logger: false,
+      cache: new MemoryCache(),
+      store: isolatedStore,
+      agentBookVerifier: {
+        lookupHuman: async () => "human_already_registered",
+      },
+      agentBookRegistration: {
+        nextNonce: async () => 7n,
+        submit: async () => ({
+          already_registered: true,
+          message: "This agent address is already registered on World Chain.",
+        }),
+      },
+    });
+    await isolatedApp.listen({ port: 0, host: "127.0.0.1" });
+    const isolatedBaseUrl = `http://127.0.0.1:${isolatedApp.server.address().port}`;
+    try {
+      const response = await fetch(`${isolatedBaseUrl}/v1/agentkit/registration/complete`, {
+        method: "POST",
+        headers: sessionHeaders(),
+        body: JSON.stringify({
+          nonce: "7",
+          result: {
+            merkle_root: "0x01",
+            nullifier_hash: "0x02",
+            proof: Array.from({ length: 8 }, (_unused, index) => `0x${String(index + 1).padStart(64, "0")}`),
+          },
+        }),
+      });
+      assert.equal(response.status, 200);
+      const body = await response.json();
+      assert.equal(body.registration.tx_hash, null);
+      assert.equal(body.registration.already_registered, true);
+      assert.equal(body.agentkit_verification.verified, true);
+    } finally {
+      await isolatedApp.close();
+    }
+  });
+
   it("creates and reads request traces", async () => {
     const createResponse = await fetch(`${baseUrl}/v1/requests`, {
       method: "POST",
