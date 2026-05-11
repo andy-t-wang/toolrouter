@@ -259,24 +259,20 @@ function agentKitBenefit(provider: LandingEndpoint) {
   if (type.includes("free")) {
     return {
       label: "Free trial",
-      detail: "No credits required",
     };
   }
   if (type.includes("discount")) {
     return {
       label: "Discount",
-      detail: "Lower provider price",
     };
   }
   if (type.includes("access")) {
     return {
       label: "Access unlock",
-      detail: "Verified-human path",
     };
   }
   return {
     label: "AgentKit",
-    detail: "Benefit verified",
   };
 }
 
@@ -288,7 +284,6 @@ function AgentKitBenefit({ provider }: { provider: LandingEndpoint }) {
         <img src="/human.svg" alt="" aria-hidden="true" />
         {benefit.label}
       </span>
-      <span className="agentkit-status-detail">{benefit.detail}</span>
     </div>
   );
 }
