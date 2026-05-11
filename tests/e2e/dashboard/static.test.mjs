@@ -163,10 +163,13 @@ describe("web dashboard static wiring", () => {
     assert.match(dashboardPage, /Credits usually appear within 30-90 seconds after\s+checkout/);
     assert.match(dashboardPage, /ToolRouter retries settlement/);
     assert.match(dashboardLedger, /top_up_settled: "Credits added"/);
-    assert.match(dashboardLedger, /request_charge: "Usage charged"/);
+    assert.match(dashboardPage, /Credit activity/);
     assert.match(dashboardPage, /compactLedgerEntries\(ledger\)/);
     assert.match(dashboardPage, /ledgerTypeLabel\(entry\.type\)/);
     assert.match(dashboardPage, /ledgerAmountPolarity\(entry\)/);
+    assert.doesNotMatch(dashboardPage, /ledgerSourceCell/);
+    assert.doesNotMatch(dashboardPage, /<th>Source<\/th>/);
+    assert.doesNotMatch(dashboardPage, /<th>Reference<\/th>/);
     assert.match(dashboardPage, /copy-key-button/);
     assert.match(dashboardPage, /Copied/);
     assert.doesNotMatch(dashboardPage, /Payment address/);

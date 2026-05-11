@@ -9,7 +9,7 @@ import {
 } from "../../../apps/web/app/dashboard-ledger.ts";
 
 describe("dashboard ledger presentation", () => {
-  it("collapses request accounting events into one charged request row", () => {
+  it("hides request accounting events from account credit activity", () => {
     const rows = compactLedgerEntries([
       {
         id: "reserve_1",
@@ -37,13 +37,7 @@ describe("dashboard ledger presentation", () => {
       },
     ]);
 
-    assert.equal(rows.length, 1);
-    assert.equal(rows[0].type, "request_charge");
-    assert.equal(rows[0].reference_id, "crr_request_1");
-    assert.equal(rows[0].amount_usd, "0.007");
-    assert.equal(ledgerTypeLabel(rows[0].type), "Usage charged");
-    assert.equal(ledgerAmountPolarity(rows[0]), "negative");
-    assert.equal(ledgerAmountSign(rows[0]), "-");
+    assert.equal(rows.length, 0);
   });
 
   it("hides fully returned request credits from the compact ledger", () => {

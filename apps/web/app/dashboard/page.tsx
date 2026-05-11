@@ -188,20 +188,6 @@ function formatDate(value: string | null | undefined) {
   });
 }
 
-function sourceLabel(source: unknown) {
-  const labels: Record<string, string> = {
-    stripe: "Stripe",
-    toolrouter: "ToolRouter",
-    router: "ToolRouter",
-    x402: "x402",
-    agentkit: "AgentKit",
-  };
-  const normalized = String(source || "").trim();
-  if (!normalized) return "-";
-  const key = normalized.toLowerCase();
-  return labels[key] || normalized;
-}
-
 function formatTime(value: string | null | undefined) {
   if (!value) return "-";
   const date = new Date(value);
@@ -284,15 +270,6 @@ function endpointCell(endpointId: unknown) {
       <span>{meta.name}</span>
     </span>
   );
-}
-
-function ledgerSourceCell(entry: any) {
-  if (String(entry?.source || "").toLowerCase() === "request") {
-    return entry?.metadata?.endpoint_id
-      ? endpointCell(entry.metadata.endpoint_id)
-      : "Request";
-  }
-  return sourceLabel(entry?.source);
 }
 
 function keyStatus(active: boolean) {
@@ -1358,7 +1335,7 @@ export default function DashboardPage() {
 
                 <section className="card">
                   <div className="hd">
-                    <h2>Credit ledger</h2>
+                    <h2>Credit activity</h2>
                   </div>
                   <div className="table-scroll">
                     <table className="tbl ledger-table">
@@ -1366,8 +1343,6 @@ export default function DashboardPage() {
                         <tr>
                           <th>Date / time</th>
                           <th>Type</th>
-                          <th>Source</th>
-                          <th>Reference</th>
                           <th className="num">Amount</th>
                         </tr>
                       </thead>
@@ -1379,10 +1354,6 @@ export default function DashboardPage() {
                                 {formatDateTime(entry.ts)}
                               </td>
                               <td>{ledgerTypeLabel(entry.type)}</td>
-                              <td>{ledgerSourceCell(entry)}</td>
-                              <td className="mono muted clip">
-                                {entry.reference_id || "-"}
-                              </td>
                               <td
                                 className={`mono num ledger-amount ${ledgerAmountPolarity(entry)}`}
                               >
@@ -1392,7 +1363,7 @@ export default function DashboardPage() {
                           ))
                         ) : (
                           <tr>
-                            <td colSpan={5}>No credit activity yet.</td>
+                            <td colSpan={3}>No credit activity yet.</td>
                           </tr>
                         )}
                       </tbody>

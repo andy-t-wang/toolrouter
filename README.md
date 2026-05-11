@@ -83,7 +83,7 @@ After Stripe Checkout succeeds, credits usually appear in 30-90 seconds. If trea
 npm run billing:retry-funding
 ```
 
-Run the MCP server for Hermes, Codex, Claude, and other MCP-capable agents:
+Create an account and API key at `https://toolrouter.world/`, then run the MCP server for Hermes, Codex, Claude, and other MCP-capable agents:
 
 ```sh
 TOOLROUTER_API_URL=http://127.0.0.1:9402 TOOLROUTER_API_KEY=tr_... npx -y @worldcoin/toolrouter

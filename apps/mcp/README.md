@@ -2,6 +2,8 @@
 
 MCP adapter for ToolRouter. It exposes ToolRouter endpoints to MCP-capable agents and calls the ToolRouter API with your API key. Agents run this package with `npx`; they do not need a local ToolRouter repo checkout.
 
+Create an account, verify World ID, and generate an API key at [toolrouter.world](https://toolrouter.world/).
+
 ## Usage
 
 ```sh
