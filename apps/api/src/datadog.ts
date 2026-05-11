@@ -9,6 +9,7 @@ type DatadogClientConfig = {
 type MetricTags = Record<string, string | number | boolean | null | undefined>;
 
 const METRIC_TYPE_COUNT = 1;
+const METRIC_TYPE_GAUGE = 3;
 
 function trimSlash(value: string) {
   return value.replace(/\/$/u, "");
@@ -48,7 +49,7 @@ export function createDatadogClient({
   const apiKey = env.DD_API_KEY || env.DATADOG_API_KEY;
   const configured = Boolean(apiKey);
 
-  async function increment(metric: string, tags: MetricTags = {}, value = 1) {
+  async function submit(metric: string, type: number, tags: MetricTags = {}, value = 1) {
     if (!configured) return { sent: false, skipped: true };
     const response = await fetchImpl(`${datadogBaseUrl(env)}/api/v2/series`, {
       method: "POST",
@@ -60,7 +61,7 @@ export function createDatadogClient({
         series: [
           {
             metric,
-            type: METRIC_TYPE_COUNT,
+            type,
             points: [
               {
                 timestamp: Math.floor(now() / 1000),
@@ -83,8 +84,17 @@ export function createDatadogClient({
     return { sent: true, skipped: false };
   }
 
+  async function increment(metric: string, tags: MetricTags = {}, value = 1) {
+    return submit(metric, METRIC_TYPE_COUNT, tags, value);
+  }
+
+  async function gauge(metric: string, value: number, tags: MetricTags = {}) {
+    return submit(metric, METRIC_TYPE_GAUGE, tags, value);
+  }
+
   return {
     configured,
+    gauge,
     increment,
   };
 }

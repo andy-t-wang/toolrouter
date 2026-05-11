@@ -106,6 +106,7 @@ function publicTopUp(purchase: any) {
 
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 const DEFAULT_REQUEST_TIMEOUT_MS = 8_000;
+const DEFAULT_AGENTKIT_PREFLIGHT_TIMEOUT_MS = 2_500;
 const STATUS_RANK: Record<string, number> = {
   healthy: 0,
   degraded: 1,
@@ -116,6 +117,14 @@ const STATUS_RANK: Record<string, number> = {
 function envMs(name: string, fallback: number) {
   const value = Number(process.env[name]);
   return Number.isFinite(value) && value > 0 ? Math.floor(value) : fallback;
+}
+
+function agentKitPreflightTimeoutMs(requestTimeoutMs: number) {
+  const configured = envMs(
+    "TOOLROUTER_AGENTKIT_PREFLIGHT_TIMEOUT_MS",
+    DEFAULT_AGENTKIT_PREFLIGHT_TIMEOUT_MS,
+  );
+  return Math.max(1, Math.min(configured, requestTimeoutMs));
 }
 
 function timedOut(result: any) {
@@ -138,18 +147,41 @@ function logEndpointRequest(request: any, endpoint: any, result: any) {
 }
 
 function requestMetricStatus(row: any) {
+  if (Number(row.status_code) === 402) return "payment_required";
   return isErrorRequest(row) ? "fail" : "success";
 }
 
-function recordRequestMetrics(datadog: any, row: any) {
-  datadog?.increment?.("toolrouter.requests.count", {
+function datadogRequestTime(row: any) {
+  const parsed = Date.parse(row.ts || "");
+  if (!Number.isFinite(parsed)) return "unknown";
+  return new Date(parsed).toISOString().replace(/\.\d{3}Z$/u, "Z");
+}
+
+function datadogRequestTimestamp(row: any) {
+  const parsed = Date.parse(row.ts || "");
+  return Number.isFinite(parsed) ? Math.floor(parsed / 1000) : null;
+}
+
+function requestMetricTags(row: any) {
+  return {
     status: requestMetricStatus(row),
     endpoint: row.endpoint_id,
     path: row.path || "unknown",
     status_code: row.status_code || "unknown",
+    request_time: datadogRequestTime(row),
     request_id: row.id,
     trace_id: row.trace_id,
-  }).catch(() => undefined);
+  };
+}
+
+function recordRequestMetrics(datadog: any, row: any) {
+  const tags = requestMetricTags(row);
+  datadog?.increment?.("toolrouter.requests.count", tags).catch(() => undefined);
+  const requestTimestamp = datadogRequestTimestamp(row);
+  if (requestTimestamp !== null) {
+    datadog?.gauge?.("toolrouter.requests.timestamp", requestTimestamp, tags)
+      .catch(() => undefined);
+  }
   if (!isErrorRequest(row) && isAgentKitUse(row)) {
     datadog?.increment?.("toolrouter.agentkit.uses.count", {
       endpoint: row.endpoint_id,
@@ -594,12 +626,21 @@ function agentKitValueForRequest(endpoint: any, result: any) {
   };
 }
 
-function canTryAgentKitFreeTrialWithoutCredits(endpoint: any, paymentMode: any) {
+function shouldPreflightAgentKitFreeTrial(endpoint: any, paymentMode: any) {
   return endpoint?.agentkit_value_type === "free_trial" && paymentMode !== "x402_only";
 }
 
 function isInsufficientCreditsError(error: any) {
   return error?.code === "insufficient_credits";
+}
+
+function realizedFreeTrial(endpoint: any, result: any) {
+  return (
+    endpoint?.agentkit_value_type === "free_trial" &&
+    result?.ok === true &&
+    result?.path === "agentkit" &&
+    !result?.charged
+  );
 }
 
 function createRequestRow({
@@ -1361,39 +1402,63 @@ export function createApiApp({
         estimatedUsd: providerRequest.estimatedUsd,
         maxUsd,
       });
-      let executorPaymentMode = paymentMode;
-      try {
-        reservation = await reserveCredits({
-          store,
-          user_id: auth.user_id,
-          api_key_id: auth.api_key_id,
-          trace_id: traceId,
-          endpoint_id: endpoint.id,
-          amountUsd: String(
-            maxUsd ||
-              providerRequest.estimatedUsd ||
-              process.env.X402_MAX_USD_PER_REQUEST ||
-              "0.05",
-          ),
+      const paymentSigner = await paymentSignerForRequest(store, crossmint, auth);
+      const timeoutMs = envMs("TOOLROUTER_REQUEST_TIMEOUT_MS", DEFAULT_REQUEST_TIMEOUT_MS);
+      let result: any = null;
+      const preflightFreeTrial = shouldPreflightAgentKitFreeTrial(endpoint, paymentMode);
+      if (preflightFreeTrial) {
+        result = await executor({
+          endpoint,
+          request: providerRequest,
+          maxUsd,
+          paymentMode: "agentkit_only",
+          traceId,
+          paymentSigner,
+          timeoutMs: agentKitPreflightTimeoutMs(timeoutMs),
         });
-      } catch (error: any) {
-        if (
-          !isInsufficientCreditsError(error) ||
-          !canTryAgentKitFreeTrialWithoutCredits(endpoint, paymentMode)
-        ) {
-          throw error;
-        }
-        executorPaymentMode = "agentkit_only";
       }
-      const result = await executor({
-        endpoint,
-        request: providerRequest,
-        maxUsd,
-        paymentMode: executorPaymentMode,
-        traceId,
-        paymentSigner: await paymentSignerForRequest(store, crossmint, auth),
-        timeoutMs: envMs("TOOLROUTER_REQUEST_TIMEOUT_MS", DEFAULT_REQUEST_TIMEOUT_MS),
-      });
+
+      if (!result || !realizedFreeTrial(endpoint, result)) {
+        let fallbackPaymentMode = paymentMode;
+        if (preflightFreeTrial && paymentMode !== "agentkit_only") {
+          fallbackPaymentMode = "x402_only";
+        }
+        if (fallbackPaymentMode !== "agentkit_only") {
+          try {
+            reservation = await reserveCredits({
+              store,
+              user_id: auth.user_id,
+              api_key_id: auth.api_key_id,
+              trace_id: traceId,
+              endpoint_id: endpoint.id,
+              amountUsd: String(
+                maxUsd ||
+                  providerRequest.estimatedUsd ||
+                  process.env.X402_MAX_USD_PER_REQUEST ||
+                  "0.05",
+              ),
+            });
+          } catch (error: any) {
+            if (!isInsufficientCreditsError(error) || !preflightFreeTrial || !result) {
+              throw error;
+            }
+            fallbackPaymentMode = "agentkit_only";
+          }
+        }
+
+        if (reservation || !preflightFreeTrial) {
+          result = await executor({
+            endpoint,
+            request: providerRequest,
+            maxUsd,
+            paymentMode: fallbackPaymentMode,
+            traceId,
+            paymentSigner,
+            timeoutMs,
+          });
+        }
+      }
+
       logEndpointRequest(request, endpoint, result);
       const credit = reservation
         ? await finalizeCreditReservation({

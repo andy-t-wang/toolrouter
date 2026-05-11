@@ -673,11 +673,100 @@ describe("router API", () => {
       assert.equal(created.credit_captured_usd, null);
       assert.equal(created.credit_released_usd, null);
       assert.equal(executorCalls[0].paymentMode, "agentkit_only");
+      assert.equal(executorCalls[0].timeoutMs, 2_500);
 
       const listResponse = await fetch(`${isolatedBaseUrl}/v1/requests`, { headers: authHeaders() });
       const listed = await listResponse.json();
       assert.equal(listed.requests[0].agentkit_value_type, "free_trial");
       assert.equal(listed.requests[0].agentkit_value_label, "AgentKit-Free Trial");
+    } finally {
+      await isolatedApp.close();
+    }
+  });
+
+  it("falls back to paid x402 when Exa AgentKit preflight does not realize the free trial", async () => {
+    const executorCalls = [];
+    const isolatedStore = new LocalStore({
+      path: join(mkdtempSync(join(tmpdir(), "toolrouter-free-trial-fallback-")), "store.json"),
+    });
+    await isolatedStore.upsertCreditAccount({
+      user_id: process.env.TOOLROUTER_DEV_USER_ID,
+      available_usd: "1",
+      pending_usd: "0",
+      reserved_usd: "0",
+      currency: "USD",
+    });
+    const isolatedApp = createApiApp({
+      logger: false,
+      cache: new MemoryCache(),
+      store: isolatedStore,
+      executor: async (payload) => {
+        executorCalls.push(payload);
+        if (executorCalls.length === 1) {
+          return {
+            trace_id: payload.traceId,
+            endpoint_id: payload.endpoint.id,
+            status_code: 402,
+            ok: false,
+            path: "agentkit",
+            charged: false,
+            estimated_usd: payload.request.estimatedUsd,
+            amount_usd: null,
+            currency: null,
+            payment_reference: null,
+            payment_network: null,
+            payment_error: null,
+            latency_ms: payload.timeoutMs,
+            body: { error: "Payment required" },
+          };
+        }
+        return {
+          trace_id: payload.traceId,
+          endpoint_id: payload.endpoint.id,
+          status_code: 200,
+          ok: true,
+          path: "x402",
+          charged: true,
+          estimated_usd: payload.request.estimatedUsd,
+          amount_usd: "0.007",
+          currency: "USD",
+          payment_reference: "pay_x402_fallback",
+          payment_network: "eip155:8453",
+          payment_error: null,
+          latency_ms: 12,
+          body: { results: [] },
+        };
+      },
+    });
+    await isolatedApp.listen({ port: 0, host: "127.0.0.1" });
+    const isolatedBaseUrl = `http://127.0.0.1:${isolatedApp.server.address().port}`;
+    try {
+      const response = await fetch(`${isolatedBaseUrl}/v1/requests`, {
+        method: "POST",
+        headers: authHeaders(),
+        body: JSON.stringify({
+          endpoint_id: "exa.search",
+          input: { query: "AgentKit", search_type: "fast", num_results: 1 },
+          maxUsd: "0.02",
+        }),
+      });
+      assert.equal(response.status, 200);
+      const created = await response.json();
+      assert.equal(created.path, "x402");
+      assert.equal(created.charged, true);
+      assert.equal(created.credit_reserved_usd, "0.02");
+      assert.equal(created.credit_captured_usd, "0.007");
+      assert.equal(created.credit_released_usd, "0.013");
+      assert.equal(executorCalls.length, 2);
+      assert.equal(executorCalls[0].paymentMode, "agentkit_only");
+      assert.equal(executorCalls[0].timeoutMs, 2_500);
+      assert.equal(executorCalls[1].paymentMode, "x402_only");
+      assert.equal(executorCalls[1].timeoutMs, 8_000);
+
+      const listResponse = await fetch(`${isolatedBaseUrl}/v1/requests`, { headers: authHeaders() });
+      const listed = await listResponse.json();
+      assert.equal(listed.requests[0].agentkit_value_type, null);
+      assert.equal(listed.requests[0].agentkit_value_label, null);
     } finally {
       await isolatedApp.close();
     }
@@ -799,6 +888,65 @@ describe("router API", () => {
     }
   });
 
+  it("tags 402 Datadog request metrics as payment-required instead of failures", async () => {
+    const metrics = [];
+    const isolatedStore = new LocalStore({
+      path: join(mkdtempSync(join(tmpdir(), "toolrouter-datadog-402-")), "store.json"),
+    });
+    const isolatedApp = createApiApp({
+      logger: false,
+      cache: new MemoryCache(),
+      store: isolatedStore,
+      datadog: {
+        increment: async (metric, tags) => {
+          metrics.push({ metric, tags });
+          return { sent: true };
+        },
+        gauge: async (metric, value, tags) => {
+          metrics.push({ metric, value, tags });
+          return { sent: true };
+        },
+      },
+      executor: async (payload) => ({
+        trace_id: payload.traceId,
+        endpoint_id: payload.endpoint.id,
+        status_code: 402,
+        ok: false,
+        path: "x402",
+        charged: false,
+        estimated_usd: payload.request.estimatedUsd,
+        amount_usd: null,
+        currency: null,
+        payment_reference: null,
+        payment_network: null,
+        payment_error: null,
+        latency_ms: 1,
+        body: { error: "Payment required" },
+      }),
+    });
+    await isolatedApp.listen({ port: 0, host: "127.0.0.1" });
+    const isolatedBaseUrl = `http://127.0.0.1:${isolatedApp.server.address().port}`;
+    try {
+      const response = await fetch(`${isolatedBaseUrl}/v1/requests`, {
+        method: "POST",
+        headers: authHeaders(),
+        body: JSON.stringify({
+          endpoint_id: "exa.search",
+          input: { query: "AgentKit", search_type: "fast", num_results: 1 },
+          maxUsd: "0.02",
+          payment_mode: "x402_only",
+        }),
+      });
+      assert.equal(response.status, 200);
+      const requestMetric = metrics.find(
+        (entry) => entry.metric === "toolrouter.requests.count",
+      );
+      assert.equal(requestMetric.tags.status, "payment_required");
+    } finally {
+      await isolatedApp.close();
+    }
+  });
+
   it("passes the default request timeout and records timed-out requests", async () => {
     const previousTimeout = process.env.TOOLROUTER_REQUEST_TIMEOUT_MS;
     delete process.env.TOOLROUTER_REQUEST_TIMEOUT_MS;
@@ -849,7 +997,11 @@ describe("router API", () => {
       assert.equal(created.charged, false);
       assert.equal(created.credit_captured_usd, "0");
       assert.equal(created.credit_released_usd, "0.02");
-      assert.equal(executorCalls[0].timeoutMs, 8_000);
+      assert.equal(executorCalls.length, 2);
+      assert.equal(executorCalls[0].paymentMode, "agentkit_only");
+      assert.equal(executorCalls[0].timeoutMs, 2_500);
+      assert.equal(executorCalls[1].paymentMode, "x402_only");
+      assert.equal(executorCalls[1].timeoutMs, 8_000);
 
       const listResponse = await fetch(`${isolatedBaseUrl}/v1/requests`, { headers: authHeaders() });
       const listed = await listResponse.json();

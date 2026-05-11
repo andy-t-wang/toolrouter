@@ -89,6 +89,44 @@ function queryTable(title, queryString) {
   };
 }
 
+function recentRequestsTable() {
+  return {
+    definition: {
+      type: "query_table",
+      title: "Recent requests by time",
+      requests: [
+        {
+          response_format: "scalar",
+          queries: [
+            {
+              data_source: "metrics",
+              name: "request_count",
+              query: "sum:toolrouter.requests.count{env:production,source:toolrouter} by {request_time,request_id,trace_id,endpoint,status,status_code,path}.as_count().rollup(sum, 60)",
+              aggregator: "sum",
+            },
+          ],
+          formulas: [
+            {
+              formula: "request_count",
+              alias: "Requests",
+            },
+          ],
+          sort: {
+            count: 100,
+            order_by: [
+              {
+                type: "group",
+                name: "request_time",
+                order: "desc",
+              },
+            ],
+          },
+        },
+      ],
+    },
+  };
+}
+
 function query(q, displayType = "bars") {
   return {
     display_type: displayType,
@@ -102,12 +140,11 @@ const dashboard = {
   layout_type: "ordered",
   widgets: [
     timeseries("Requests per hour by status", [
-      query("sum:toolrouter.requests.count{env:production,source:toolrouter} by {status}.as_count().rollup(sum, 3600)"),
+      query("sum:toolrouter.requests.count{env:production,source:toolrouter,status:success}.as_count().rollup(sum, 3600)"),
+      query("sum:toolrouter.requests.count{env:production,source:toolrouter,status:fail,!status_code:402}.as_count().rollup(sum, 3600)"),
+      query("sum:toolrouter.requests.count{env:production,source:toolrouter,status_code:402}.as_count().rollup(sum, 3600)"),
     ]),
-    queryTable(
-      "Recent requests by id",
-      "sum:toolrouter.requests.count{env:production,source:toolrouter} by {request_id,trace_id,endpoint,status,status_code,path}.as_count().rollup(sum, 60)",
-    ),
+    recentRequestsTable(),
     timeseries("AgentKit uses per hour", [
       query("sum:toolrouter.agentkit.uses.count{env:production,source:toolrouter}.as_count().rollup(sum, 3600)"),
     ]),
