@@ -227,6 +227,7 @@ code {
   display: block;
   flex: none;
   height: 22px;
+  object-fit: contain;
   transform: translateY(-1px);
   width: 28px;
 }
@@ -1941,7 +1942,7 @@ code {
   border-bottom: 1px solid var(--line);
   display: grid;
   gap: 20px;
-  grid-template-columns: 2.4fr 1.1fr 1.4fr 0.9fr 0.7fr;
+  grid-template-columns: 2.2fr 1.1fr 1.1fr 1fr 0.7fr;
   padding: 14px var(--pad);
 }
 
@@ -1986,6 +1987,11 @@ code {
 
 .provider-id {
   font-size: 11px;
+}
+
+.check-age {
+  font-size: 12px;
+  line-height: 1.25;
 }
 
 .status-dot-label {
@@ -2873,7 +2879,7 @@ code {
 
   .mkt-uptime-grid {
     gap: 10px;
-    grid-template-columns: minmax(0, 1.5fr) minmax(96px, 0.9fr) 58px 54px;
+    grid-template-columns: minmax(0, 1.35fr) minmax(82px, 0.8fr) minmax(82px, 0.75fr) 54px;
     padding-left: 10px;
     padding-right: 10px;
   }

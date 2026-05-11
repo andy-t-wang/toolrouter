@@ -4,6 +4,8 @@ import { endpointRegistry } from "../endpoints/registry.ts";
 
 export const DEFAULT_HEALTH_CHECK_INTERVAL_MS = 12 * 60 * 60 * 1000;
 export const DEFAULT_HEALTH_PROBE_TIMEOUT_MS = 5_000;
+export const DEFAULT_HEALTH_FAILURE_RETRY_BASE_MS = 15 * 60 * 1000;
+export const DEFAULT_HEALTH_FAILURE_RETRY_MAX_MS = DEFAULT_HEALTH_CHECK_INTERVAL_MS;
 
 export const HEALTH_STATUSES = Object.freeze(["healthy", "degraded", "failing", "unverified"]);
 const AGENTKIT_HEALTH_PATHS = new Set(["agentkit", "agentkit_to_x402"]);
@@ -30,6 +32,30 @@ function healthProbeTimeoutMs(value) {
   return timeoutMs && timeoutMs > 0
     ? Math.floor(timeoutMs)
     : envMs("TOOLROUTER_HEALTH_PROBE_TIMEOUT_MS", DEFAULT_HEALTH_PROBE_TIMEOUT_MS);
+}
+
+function checkIntervalMs(value) {
+  const intervalMs = maybeNumber(value);
+  return intervalMs && intervalMs > 0 ? Math.floor(intervalMs) : DEFAULT_HEALTH_CHECK_INTERVAL_MS;
+}
+
+function failureRetryBaseMs(value) {
+  const intervalMs = maybeNumber(value);
+  return intervalMs && intervalMs > 0
+    ? Math.floor(intervalMs)
+    : envMs("TOOLROUTER_HEALTH_FAILURE_RETRY_BASE_MS", DEFAULT_HEALTH_FAILURE_RETRY_BASE_MS);
+}
+
+function failureRetryMaxMs(value) {
+  const intervalMs = maybeNumber(value);
+  return intervalMs && intervalMs > 0
+    ? Math.floor(intervalMs)
+    : envMs("TOOLROUTER_HEALTH_FAILURE_RETRY_MAX_MS", DEFAULT_HEALTH_FAILURE_RETRY_MAX_MS);
+}
+
+function workerTickMs(value, fallback) {
+  const intervalMs = maybeNumber(value);
+  return intervalMs && intervalMs > 0 ? Math.floor(intervalMs) : fallback;
 }
 
 function latencyBudgetMs(endpoint) {
@@ -119,6 +145,77 @@ async function recentAgentKitRequest({ db, endpoint, since }) {
   } catch {
     return null;
   }
+}
+
+async function currentEndpointStatus(db, endpointId) {
+  if (!db || typeof db.listEndpointStatus !== "function") return null;
+  try {
+    const rows = await db.listEndpointStatus();
+    return (rows || []).find((row) => row?.endpoint_id === endpointId) || null;
+  } catch {
+    return null;
+  }
+}
+
+async function recentHealthChecks(db, endpointId, limit = 25) {
+  if (!db || typeof db.listHealthChecks !== "function") return [];
+  try {
+    const rows = await db.listHealthChecks({ endpoint_id: endpointId, limit });
+    return (rows || []).slice().sort((a, b) => {
+      const aTime = Date.parse(a?.checked_at || a?.last_checked_at || "");
+      const bTime = Date.parse(b?.checked_at || b?.last_checked_at || "");
+      return (Number.isFinite(bTime) ? bTime : 0) - (Number.isFinite(aTime) ? aTime : 0);
+    });
+  } catch {
+    return [];
+  }
+}
+
+function isRecoveryStatus(status) {
+  return status === "failing" || status === "degraded";
+}
+
+function consecutiveRecoveryChecks(rows) {
+  let count = 0;
+  for (const row of rows || []) {
+    if (!isRecoveryStatus(row?.status)) break;
+    count += 1;
+  }
+  return Math.max(1, count);
+}
+
+function recoveryBackoffMs(attemptCount, baseMs, maxMs) {
+  const base = failureRetryBaseMs(baseMs);
+  const max = failureRetryMaxMs(maxMs);
+  const multiplier = 2 ** Math.max(0, Number(attemptCount || 1) - 1);
+  return Math.min(max, base * multiplier);
+}
+
+async function endpointProbeCadence({ db, endpointId, statusRow, now, healthyIntervalMs, retryBaseMs, retryMaxMs }) {
+  const status = statusRow?.status;
+  const checkedAt = statusRow?.last_checked_at || statusRow?.checked_at;
+  if (!checkedAt) return { due: true, intervalMs: 0, reason: null };
+  const checkedAtMs = Date.parse(checkedAt);
+  if (!Number.isFinite(checkedAtMs)) return { due: true, intervalMs: 0, reason: null };
+
+  if (!isRecoveryStatus(status)) {
+    const intervalMs = checkIntervalMs(healthyIntervalMs);
+    return {
+      due: now.getTime() - checkedAtMs >= intervalMs,
+      intervalMs,
+      reason: "recent_health_check",
+    };
+  }
+
+  const checks = await recentHealthChecks(db, endpointId);
+  const failures = consecutiveRecoveryChecks(checks);
+  const intervalMs = recoveryBackoffMs(failures, retryBaseMs, retryMaxMs);
+  return {
+    due: now.getTime() - checkedAtMs >= intervalMs,
+    intervalMs,
+    reason: "failure_backoff",
+    consecutive_failures: failures,
+  };
 }
 
 function rowFromRequest(endpoint, requestRow, fallbackCheckedAt) {
@@ -241,10 +338,39 @@ export async function runEndpointHealthCheck({
   recentRequestWindowMs = DEFAULT_HEALTH_CHECK_INTERVAL_MS,
   useRecentRequests = true,
   timeoutMs,
+  minCheckIntervalMs = null,
+  failureRetryBaseMs = null,
+  failureRetryMaxMs = null,
+  force = false,
 }) {
   if (!endpoint) throw new TypeError("endpoint is required");
   const checkedAt = now();
   const started = Date.now();
+
+  if (!force && minCheckIntervalMs) {
+    const currentStatus = await currentEndpointStatus(db, endpoint.id);
+    const cadence = await endpointProbeCadence({
+      db,
+      endpointId: endpoint.id,
+      statusRow: currentStatus,
+      now: checkedAt,
+      healthyIntervalMs: minCheckIntervalMs,
+      retryBaseMs: failureRetryBaseMs,
+      retryMaxMs: failureRetryMaxMs,
+    });
+    if (currentStatus && !cadence.due) {
+      return {
+        endpoint_id: endpoint.id,
+        status: currentStatus.status,
+        skipped: true,
+        skip_reason: cadence.reason,
+        next_check_after_ms: cadence.intervalMs,
+        consecutive_failures: cadence.consecutive_failures ?? null,
+        healthCheck: null,
+        endpointStatus: currentStatus,
+      };
+    }
+  }
 
   let healthCheckRow;
   if (!endpoint.enabled) {
@@ -331,6 +457,10 @@ export async function runEndpointHealthChecks({
   recentRequestWindowMs = DEFAULT_HEALTH_CHECK_INTERVAL_MS,
   useRecentRequests = true,
   timeoutMs,
+  minCheckIntervalMs = null,
+  failureRetryBaseMs = null,
+  failureRetryMaxMs = null,
+  force = false,
   logger,
 }: any = {}) {
   const results = [];
@@ -343,9 +473,13 @@ export async function runEndpointHealthChecks({
       recentRequestWindowMs,
       useRecentRequests,
       timeoutMs,
+      minCheckIntervalMs,
+      failureRetryBaseMs,
+      failureRetryMaxMs,
+      force,
     });
     results.push(result);
-    logger?.info?.("endpoint health check completed", {
+    logger?.info?.(result.skipped ? "endpoint health check skipped" : "endpoint health check completed", {
       endpoint_id: result.endpoint_id,
       status: result.status,
       status_code: result.healthCheck?.status_code ?? null,
@@ -353,6 +487,10 @@ export async function runEndpointHealthChecks({
       charged: Boolean(result.healthCheck?.charged),
       latency_ms: result.healthCheck?.latency_ms ?? null,
       timeout: String(result.healthCheck?.error || "").includes("timed out after"),
+      skipped: Boolean(result.skipped),
+      skip_reason: result.skip_reason ?? null,
+      next_check_after_ms: result.next_check_after_ms ?? null,
+      consecutive_failures: result.consecutive_failures ?? null,
       error: result.healthCheck?.error ?? null,
     });
   }
@@ -361,15 +499,28 @@ export async function runEndpointHealthChecks({
 
 export function createHealthWorker(options) {
   let timer = null;
+  const intervalMs = options?.intervalMs ?? DEFAULT_HEALTH_CHECK_INTERVAL_MS;
+  const retryBaseMs = failureRetryBaseMs(options?.failureRetryBaseMs);
+  const retryMaxMs = failureRetryMaxMs(options?.failureRetryMaxMs);
+  const tickMs = workerTickMs(
+    options?.tickMs ?? process.env.TOOLROUTER_HEALTH_WORKER_TICK_MS,
+    Math.min(intervalMs, retryBaseMs),
+  );
+  const runOptions = {
+    ...options,
+    minCheckIntervalMs: options?.minCheckIntervalMs ?? intervalMs,
+    failureRetryBaseMs: retryBaseMs,
+    failureRetryMaxMs: retryMaxMs,
+  };
   return {
-    runOnce: () => runEndpointHealthChecks(options),
+    runOnce: (overrides = {}) => runEndpointHealthChecks({ ...runOptions, ...overrides }),
     start() {
       if (timer) return timer;
       timer = setInterval(() => {
-        runEndpointHealthChecks(options).catch((error) => {
+        runEndpointHealthChecks(runOptions).catch((error) => {
           options?.logger?.error?.("endpoint health check failed", { error });
         });
-      }, options?.intervalMs ?? DEFAULT_HEALTH_CHECK_INTERVAL_MS);
+      }, tickMs);
       return timer;
     },
     stop() {

@@ -874,7 +874,7 @@ export default function DashboardPage() {
         <main className="auth-layout">
           <section className="card auth-panel">
             <div className="top-brand">
-              <img className="brand-mark" src="/toolrouter-mark.svg" alt="" aria-hidden="true" />
+              <img className="brand-mark" src="/logo.png" alt="" aria-hidden="true" />
               <span>ToolRouter</span>
             </div>
             <h1 className="display">Sign in or Create Account</h1>
@@ -912,7 +912,7 @@ export default function DashboardPage() {
               href="#dashboard"
               onClick={() => setPage("dashboard")}
             >
-              <img className="brand-mark" src="/toolrouter-mark.svg" alt="" aria-hidden="true" />
+              <img className="brand-mark" src="/logo.png" alt="" aria-hidden="true" />
               <span>ToolRouter</span>
             </a>
             <nav className="topnav-tabs" aria-label="Dashboard sections">

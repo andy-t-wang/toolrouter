@@ -13,7 +13,7 @@ const worker = createHealthWorker({
 });
 
 if (process.argv.includes("--once")) {
-  const results = await worker.runOnce();
+  const results = await worker.runOnce({ force: process.argv.includes("--force") });
   console.log(JSON.stringify({ ok: true, checked: results.length, results }, null, 2));
 } else {
   await worker.runOnce();

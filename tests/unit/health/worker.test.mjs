@@ -6,13 +6,25 @@ import { getEndpoint, runEndpointHealthCheck } from "../../../packages/router-co
 function createDb(requestRows = []) {
   const insertedHealthChecks = [];
   const upsertedStatuses = [];
+  const endpointStatuses = [];
+  const healthChecks = [];
   return {
     insertedHealthChecks,
     upsertedStatuses,
+    endpointStatuses,
+    healthChecks,
     listRequestFilters: [],
+    listHealthCheckFilters: [],
     async listRequests(filters) {
       this.listRequestFilters.push(filters);
       return requestRows;
+    },
+    async listHealthChecks(filters) {
+      this.listHealthCheckFilters.push(filters);
+      return healthChecks.filter((row) => !filters.endpoint_id || row.endpoint_id === filters.endpoint_id);
+    },
+    async listEndpointStatus() {
+      return endpointStatuses;
     },
     async insertHealthCheck(row) {
       insertedHealthChecks.push(row);
@@ -26,6 +38,188 @@ function createDb(requestRows = []) {
 }
 
 describe("endpoint health worker", () => {
+  it("skips a probe when the endpoint was checked inside the cadence window", async () => {
+    const endpoint = getEndpoint("browserbase.session");
+    const db = createDb();
+    db.endpointStatuses.push({
+      endpoint_id: "browserbase.session",
+      status: "healthy",
+      last_checked_at: "2026-05-09T10:00:00.000Z",
+      status_code: 200,
+    });
+    let executed = false;
+
+    const result = await runEndpointHealthCheck({
+      endpoint,
+      db,
+      executor: async () => {
+        executed = true;
+        return { ok: true, status_code: 200, path: "agentkit_to_x402", charged: true };
+      },
+      now: () => new Date("2026-05-09T11:00:00.000Z"),
+      minCheckIntervalMs: 12 * 60 * 60 * 1000,
+    });
+
+    assert.equal(executed, false);
+    assert.equal(result.skipped, true);
+    assert.equal(result.skip_reason, "recent_health_check");
+    assert.equal(db.insertedHealthChecks.length, 0);
+    assert.equal(db.upsertedStatuses.length, 0);
+  });
+
+  it("runs a probe when the last endpoint status is outside the cadence window", async () => {
+    const endpoint = getEndpoint("browserbase.session");
+    const db = createDb();
+    db.endpointStatuses.push({
+      endpoint_id: "browserbase.session",
+      status: "healthy",
+      last_checked_at: "2026-05-08T22:59:59.000Z",
+      status_code: 200,
+    });
+    let executed = false;
+
+    const result = await runEndpointHealthCheck({
+      endpoint,
+      db,
+      executor: async () => {
+        executed = true;
+        return {
+          ok: true,
+          status_code: 200,
+          path: "agentkit_to_x402",
+          charged: true,
+          latency_ms: 40,
+          amount_usd: "0.01",
+        };
+      },
+      now: () => new Date("2026-05-09T11:00:00.000Z"),
+      minCheckIntervalMs: 12 * 60 * 60 * 1000,
+    });
+
+    assert.equal(executed, true);
+    assert.equal(result.skipped, undefined);
+    assert.equal(result.status, "healthy");
+    assert.equal(db.insertedHealthChecks.length, 1);
+  });
+
+  it("retries failed endpoints on the first backoff interval instead of waiting for the healthy cadence", async () => {
+    const endpoint = getEndpoint("browserbase.search");
+    const db = createDb();
+    db.endpointStatuses.push({
+      endpoint_id: "browserbase.search",
+      status: "failing",
+      last_checked_at: "2026-05-09T10:00:00.000Z",
+      status_code: 500,
+    });
+    db.healthChecks.push({
+      endpoint_id: "browserbase.search",
+      status: "failing",
+      checked_at: "2026-05-09T10:00:00.000Z",
+    });
+    let executed = false;
+
+    const result = await runEndpointHealthCheck({
+      endpoint,
+      db,
+      executor: async () => {
+        executed = true;
+        return {
+          ok: true,
+          status_code: 200,
+          path: "agentkit_to_x402",
+          charged: true,
+          latency_ms: 40,
+        };
+      },
+      now: () => new Date("2026-05-09T10:16:00.000Z"),
+      minCheckIntervalMs: 12 * 60 * 60 * 1000,
+      failureRetryBaseMs: 15 * 60 * 1000,
+      failureRetryMaxMs: 12 * 60 * 60 * 1000,
+    });
+
+    assert.equal(executed, true);
+    assert.equal(result.status, "healthy");
+    assert.equal(db.insertedHealthChecks.length, 1);
+  });
+
+  it("skips failed endpoints until their exponential backoff interval elapses", async () => {
+    const endpoint = getEndpoint("browserbase.search");
+    const db = createDb();
+    db.endpointStatuses.push({
+      endpoint_id: "browserbase.search",
+      status: "failing",
+      last_checked_at: "2026-05-09T10:00:00.000Z",
+      status_code: 500,
+    });
+    db.healthChecks.push(
+      {
+        endpoint_id: "browserbase.search",
+        status: "failing",
+        checked_at: "2026-05-09T10:00:00.000Z",
+      },
+      {
+        endpoint_id: "browserbase.search",
+        status: "failing",
+        checked_at: "2026-05-09T09:44:00.000Z",
+      },
+    );
+    let executed = false;
+
+    const result = await runEndpointHealthCheck({
+      endpoint,
+      db,
+      executor: async () => {
+        executed = true;
+        return { ok: true, status_code: 200, path: "agentkit_to_x402", charged: true };
+      },
+      now: () => new Date("2026-05-09T10:20:00.000Z"),
+      minCheckIntervalMs: 12 * 60 * 60 * 1000,
+      failureRetryBaseMs: 15 * 60 * 1000,
+      failureRetryMaxMs: 12 * 60 * 60 * 1000,
+    });
+
+    assert.equal(executed, false);
+    assert.equal(result.skipped, true);
+    assert.equal(result.skip_reason, "failure_backoff");
+    assert.equal(result.consecutive_failures, 2);
+    assert.equal(result.next_check_after_ms, 30 * 60 * 1000);
+  });
+
+  it("allows forced probes to bypass the cadence guard", async () => {
+    const endpoint = getEndpoint("browserbase.session");
+    const db = createDb();
+    db.endpointStatuses.push({
+      endpoint_id: "browserbase.session",
+      status: "healthy",
+      last_checked_at: "2026-05-09T10:00:00.000Z",
+      status_code: 200,
+    });
+    let executed = false;
+
+    const result = await runEndpointHealthCheck({
+      endpoint,
+      db,
+      executor: async () => {
+        executed = true;
+        return {
+          ok: true,
+          status_code: 200,
+          path: "agentkit_to_x402",
+          charged: true,
+          latency_ms: 40,
+          amount_usd: "0.01",
+        };
+      },
+      now: () => new Date("2026-05-09T11:00:00.000Z"),
+      minCheckIntervalMs: 12 * 60 * 60 * 1000,
+      force: true,
+    });
+
+    assert.equal(executed, true);
+    assert.equal(result.status, "healthy");
+    assert.equal(db.insertedHealthChecks.length, 1);
+  });
+
   it("reuses a recent successful AgentKit request instead of spending a new probe", async () => {
     const endpoint = getEndpoint("exa.search");
     const db = createDb([

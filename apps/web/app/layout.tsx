@@ -32,11 +32,11 @@ export const metadata: Metadata = {
   },
   icons: {
     icon: [
-      { url: "/toolrouter-mark.svg", type: "image/svg+xml" },
+      { url: "/logo.png", type: "image/png" },
       { url: "/favicon.ico", sizes: "any" },
     ],
-    shortcut: "/toolrouter-mark.svg",
-    apple: "/toolrouter-mark.svg",
+    shortcut: "/logo.png",
+    apple: "/logo.png",
   },
 };
 
@@ -44,9 +44,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en">
       <head>
-        <link rel="icon" href="/toolrouter-mark.svg" type="image/svg+xml" />
-        <link rel="shortcut icon" href="/toolrouter-mark.svg" />
-        <link rel="apple-touch-icon" href="/toolrouter-mark.svg" />
+        <link rel="icon" href="/logo.png" type="image/png" />
+        <link rel="shortcut icon" href="/logo.png" />
+        <link rel="apple-touch-icon" href="/logo.png" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
         <link

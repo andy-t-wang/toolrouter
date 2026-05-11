@@ -20,7 +20,7 @@ const css = readFileSync(new URL("../../../apps/web/app/globals.css", import.met
 describe("web dashboard static wiring", () => {
   it("keeps the public landing page at the root route", () => {
     assert.match(landingPage, /ToolRouter/);
-    assert.match(landingPage, /\/toolrouter-mark\.svg/);
+    assert.match(landingPage, /\/logo\.png/);
     assert.match(landingPage, /Tools your agent/);
     assert.match(landingPage, /Simplified billing/);
     assert.match(landingPage, /no\s+stablecoin\s+top-ups/);
@@ -40,8 +40,11 @@ describe("web dashboard static wiring", () => {
     assert.match(landingPage, /\/dashboard/);
     assert.match(landingPage, /\/v1\/status/);
     assert.match(landingPage, /publicEndpointStatus\(provider\)/);
-    assert.match(landingPage, /publicEndpointUptime/);
-    assert.match(landingPage, /publicEndpointSparkline\(provider\)/);
+    assert.match(landingPage, /paymentPathLabel\(provider\)/);
+    assert.match(landingPage, /Last check/);
+    assert.match(landingPage, /Checked at least once/);
+    assert.doesNotMatch(landingPage, /Fleet uptime/);
+    assert.doesNotMatch(landingPage, /Last 30 days/);
     assert.match(landingPage, /displayEndpointId\(provider\)/);
     assert.doesNotMatch(landingPage, /AgentKitStatusBadge/);
     assert.doesNotMatch(landingPage, /status-human-badge/);
@@ -231,7 +234,7 @@ describe("web dashboard static wiring", () => {
     assert.match(css, /\.endpoint-cell\s*\{[^}]*display:\s*inline-flex/);
     assert.doesNotMatch(css, /\.endpoint-cell\s*\{[^}]*display:\s*grid/);
     assert.match(layout, /rel="icon"/);
-    assert.match(layout, /\/toolrouter-mark\.svg/);
+    assert.match(layout, /\/logo\.png/);
   });
 
   it("serves path-specific OpenGraph images for public pages", () => {
@@ -247,6 +250,9 @@ describe("web dashboard static wiring", () => {
     assert.match(docsPage, /Ship endpoints agents can trust\./);
     assert.match(ogRoute, /ImageResponse/);
     assert.match(ogRoute, /routeCards/);
+    assert.match(ogRoute, /Tools your agent can trust/);
+    assert.doesNotMatch(ogRoute, /AgentKit \+ x402 tool routing/);
+    assert.doesNotMatch(ogRoute, /Every endpoint is verified/);
     assert.match(ogRoute, /"\/setup"/);
     assert.match(ogRoute, /"\/docs"/);
     assert.match(ogRoute, /width:\s*1200/);

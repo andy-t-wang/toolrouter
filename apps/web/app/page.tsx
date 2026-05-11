@@ -20,6 +20,10 @@ type LandingEndpoint = {
   uptime_30d?: number | null;
   sparkline_30d?: Array<number | null>;
   health_check_count_30d?: number;
+  path?: string | null;
+  charged?: boolean;
+  amount_usd?: number | string | null;
+  last_error?: string | null;
 };
 
 type LandingStatus = {
@@ -107,28 +111,8 @@ function statusRank(status: string) {
   return ranks[status] ?? ranks.unverified;
 }
 
-function average(values: number[]) {
-  if (!values.length) return null;
-  return values.reduce((sum, value) => sum + value, 0) / values.length;
-}
-
 function publicEndpointStatus(endpoint: Pick<LandingEndpoint, "status">) {
   return endpoint.status || "unverified";
-}
-
-function publicEndpointUptime(
-  endpoint: Pick<LandingEndpoint, "status" | "uptime_30d">,
-) {
-  if (typeof endpoint.uptime_30d === "number") return endpoint.uptime_30d;
-  return publicEndpointStatus(endpoint) === "healthy" ? 100 : null;
-}
-
-function publicEndpointSparkline(
-  endpoint: Pick<LandingEndpoint, "status" | "uptime_30d" | "sparkline_30d">,
-) {
-  if (Array.isArray(endpoint.sparkline_30d)) return endpoint.sparkline_30d;
-  const uptime = publicEndpointUptime(endpoint);
-  return typeof uptime === "number" ? [uptime] : [];
 }
 
 function mergeEndpointRows(rows: LandingEndpoint[]) {
@@ -150,9 +134,6 @@ function mergeEndpointRows(rows: LandingEndpoint[]) {
 }
 
 function summarizeStatus(endpoints: LandingEndpoint[], bodySummary: any = {}) {
-  const trackedUptime = endpoints
-    .map(publicEndpointUptime)
-    .filter((value): value is number => typeof value === "number");
   return {
     endpoint_count: Math.max(
       Number(bodySummary?.endpoint_count || 0),
@@ -161,7 +142,7 @@ function summarizeStatus(endpoints: LandingEndpoint[], bodySummary: any = {}) {
     operational_count: endpoints.filter(
       (endpoint) => publicEndpointStatus(endpoint) === "healthy",
     ).length,
-    uptime_30d: average(trackedUptime),
+    uptime_30d: null,
     last_checked_at:
       endpoints
         .map((endpoint) => endpoint.last_checked_at)
@@ -239,43 +220,6 @@ function formatProbeAge(value?: string | null) {
   return `Last probe ${diffDays} days ago`;
 }
 
-function Uptime30({ values }: { values: Array<number | null> }) {
-  if (!values?.some((value) => typeof value === "number")) {
-    return <span className="mono muted no-probes">not yet probed</span>;
-  }
-  const padded =
-    values.length >= 30
-      ? values.slice(-30)
-      : [...Array(30 - values.length).fill(null), ...values];
-  return (
-    <div className="mkt-uptime-bars" aria-hidden="true">
-      {padded.map((value, index) => {
-        if (value === null) return <span key={index} className="ub null" />;
-        const cls =
-          value >= 99.9
-            ? "ok"
-            : value >= 99
-              ? "ok2"
-              : value >= 95
-                ? "warn"
-                : "bad";
-        return (
-          <span
-            key={index}
-            className={`ub ${cls}`}
-            title={`Day -${30 - index}: ${value.toFixed(2)}%`}
-          >
-            <span
-              className="ub-fill"
-              style={{ height: `${Math.max(8, value)}%` }}
-            />
-          </span>
-        );
-      })}
-    </div>
-  );
-}
-
 function StatusDot({ status }: { status: string }) {
   const map: Record<string, { dot: string; label: string }> = {
     degraded: { dot: "warn", label: "Degraded" },
@@ -305,6 +249,17 @@ function displayEndpointId(provider: LandingEndpoint) {
     : provider.id;
 }
 
+function paymentPathLabel(provider: LandingEndpoint) {
+  if (!provider.path) return "Awaiting check";
+  if (provider.path === "agentkit" && !provider.charged) return "AgentKit free";
+  if (provider.path === "agentkit_to_x402") {
+    return provider.charged ? "AgentKit + x402" : "AgentKit checked";
+  }
+  if (provider.path === "x402") return provider.charged ? "x402 paid" : "x402";
+  if (provider.path === "timeout") return "Timed out";
+  return provider.path;
+}
+
 function ProviderMark({ provider }: { provider: LandingEndpoint }) {
   const src = providerLogoSrc(provider.provider);
   const label = titleCase(provider.provider);
@@ -316,11 +271,6 @@ function ProviderMark({ provider }: { provider: LandingEndpoint }) {
 }
 
 function UptimeRow({ provider }: { provider: LandingEndpoint }) {
-  const publicUptime = publicEndpointUptime(provider);
-  const uptime =
-    typeof publicUptime === "number"
-      ? `${publicUptime.toFixed(2)}%`
-      : "—";
   const latency = provider.p50_latency_ms ?? provider.latency_ms;
   return (
     <div className="mkt-uptime-grid mkt-uptime-row">
@@ -340,10 +290,10 @@ function UptimeRow({ provider }: { provider: LandingEndpoint }) {
       <div>
         <StatusDot status={publicEndpointStatus(provider)} />
       </div>
-      <div className="hide-md">
-        <Uptime30 values={publicEndpointSparkline(provider)} />
+      <div className="mono muted check-age">
+        {formatProbeAge(provider.last_checked_at)}
       </div>
-      <div className="num mono">{uptime}</div>
+      <div className="mono muted hide-md">{paymentPathLabel(provider)}</div>
       <div className="num mono muted">
         {typeof latency === "number" ? `${latency}ms` : "—"}
       </div>
@@ -398,7 +348,6 @@ function HumanBoostArt() {
 export default async function LandingPage() {
   const statusData = await loadLandingStatus();
   const providers = statusData.endpoints;
-  const avg = statusData.summary.uptime_30d;
   const operational = statusData.summary.operational_count;
   const endpointCount = statusData.summary.endpoint_count || providers.length;
   const probedCount = providers.reduce(
@@ -414,7 +363,7 @@ export default async function LandingPage() {
             <a className="mkt-brand" href="/">
               <img
                 className="brand-mark"
-                src="/toolrouter-mark.svg"
+                src="/logo.png"
                 alt=""
                 aria-hidden="true"
               />
@@ -653,28 +602,28 @@ export default async function LandingPage() {
           <div className="mkt-container">
             <div className="uptime-head">
               <div>
-                <div className="mkt-eyebrow">Live status · 30 days</div>
+                <div className="mkt-eyebrow">Live status</div>
                 <h2 className="mkt-display">Verified Liveness</h2>
                 <p className="mkt-lede compact">
                   Each endpoint runs through a real AgentKit or x402 call on
-                  schedule. If a provider drifts, agents on ToolRouter learn
-                  before you do.
+                  schedule. The table shows the latest verified result, not a
+                  launch-era uptime claim from sparse history.
                 </p>
               </div>
               <div className="uptime-summary">
-                <div className="us-row">
-                  <div className="us-num num">
-                    {typeof avg === "number" ? avg.toFixed(2) : "—"}
-                    <span className="us-sm">%</span>
-                  </div>
-                  <div className="us-lbl">Fleet uptime · 30d</div>
-                </div>
                 <div className="us-row">
                   <div className="us-num num">
                     {operational}
                     <span className="us-sm muted">/{endpointCount}</span>
                   </div>
                   <div className="us-lbl">Operational right now</div>
+                </div>
+                <div className="us-row">
+                  <div className="us-num num">
+                    {probedCount}
+                    <span className="us-sm muted">/{endpointCount}</span>
+                  </div>
+                  <div className="us-lbl">Checked at least once</div>
                 </div>
               </div>
             </div>
@@ -683,9 +632,9 @@ export default async function LandingPage() {
               <div className="mkt-uptime-grid uptime-grid-head">
                 <div>Endpoint</div>
                 <div>Status</div>
-                <div className="hide-md">Last 30 days</div>
-                <div>Uptime</div>
-                <div>p50</div>
+                <div>Last check</div>
+                <div className="hide-md">Path</div>
+                <div>Latency</div>
               </div>
               {providers.map((provider) => (
                 <UptimeRow key={provider.id} provider={provider} />
@@ -721,7 +670,7 @@ export default async function LandingPage() {
             <a className="mkt-brand small" href="/">
               <img
                 className="brand-mark"
-                src="/toolrouter-mark.svg"
+                src="/logo.png"
                 alt=""
                 aria-hidden="true"
               />
