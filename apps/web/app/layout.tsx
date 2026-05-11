@@ -6,7 +6,7 @@ const appUrl = process.env.NEXT_PUBLIC_TOOLROUTER_APP_URL || "https://toolrouter
 const defaultDescription =
   "ToolRouter is an MCP server your agent connects to once. Every endpoint behind it is verified, paid through AgentKit, and traced end-to-end.";
 const defaultOgImage = {
-  url: "/og?path=/",
+  url: "/og.png",
   width: 1200,
   height: 630,
   alt: "ToolRouter",
