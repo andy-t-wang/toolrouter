@@ -45,7 +45,7 @@ export default function SetupPage() {
             <div className="mkt-nav-actions">
               <a
                 className="mkt-icon-link"
-                href="https://github.com/andy-t-wang/toolrouter/settings"
+                href="https://github.com/andy-t-wang/toolrouter"
                 target="_blank"
                 rel="noreferrer"
                 aria-label="GitHub"
