@@ -68,6 +68,20 @@ function materializeEndpoint(definition) {
       paymentMode: definition.health_probe.payment_mode || definition.default_payment_mode || "agentkit_first",
       latencyBudgetMs: definition.health_probe.latency_budget_ms ?? definition.health_probe.latencyBudgetMs,
     }),
+    agentkitHealthProbe: Object.freeze({
+      ...(definition.agentkit_health_probe || definition.health_probe),
+      maxUsd: definition.agentkit_health_probe?.max_usd || definition.agentkit_health_probe?.maxUsd || maxUsd,
+      paymentMode:
+        definition.agentkit_health_probe?.payment_mode ||
+        definition.agentkit_health_probe?.paymentMode ||
+        definition.default_payment_mode ||
+        "agentkit_first",
+      latencyBudgetMs:
+        definition.agentkit_health_probe?.latency_budget_ms ??
+        definition.agentkit_health_probe?.latencyBudgetMs ??
+        definition.health_probe.latency_budget_ms ??
+        definition.health_probe.latencyBudgetMs,
+    }),
     liveSmoke: Object.freeze({
       ...definition.live_smoke,
     }),
@@ -97,6 +111,7 @@ export function endpointToJSON(endpoint) {
     ui: endpoint.ui,
     fixture_input: endpoint.fixtureInput,
     health_probe: endpoint.healthProbe,
+    agentkit_health_probe: endpoint.agentkitHealthProbe,
     default_payment_mode: endpoint.defaultPaymentMode,
     enabled: endpoint.enabled,
   };

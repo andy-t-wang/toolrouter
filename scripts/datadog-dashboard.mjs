@@ -127,11 +127,17 @@ function recentRequestsTable() {
   };
 }
 
-function query(q, displayType = "bars") {
-  return {
+function query(q, displayType = "bars", options = {}) {
+  const request = {
     display_type: displayType,
     q,
   };
+  if (options.palette) {
+    request.style = {
+      palette: options.palette,
+    };
+  }
+  return request;
 }
 
 const THIRTY_MINUTES_SECONDS = 1800;
@@ -142,9 +148,9 @@ const dashboard = {
   layout_type: "ordered",
   widgets: [
     timeseries("Requests per 30 min by status", [
-      query(`sum:toolrouter.requests.count{env:production,source:toolrouter,status:success}.as_count().rollup(sum, ${THIRTY_MINUTES_SECONDS})`),
-      query(`sum:toolrouter.requests.count{env:production,source:toolrouter,status:fail,!status_code:402}.as_count().rollup(sum, ${THIRTY_MINUTES_SECONDS})`),
-      query(`sum:toolrouter.requests.count{env:production,source:toolrouter,status_code:402}.as_count().rollup(sum, ${THIRTY_MINUTES_SECONDS})`),
+      query(`sum:toolrouter.requests.count{env:production,source:toolrouter,status:success}.as_count().rollup(sum, ${THIRTY_MINUTES_SECONDS})`, "bars", { palette: "green" }),
+      query(`sum:toolrouter.requests.count{env:production,source:toolrouter,status:fail,!status_code:402}.as_count().rollup(sum, ${THIRTY_MINUTES_SECONDS})`, "bars", { palette: "red" }),
+      query(`sum:toolrouter.requests.count{env:production,source:toolrouter,status_code:402}.as_count().rollup(sum, ${THIRTY_MINUTES_SECONDS})`, "bars", { palette: "gray" }),
     ]),
     recentRequestsTable(),
     timeseries("AgentKit uses per 30 min", [

@@ -24,12 +24,23 @@ export const exaSearchEndpointDefinition = Object.freeze({
     num_results: 5,
   },
   health_probe: {
-    mode: "challenge",
-    payment_mode: "agentkit_first",
+    mode: "paid_availability",
+    payment_mode: "x402_only",
     max_usd: "0.01",
-    latency_budget_ms: 2500,
+    latency_budget_ms: 10000,
     input: {
       query: "ToolRouter health check",
+      search_type: "fast",
+      num_results: 5,
+    },
+  },
+  agentkit_health_probe: {
+    mode: "agentkit_benefit",
+    payment_mode: "agentkit_first",
+    max_usd: "0.01",
+    latency_budget_ms: 10000,
+    input: {
+      query: "ToolRouter AgentKit health check",
       search_type: "fast",
       num_results: 5,
     },

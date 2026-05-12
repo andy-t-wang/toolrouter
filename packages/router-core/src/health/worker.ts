@@ -112,11 +112,11 @@ function agentKitValueRealized(endpoint, row) {
   return AGENTKIT_HEALTH_PATHS.has(row?.path);
 }
 
-function statusFromResult(result, endpoint) {
+function statusFromResult(result, endpoint, { requireAgentKitValue = false } = {}) {
   if (result.payment_error) return "degraded";
   if (result.ok) {
     if (result.latency_ms > latencyBudgetMs(endpoint)) return "degraded";
-    if (!freeTrialValueRealized(endpoint, result)) return "degraded";
+    if (requireAgentKitValue && !freeTrialValueRealized(endpoint, result)) return "degraded";
     return "healthy";
   }
   if (result.status_code === null) return "failing";
@@ -218,8 +218,12 @@ async function endpointProbeCadence({ db, endpointId, statusRow, now, healthyInt
   };
 }
 
-function rowFromRequest(endpoint, requestRow, fallbackCheckedAt) {
-  const checkedAt = requestRow.ts || fallbackCheckedAt.toISOString();
+function healthProbeForEndpoint(endpoint, probeKind = "availability") {
+  if (probeKind === "agentkit") return endpoint.agentkitHealthProbe || endpoint.healthProbe;
+  return endpoint.healthProbe;
+}
+
+function rowFromRequest(endpoint, requestRow, checkedAt, { probeKind = "availability" } = {}) {
   const normalized = {
     status_code: maybeNumber(requestRow.status_code),
     ok: requestRow.ok !== false,
@@ -231,8 +235,10 @@ function rowFromRequest(endpoint, requestRow, fallbackCheckedAt) {
   return {
     id: `hc_req_${requestRow.id || randomUUID()}_${randomUUID()}`,
     endpoint_id: endpoint.id,
-    checked_at: checkedAt,
-    status: statusFromResult(normalized, endpoint),
+    checked_at: checkedAt.toISOString(),
+    status: statusFromResult(normalized, endpoint, {
+      requireAgentKitValue: probeKind === "agentkit",
+    }),
     status_code: normalized.status_code,
     latency_ms: normalized.latency_ms,
     path: maybeString(requestRow.path),
@@ -323,10 +329,10 @@ async function upsertEndpointStatus(db, row) {
   throw new TypeError("db must expose upsertEndpointStatus(row) or Supabase from(table)");
 }
 
-async function persistRows(db, healthCheckRow) {
+async function persistRows(db, healthCheckRow, { updateEndpointStatus = true } = {}) {
   const statusRow = endpointStatusRow(healthCheckRow);
   await insertHealthCheck(db, healthCheckRow);
-  await upsertEndpointStatus(db, statusRow);
+  if (updateEndpointStatus) await upsertEndpointStatus(db, statusRow);
   return statusRow;
 }
 
@@ -341,6 +347,8 @@ export async function runEndpointHealthCheck({
   minCheckIntervalMs = null,
   failureRetryBaseMs = null,
   failureRetryMaxMs = null,
+  probeKind = "availability",
+  updateEndpointStatus = true,
   force = false,
 }) {
   if (!endpoint) throw new TypeError("endpoint is required");
@@ -401,18 +409,20 @@ export async function runEndpointHealthCheck({
           })
         : null;
       if (recentRequest) {
-        healthCheckRow = rowFromRequest(endpoint, recentRequest, checkedAt);
+        healthCheckRow = rowFromRequest(endpoint, recentRequest, checkedAt, { probeKind });
       } else {
-        const request = endpoint.buildRequest(endpoint.healthProbe.input);
+        const probe = healthProbeForEndpoint(endpoint, probeKind);
+        const request = endpoint.buildRequest(probe.input);
         const traceId = `health_${randomUUID()}`;
         const result = await executeThroughExecutor(executor, {
           kind: "health_probe",
+          probeKind,
           endpoint,
           endpointId: endpoint.id,
-          input: endpoint.healthProbe.input,
+          input: probe.input,
           request,
-          maxUsd: endpoint.healthProbe.maxUsd,
-          paymentMode: endpoint.healthProbe.paymentMode || endpoint.defaultPaymentMode || "agentkit_first",
+          maxUsd: probe.maxUsd,
+          paymentMode: probe.paymentMode || endpoint.defaultPaymentMode || "agentkit_first",
           traceId,
           timeoutMs: healthProbeTimeoutMs(timeoutMs),
         });
@@ -421,7 +431,9 @@ export async function runEndpointHealthCheck({
           id: `hc_${randomUUID()}`,
           endpoint_id: endpoint.id,
           checked_at: checkedAt.toISOString(),
-          status: statusFromResult(normalized, endpoint),
+          status: statusFromResult(normalized, endpoint, {
+            requireAgentKitValue: probeKind === "agentkit",
+          }),
           status_code: normalized.status_code,
           latency_ms: normalized.latency_ms,
           path: normalized.path,
@@ -440,7 +452,7 @@ export async function runEndpointHealthCheck({
     }
   }
 
-  const statusRow = await persistRows(db, healthCheckRow);
+  const statusRow = await persistRows(db, healthCheckRow, { updateEndpointStatus });
   return {
     endpoint_id: endpoint.id,
     status: healthCheckRow.status,
@@ -460,6 +472,8 @@ export async function runEndpointHealthChecks({
   minCheckIntervalMs = null,
   failureRetryBaseMs = null,
   failureRetryMaxMs = null,
+  probeKind = "availability",
+  updateEndpointStatus = true,
   force = false,
   logger,
 }: any = {}) {
@@ -476,11 +490,14 @@ export async function runEndpointHealthChecks({
       minCheckIntervalMs,
       failureRetryBaseMs,
       failureRetryMaxMs,
+      probeKind,
+      updateEndpointStatus,
       force,
     });
     results.push(result);
     logger?.info?.(result.skipped ? "endpoint health check skipped" : "endpoint health check completed", {
       endpoint_id: result.endpoint_id,
+      probe_kind: probeKind,
       status: result.status,
       status_code: result.healthCheck?.status_code ?? null,
       path: result.healthCheck?.path ?? null,

@@ -95,6 +95,9 @@ describe("Datadog metrics helper", () => {
     assert.match(datadogDashboardScript, /status_code:402/);
     assert.match(datadogDashboardScript, /THIRTY_MINUTES_SECONDS = 1800/);
     assert.match(datadogDashboardScript, /Requests per 30 min by status/);
+    assert.match(datadogDashboardScript, /status:success[\s\S]+palette: "green"/);
+    assert.match(datadogDashboardScript, /status:fail,!status_code:402[\s\S]+palette: "red"/);
+    assert.match(datadogDashboardScript, /status_code:402[\s\S]+palette: "gray"/);
     assert.doesNotMatch(datadogDashboardScript, /rollup\(sum, 3600\)/);
     assert.doesNotMatch(
       datadogDashboardScript,

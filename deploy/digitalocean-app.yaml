@@ -238,5 +238,7 @@ workers:
         value: api.exa.ai,x402.browserbase.com
       - key: X402_MAX_USD_PER_REQUEST
         value: "0.05"
-      - key: TOOLROUTER_HEALTH_INTERVAL_MS
+      - key: TOOLROUTER_PAID_HEALTH_INTERVAL_MS
+        value: "3600000"
+      - key: TOOLROUTER_AGENTKIT_HEALTH_INTERVAL_MS
         value: "43200000"

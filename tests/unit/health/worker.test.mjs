@@ -256,7 +256,7 @@ describe("endpoint health worker", () => {
 
     assert.equal(executed, false);
     assert.equal(result.status, "healthy");
-    assert.equal(db.insertedHealthChecks[0].checked_at, "2026-05-09T10:00:00.000Z");
+    assert.equal(db.insertedHealthChecks[0].checked_at, "2026-05-09T11:00:00.000Z");
     assert.equal(db.insertedHealthChecks[0].path, "agentkit");
     assert.equal(db.upsertedStatuses[0].path, "agentkit");
     assert.equal(db.listRequestFilters[0].endpoint_id, "exa.search");
@@ -343,14 +343,14 @@ describe("endpoint health worker", () => {
         status_code: 200,
         path: "agentkit",
         charged: false,
-        latency_ms: 2_501,
+        latency_ms: 10_001,
       }),
       now: () => new Date("2026-05-09T11:00:00.000Z"),
       useRecentRequests: false,
     });
 
     assert.equal(result.status, "degraded");
-    assert.equal(db.insertedHealthChecks[0].latency_ms, 2_501);
+    assert.equal(db.insertedHealthChecks[0].latency_ms, 10_001);
     assert.equal(db.upsertedStatuses[0].status, "degraded");
   });
 
@@ -365,7 +365,7 @@ describe("endpoint health worker", () => {
         ok: true,
         path: "agentkit",
         charged: false,
-        latency_ms: 3_000,
+        latency_ms: 10_001,
         error: null,
       },
     ]);
@@ -384,7 +384,7 @@ describe("endpoint health worker", () => {
 
     assert.equal(executed, false);
     assert.equal(result.status, "degraded");
-    assert.equal(db.insertedHealthChecks[0].latency_ms, 3_000);
+    assert.equal(db.insertedHealthChecks[0].latency_ms, 10_001);
   });
 
   it("does not reuse a paid fallback as free-trial AgentKit evidence", async () => {
@@ -424,7 +424,7 @@ describe("endpoint health worker", () => {
     assert.equal(db.insertedHealthChecks[0].path, "agentkit");
   });
 
-  it("marks a free-trial paid fallback as degraded even when the provider call succeeds", async () => {
+  it("keeps free-trial endpoints healthy when the paid availability path succeeds", async () => {
     const endpoint = getEndpoint("exa.search");
     const db = createDb();
 
@@ -443,9 +443,35 @@ describe("endpoint health worker", () => {
       useRecentRequests: false,
     });
 
-    assert.equal(result.status, "degraded");
+    assert.equal(result.status, "healthy");
     assert.equal(db.insertedHealthChecks[0].path, "agentkit_to_x402");
     assert.equal(db.insertedHealthChecks[0].charged, true);
+  });
+
+  it("does not let AgentKit benefit checks overwrite endpoint availability status", async () => {
+    const endpoint = getEndpoint("exa.search");
+    const db = createDb();
+
+    const result = await runEndpointHealthCheck({
+      endpoint,
+      db,
+      executor: async () => ({
+        ok: true,
+        status_code: 200,
+        path: "agentkit_to_x402",
+        charged: true,
+        latency_ms: 40,
+        amount_usd: "0.007",
+      }),
+      now: () => new Date("2026-05-09T11:00:00.000Z"),
+      useRecentRequests: false,
+      probeKind: "agentkit",
+      updateEndpointStatus: false,
+    });
+
+    assert.equal(result.status, "degraded");
+    assert.equal(db.insertedHealthChecks[0].path, "agentkit_to_x402");
+    assert.equal(db.upsertedStatuses.length, 0);
   });
 
   it("allows AgentKit access endpoints to be healthy when they use x402 with AgentKit proof", async () => {

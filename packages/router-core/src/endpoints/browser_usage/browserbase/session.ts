@@ -23,7 +23,16 @@ export const browserbaseSessionEndpointDefinition = Object.freeze({
     estimated_minutes: 5,
   },
   health_probe: {
-    mode: "challenge",
+    mode: "paid_availability",
+    payment_mode: "x402_only",
+    max_usd: "0.02",
+    latency_budget_ms: 5000,
+    input: {
+      estimated_minutes: 5,
+    },
+  },
+  agentkit_health_probe: {
+    mode: "agentkit_benefit",
     payment_mode: "agentkit_first",
     max_usd: "0.02",
     latency_budget_ms: 5000,

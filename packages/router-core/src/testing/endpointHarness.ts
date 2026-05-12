@@ -72,17 +72,28 @@ export function validateEndpointConfig(endpoint) {
   if (!isPlainObject(endpoint.healthProbe)) {
     errors.push("healthProbe is required");
   } else {
-    if (endpoint.healthProbe.mode !== "challenge") errors.push("healthProbe.mode must be challenge");
+    if (endpoint.healthProbe.mode !== "paid_availability") errors.push("healthProbe.mode must be paid_availability");
     if (!isPlainObject(endpoint.healthProbe.input)) errors.push("healthProbe.input must be an object");
     if (!validUsdString(endpoint.healthProbe.maxUsd)) errors.push("healthProbe.maxUsd must be a USD string");
-    if (endpoint.healthProbe.paymentMode !== "agentkit_first") {
-      errors.push("healthProbe.paymentMode must be agentkit_first");
+    if (endpoint.healthProbe.paymentMode !== "x402_only") {
+      errors.push("healthProbe.paymentMode must be x402_only");
     }
     if (
       endpoint.healthProbe.latencyBudgetMs !== undefined &&
       (!Number.isFinite(endpoint.healthProbe.latencyBudgetMs) || endpoint.healthProbe.latencyBudgetMs <= 0)
     ) {
       errors.push("healthProbe.latencyBudgetMs must be a positive number");
+    }
+  }
+
+  if (!isPlainObject(endpoint.agentkitHealthProbe)) {
+    errors.push("agentkitHealthProbe is required");
+  } else {
+    if (endpoint.agentkitHealthProbe.mode !== "agentkit_benefit") {
+      errors.push("agentkitHealthProbe.mode must be agentkit_benefit");
+    }
+    if (endpoint.agentkitHealthProbe.paymentMode !== "agentkit_first") {
+      errors.push("agentkitHealthProbe.paymentMode must be agentkit_first");
     }
   }
 
