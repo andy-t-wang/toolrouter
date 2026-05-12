@@ -1,0 +1,36 @@
+name: Live E2E
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 9 * * *"
+
+jobs:
+  live-e2e:
+    runs-on: ubuntu-latest
+    env:
+      ROUTER_DEV_MODE: "false"
+      RUN_LIVE_EXA_TESTS: "true"
+      RUN_LIVE_EXA_PAID_SMOKE: "true"
+      RUN_LIVE_BROWSERBASE_TESTS: "true"
+      RUN_LIVE_BROWSERBASE_PAID_SMOKE: "true"
+      AGENT_WALLET_PRIVATE_KEY: ${{ secrets.AGENT_WALLET_PRIVATE_KEY }}
+      CROSSMINT_ENV: "production"
+      CROSSMINT_SERVER_SIDE_API_KEY: ${{ secrets.CROSSMINT_SERVER_SIDE_API_KEY }}
+      CROSSMINT_SIGNER_SECRET: ${{ secrets.CROSSMINT_SIGNER_SECRET }}
+      CROSSMINT_LIVE_WALLET_LOCATOR: ${{ secrets.CROSSMINT_LIVE_WALLET_LOCATOR }}
+      CROSSMINT_LIVE_WALLET_ADDRESS: ${{ secrets.CROSSMINT_LIVE_WALLET_ADDRESS }}
+      AGENTKIT_CHAIN_ID: "eip155:480"
+      X402_ALLOWED_HOSTS: "api.exa.ai,x402.browserbase.com"
+      X402_ALLOWED_CHAINS: "eip155:8453,eip155:480"
+      X402_MAX_USD_PER_REQUEST: "0.01"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run type-check
+      - run: npm test
+      - run: npm run test:live:endpoints

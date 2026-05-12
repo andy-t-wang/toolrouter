@@ -1,0 +1,17 @@
+{
+  "name": "@toolrouter/worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node --env-file-if-exists=../../.env --import tsx src/health-worker.ts --once",
+    "start": "node --env-file-if-exists=../../.env --import tsx src/health-worker.ts",
+    "check": "tsc -p ../../tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@toolrouter/api": "file:../api",
+    "@toolrouter/db": "file:../../packages/db",
+    "@toolrouter/router-core": "file:../../packages/router-core",
+    "tsx": "^4.21.0"
+  }
+}

@@ -1,0 +1,30 @@
+# Environment and local secrets
+.env
+.env.*
+!.env.example
+*.local
+
+# Local agent/runtime state
+.agentkit-router/
+.mcp.json
+.codex/
+
+# Dependencies
+node_modules/
+
+# Build output and caches
+.next/
+apps/web/.next/
+dist/
+coverage/
+.turbo/
+.pytest_cache/
+*.tsbuildinfo
+
+# Logs and OS/editor noise
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.DS_Store

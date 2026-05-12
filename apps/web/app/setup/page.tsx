@@ -1,0 +1,130 @@
+import { McpClientTabs } from "../mcp-client-tabs.tsx";
+import { firstQueryPrompt } from "../mcp-content.ts";
+
+const setupDescription =
+  "Add one MCP server and give any agent the same verified ToolRouter tools.";
+const setupOgImage = {
+  url: "/og?path=/setup",
+  width: 1200,
+  height: 630,
+  alt: "ToolRouter setup",
+};
+
+export const metadata = {
+  title: "ToolRouter Setup",
+  description: setupDescription,
+  openGraph: {
+    title: "Connect any MCP-capable agent.",
+    description: setupDescription,
+    url: "/setup",
+    images: [setupOgImage],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Connect any MCP-capable agent.",
+    description: setupDescription,
+    images: [setupOgImage],
+  },
+};
+
+export default function SetupPage() {
+  return (
+    <>
+      <main className="mkt-page docs-page">
+        <nav className="mkt-nav" aria-label="Main navigation">
+          <div className="mkt-container mkt-nav-inner">
+            <a className="mkt-brand" href="/">
+              <img
+                className="brand-mark"
+                src="/logo.png"
+                alt=""
+                aria-hidden="true"
+              />
+              <span>ToolRouter</span>
+            </a>
+            <div className="mkt-nav-actions">
+              <a className="mkt-btn ghost sm" href="/docs">
+                Endpoint docs
+              </a>
+              <a className="mkt-btn sm" href="/dashboard">
+                Get Started
+              </a>
+            </div>
+          </div>
+        </nav>
+
+        <header className="doc-hero">
+          <div className="mkt-container">
+            <div className="mkt-eyebrow">Agent setup</div>
+            <h1 className="mkt-display">Set up your Agent with ToolRouter</h1>
+            <p className="mkt-lede">One MCP layer for all your tool calls</p>
+          </div>
+        </header>
+
+        <section className="doc-section">
+          <div className="mkt-container">
+            <McpClientTabs />
+          </div>
+        </section>
+
+        <section className="doc-section">
+          <div className="mkt-container doc-grid">
+            <div>
+              <h2 className="mkt-display">Tool categories</h2>
+              <p>
+                Agents should think in generic categories first. ToolRouter
+                recommends a concrete endpoint for each category, then records
+                the actual provider, AgentKit path, x402 fallback, and spend cap
+                in the trace.
+              </p>
+            </div>
+            <div className="doc-list tool-list">
+              <div>
+                <strong>search</strong>
+                <span>Recommended: Exa Search for fresh web results.</span>
+              </div>
+              <div>
+                <strong>browser use</strong>
+                <span>
+                  Recommended: Browserbase Session for interactive browser
+                  workflows.
+                </span>
+              </div>
+              <div>
+                <strong>toolrouter_list_categories</strong>
+                <span>
+                  Ask ToolRouter which categories and recommended endpoints are
+                  available.
+                </span>
+              </div>
+              <div>
+                <strong>toolrouter_call_endpoint</strong>
+                <span>
+                  Call the selected endpoint explicitly when you already know
+                  the endpoint_id.
+                </span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section className="doc-section doc-final">
+          <div className="mkt-container doc-code-grid">
+            <div>
+              <h2 className="mkt-display">First query</h2>
+              <p>
+                After the MCP server is loaded, this verifies discovery and
+                execution by making the agent inspect ToolRouter categories,
+                call a concrete endpoint, and return the request id from the
+                trace.
+              </p>
+            </div>
+            <pre className="landing-code">
+              <code>{firstQueryPrompt}</code>
+            </pre>
+          </div>
+        </section>
+      </main>
+    </>
+  );
+}

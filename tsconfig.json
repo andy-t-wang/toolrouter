@@ -1,0 +1,28 @@
+{
+  "compilerOptions": {
+    "target": "ES2024",
+    "lib": ["ES2024", "DOM", "DOM.Iterable"],
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "jsx": "preserve",
+    "strict": false,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "allowSyntheticDefaultImports": true,
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "allowImportingTsExtensions": true,
+    "forceConsistentCasingInFileNames": true,
+    "ignoreDeprecations": "6.0",
+    "baseUrl": ".",
+    "paths": {
+      "@toolrouter/auth": ["packages/auth/src/index.ts"],
+      "@toolrouter/cache": ["packages/cache/src/index.ts"],
+      "@toolrouter/db": ["packages/db/src/index.ts"],
+      "@toolrouter/router-core": ["packages/router-core/src/index.ts"],
+      "@toolrouter/router-core/*": ["packages/router-core/src/*"]
+    }
+  },
+  "include": ["apps/**/*.ts", "apps/**/*.tsx", "packages/**/*.ts", "tests/**/*.mjs"],
+  "exclude": ["node_modules", ".next", "dist"]
+}

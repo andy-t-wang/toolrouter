@@ -1,0 +1,24 @@
+{
+  "name": "@toolrouter/web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node ../../scripts/with-root-env.mjs ../../node_modules/next/dist/bin/next dev --hostname 0.0.0.0",
+    "build": "node ../../scripts/with-root-env.mjs ../../node_modules/next/dist/bin/next build",
+    "start": "node ../../scripts/with-root-env.mjs ../../node_modules/next/dist/bin/next start --hostname 0.0.0.0",
+    "check": "tsc -p ../../tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.105.3",
+    "@worldcoin/idkit-core": "^2.1.0",
+    "next": "^16.2.6",
+    "qrcode.react": "^4.2.0",
+    "react": "^19.2.5",
+    "react-dom": "^19.2.5"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3"
+  }
+}

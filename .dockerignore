@@ -1,0 +1,16 @@
+.env
+.env.*
+!.env.example
+.git
+.agentkit-router
+.mcp.json
+.codex
+.next
+node_modules
+npm-debug.log
+apps/*/.next
+apps/*/node_modules
+coverage
+dist
+*.local
+*.log

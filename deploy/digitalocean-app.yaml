@@ -1,0 +1,254 @@
+# DigitalOcean App Platform template for the public ToolRouter MVP.
+# Replace every SET_IN_APP_PLATFORM value before deployment.
+# Route /v1 and /health to the API; keep the dashboard on /.
+# Attach both toolrouter.world and api.toolrouter.com to this app so misconfigured
+# MCP clients that use the API subdomain still reach the same /v1 routes.
+
+name: toolrouter
+region: nyc
+
+alerts:
+  - rule: DEPLOYMENT_FAILED
+  - rule: DOMAIN_FAILED
+
+ingress:
+  rules:
+    - match:
+        path:
+          prefix: /v1
+      component:
+        name: api
+        preserve_path_prefix: true
+    - match:
+        path:
+          prefix: /health
+      component:
+        name: api
+        preserve_path_prefix: true
+    - match:
+        path:
+          prefix: /webhooks
+      component:
+        name: api
+        preserve_path_prefix: true
+    - match:
+        path:
+          prefix: /
+      component:
+        name: web
+
+services:
+  - name: api
+    github:
+      repo: your-org/toolrouter
+      branch: main
+      deploy_on_push: true
+    source_dir: /
+    dockerfile_path: deploy/Dockerfile.api
+    http_port: 8080
+    # The API is the core product and should autoscale on dedicated CPU.
+    # Dashboard and worker stay fixed-size until their load justifies scaling.
+    instance_size_slug: apps-d-1vcpu-1gb
+    autoscaling:
+      min_instance_count: 2
+      max_instance_count: 8
+      metrics:
+        cpu:
+          percent: 65
+    health_check:
+      initial_delay_seconds: 20
+      period_seconds: 10
+      timeout_seconds: 5
+      success_threshold: 1
+      failure_threshold: 5
+      http_path: /health
+      port: 8080
+    liveness_health_check:
+      initial_delay_seconds: 30
+      period_seconds: 10
+      timeout_seconds: 5
+      success_threshold: 1
+      failure_threshold: 6
+      http_path: /health
+      port: 8080
+    alerts:
+      - rule: CPU_UTILIZATION
+        operator: GREATER_THAN
+        value: 75
+        window: FIVE_MINUTES
+      - rule: MEM_UTILIZATION
+        operator: GREATER_THAN
+        value: 80
+        window: FIVE_MINUTES
+    envs:
+      - key: NODE_ENV
+        value: production
+      - key: SUPABASE_URL
+        value: SET_IN_APP_PLATFORM
+        type: SECRET
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        value: SET_IN_APP_PLATFORM
+        type: SECRET
+      - key: SUPABASE_ANON_KEY
+        value: SET_IN_APP_PLATFORM
+        type: SECRET
+      - key: VALKEY_URL
+        value: SET_IN_APP_PLATFORM
+        type: SECRET
+      - key: X402_DEFAULT_CHAIN_ID
+        value: eip155:8453
+      - key: X402_ALLOWED_CHAINS
+        value: eip155:8453,eip155:480
+      - key: X402_ALLOWED_HOSTS
+        value: api.exa.ai,x402.browserbase.com
+      - key: X402_MAX_USD_PER_REQUEST
+        value: "0.05"
+      - key: TOOLROUTER_AGENTKIT_PREFLIGHT_TIMEOUT_MS
+        value: "10000"
+      - key: TOOLROUTER_MAX_TOP_UP_USD
+        value: "5"
+      - key: STRIPE_SECRET_KEY
+        value: SET_IN_APP_PLATFORM
+        type: SECRET
+      - key: STRIPE_WEBHOOK_SECRET
+        value: SET_IN_APP_PLATFORM
+        type: SECRET
+      - key: RESEND_API_KEY
+        value: SET_IN_APP_PLATFORM
+        type: SECRET
+      - key: TOOLROUTER_ALERT_EMAIL
+        value: ops@toolrouter.world
+      - key: TOOLROUTER_ALERT_FROM
+        value: ToolRouter <alerts@toolrouter.world>
+      - key: TOOLROUTER_CHECKOUT_SUCCESS_URL
+        value: https://toolrouter.world/dashboard#billing
+      - key: TOOLROUTER_CHECKOUT_CANCEL_URL
+        value: https://toolrouter.world/dashboard#billing
+      - key: CROSSMINT_ENV
+        value: production
+      - key: CROSSMINT_SERVER_SIDE_API_KEY
+        value: SET_IN_APP_PLATFORM
+        type: SECRET
+      - key: CROSSMINT_CHAIN
+        value: base
+      - key: CROSSMINT_SIGNER_SECRET
+        value: SET_IN_APP_PLATFORM
+        type: SECRET
+      - key: CROSSMINT_TREASURY_WALLET_LOCATOR
+        value: evm:alias:toolrouter-treasury-base
+      - key: TOOLROUTER_RATE_LIMIT_PER_MINUTE
+        value: "60"
+      - key: TOOLROUTER_IP_RATE_LIMIT_PER_MINUTE
+        value: "120"
+      - key: TOOLROUTER_CORS_ORIGIN
+        value: https://toolrouter.world
+      - key: DD_API_KEY
+        value: SET_IN_APP_PLATFORM
+        type: SECRET
+      - key: DD_SITE
+        value: datadoghq.com
+      - key: DD_ENV
+        value: production
+      - key: DD_SERVICE
+        value: toolrouter-api
+      - key: DD_SOURCE
+        value: toolrouter
+
+  - name: web
+    github:
+      repo: your-org/toolrouter
+      branch: main
+      deploy_on_push: true
+    source_dir: /
+    dockerfile_path: deploy/Dockerfile.web
+    http_port: 8080
+    instance_count: 1
+    instance_size_slug: apps-s-1vcpu-1gb
+    health_check:
+      initial_delay_seconds: 30
+      period_seconds: 10
+      timeout_seconds: 5
+      success_threshold: 1
+      failure_threshold: 5
+      http_path: /
+      port: 8080
+    alerts:
+      - rule: CPU_UTILIZATION
+        operator: GREATER_THAN
+        value: 75
+        window: FIVE_MINUTES
+      - rule: MEM_UTILIZATION
+        operator: GREATER_THAN
+        value: 80
+        window: FIVE_MINUTES
+    envs:
+      - key: NODE_ENV
+        value: production
+      - key: NEXT_PUBLIC_TOOLROUTER_API_URL
+        value: ""
+        scope: BUILD_TIME
+      - key: NEXT_PUBLIC_TOOLROUTER_APP_URL
+        value: https://toolrouter.world
+        scope: BUILD_TIME
+      - key: NEXT_PUBLIC_SUPABASE_URL
+        value: SET_IN_APP_PLATFORM
+        scope: BUILD_TIME
+      - key: NEXT_PUBLIC_SUPABASE_ANON_KEY
+        value: SET_IN_APP_PLATFORM
+        scope: BUILD_TIME
+
+workers:
+  - name: health-worker
+    github:
+      repo: your-org/toolrouter
+      branch: main
+      deploy_on_push: true
+    source_dir: /
+    dockerfile_path: deploy/Dockerfile.worker
+    instance_count: 1
+    instance_size_slug: apps-s-1vcpu-1gb
+    liveness_health_check:
+      initial_delay_seconds: 30
+      period_seconds: 30
+      timeout_seconds: 5
+      success_threshold: 1
+      failure_threshold: 3
+      http_path: /health
+      port: 8080
+    envs:
+      - key: NODE_ENV
+        value: production
+      - key: SUPABASE_URL
+        value: SET_IN_APP_PLATFORM
+        type: SECRET
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        value: SET_IN_APP_PLATFORM
+        type: SECRET
+      - key: X402_DEFAULT_CHAIN_ID
+        value: eip155:8453
+      - key: X402_ALLOWED_CHAINS
+        value: eip155:8453,eip155:480
+      - key: X402_ALLOWED_HOSTS
+        value: api.exa.ai,x402.browserbase.com
+      - key: X402_MAX_USD_PER_REQUEST
+        value: "0.05"
+      - key: TOOLROUTER_PAID_HEALTH_INTERVAL_MS
+        value: "3600000"
+      - key: TOOLROUTER_AGENTKIT_HEALTH_INTERVAL_MS
+        value: "43200000"
+      - key: CROSSMINT_ENV
+        value: production
+      - key: CROSSMINT_SERVER_SIDE_API_KEY
+        value: SET_IN_APP_PLATFORM
+        type: SECRET
+      - key: CROSSMINT_CHAIN
+        value: base
+      - key: CROSSMINT_SIGNER_SECRET
+        value: SET_IN_APP_PLATFORM
+        type: SECRET
+      - key: CROSSMINT_HEALTH_WALLET_LOCATOR
+        value: SET_IN_APP_PLATFORM
+        type: SECRET
+      - key: CROSSMINT_HEALTH_WALLET_ADDRESS
+        value: SET_IN_APP_PLATFORM
+        type: SECRET
