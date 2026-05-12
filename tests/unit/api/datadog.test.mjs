@@ -90,14 +90,16 @@ describe("Datadog metrics helper", () => {
     assert.match(datadogDashboardScript, /type: "group",\s+name: "request_time",\s+order: "desc"/);
   });
 
-  it("keeps 402 responses out of the 30-minute failure series", () => {
+  it("keeps the request chart to success and fail only", () => {
     assert.match(datadogDashboardScript, /status:fail,!status_code:402/);
-    assert.match(datadogDashboardScript, /status_code:402/);
     assert.match(datadogDashboardScript, /THIRTY_MINUTES_SECONDS = 1800/);
-    assert.match(datadogDashboardScript, /Requests per 30 min by status/);
+    assert.match(datadogDashboardScript, /Requests: success vs fail/);
+    assert.match(datadogDashboardScript, /metricFormulaQuery\("success"[\s\S]+"Success"/);
+    assert.match(datadogDashboardScript, /metricFormulaQuery\("fail"[\s\S]+"Fail"/);
+    assert.match(datadogDashboardScript, /formula: name,\s+alias/);
     assert.match(datadogDashboardScript, /status:success[\s\S]+palette: "green"/);
     assert.match(datadogDashboardScript, /status:fail,!status_code:402[\s\S]+palette: "red"/);
-    assert.match(datadogDashboardScript, /status_code:402[\s\S]+palette: "gray"/);
+    assert.doesNotMatch(datadogDashboardScript, /status_code:402[\s\S]+palette: "gray"/);
     assert.doesNotMatch(datadogDashboardScript, /rollup\(sum, 3600\)/);
     assert.doesNotMatch(
       datadogDashboardScript,

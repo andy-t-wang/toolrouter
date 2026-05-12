@@ -132,6 +132,40 @@ function query(q, displayType = "bars", options = {}) {
     display_type: displayType,
     q,
   };
+  if (options.alias) {
+    request.metadata = [
+      {
+        expression: q,
+        alias_name: options.alias,
+      },
+    ];
+  }
+  if (options.palette) {
+    request.style = {
+      palette: options.palette,
+    };
+  }
+  return request;
+}
+
+function metricFormulaQuery(name, q, alias, displayType = "bars", options = {}) {
+  const request = {
+    display_type: displayType,
+    response_format: "timeseries",
+    queries: [
+      {
+        data_source: "metrics",
+        name,
+        query: q,
+      },
+    ],
+    formulas: [
+      {
+        formula: name,
+        alias,
+      },
+    ],
+  };
   if (options.palette) {
     request.style = {
       palette: options.palette,
@@ -147,10 +181,9 @@ const dashboard = {
   description: "Product-wide ToolRouter operations metrics from API-emitted Datadog count metrics.",
   layout_type: "ordered",
   widgets: [
-    timeseries("Requests per 30 min by status", [
-      query(`sum:toolrouter.requests.count{env:production,source:toolrouter,status:success}.as_count().rollup(sum, ${THIRTY_MINUTES_SECONDS})`, "bars", { palette: "green" }),
-      query(`sum:toolrouter.requests.count{env:production,source:toolrouter,status:fail,!status_code:402}.as_count().rollup(sum, ${THIRTY_MINUTES_SECONDS})`, "bars", { palette: "red" }),
-      query(`sum:toolrouter.requests.count{env:production,source:toolrouter,status_code:402}.as_count().rollup(sum, ${THIRTY_MINUTES_SECONDS})`, "bars", { palette: "gray" }),
+    timeseries("Requests: success vs fail", [
+      metricFormulaQuery("success", `sum:toolrouter.requests.count{env:production,source:toolrouter,status:success}.as_count().rollup(sum, ${THIRTY_MINUTES_SECONDS})`, "Success", "bars", { palette: "green" }),
+      metricFormulaQuery("fail", `sum:toolrouter.requests.count{env:production,source:toolrouter,status:fail,!status_code:402}.as_count().rollup(sum, ${THIRTY_MINUTES_SECONDS})`, "Fail", "bars", { palette: "red" }),
     ]),
     recentRequestsTable(),
     timeseries("AgentKit uses per 30 min", [
