@@ -1499,6 +1499,30 @@ code {
   gap: 8px;
 }
 
+.mkt-icon-link {
+  align-items: center;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  color: var(--ink);
+  display: inline-flex;
+  height: 28px;
+  justify-content: center;
+  transition: background 0.12s ease, transform 0.12s ease;
+  width: 28px;
+}
+
+.mkt-icon-link:hover {
+  background: var(--bone-2);
+  transform: translateY(-1px);
+}
+
+.mkt-icon-link svg {
+  display: block;
+  fill: currentColor;
+  height: 15px;
+  width: 15px;
+}
+
 .mkt-btn {
   align-items: center;
   background: var(--ink);
