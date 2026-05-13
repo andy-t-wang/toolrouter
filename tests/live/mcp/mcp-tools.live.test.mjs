@@ -2,7 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
 import { callTool, handleJsonRpcMessage, tools } from "../../../apps/mcp/src/server.ts";
-import { getEndpoint } from "../../../packages/router-core/src/index.ts";
+import { getEndpoint, listEndpoints } from "../../../packages/router-core/src/index.ts";
 
 const apiKey =
   process.env.TOOLROUTER_API_KEY ||
@@ -75,7 +75,7 @@ describe("ToolRouter MCP live e2e", () => {
     );
     assert.deepEqual(
       endpointList.endpoints.map((endpoint) => endpoint.id).sort(),
-      ["browserbase.session", "exa.search"].sort(),
+      listEndpoints().map((endpoint) => endpoint.id).sort(),
     );
 
     const categories = assertToolOk(

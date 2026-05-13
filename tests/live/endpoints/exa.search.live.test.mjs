@@ -61,21 +61,23 @@ async function runSmoke({ endpoint, smoke, traceId }) {
   });
 }
 
-describe("exa.search live AgentKit/x402 smoke", () => {
-  it("uses the free AgentKit path capped at one cent", { skip: runLive ? false : "live Exa smoke disabled" }, async () => {
-    const endpoint = getEndpoint("exa.search");
-    const result = await runSmoke({
-      endpoint,
-      smoke: endpoint.liveSmoke.default_path,
-      traceId: `live_agentkit_${Date.now()}`,
-    });
+describe("Exa live AgentKit/x402 smoke", () => {
+  for (const endpointId of ["exa.search", "exa.contents"]) {
+    it(`${endpointId} uses the free AgentKit path capped at one cent`, { skip: runLive ? false : "live Exa smoke disabled" }, async () => {
+      const endpoint = getEndpoint(endpointId);
+      const result = await runSmoke({
+        endpoint,
+        smoke: endpoint.liveSmoke.default_path,
+        traceId: `live_agentkit_${endpointId.replace(/\W/gu, "_")}_${Date.now()}`,
+      });
 
-    assert.equal(result.ok, true);
-    assert.equal(result.path, "agentkit");
-    assert.equal(result.charged, false);
-    assert.equal(result.status_code, 200);
-    assert.ok(result.body);
-  });
+      assert.equal(result.ok, true);
+      assert.equal(result.path, "agentkit");
+      assert.equal(result.charged, false);
+      assert.equal(result.status_code, 200);
+      assert.ok(result.body);
+    });
+  }
 
   it("can force a capped x402 payment for wallet plumbing", { skip: runPaid ? false : "paid Exa smoke disabled" }, async () => {
     const endpoint = getEndpoint("exa.search");

@@ -77,7 +77,10 @@ function timeoutResult({ endpoint, request, traceId, started, timeoutMs, path })
 
 function allowedHosts() {
   return new Set(
-    (process.env.X402_ALLOWED_HOSTS || "api.exa.ai,x402.browserbase.com")
+    (
+      process.env.X402_ALLOWED_HOSTS ||
+      "api.exa.ai,x402.browserbase.com,api.run402.com,pplx.x402.paysponge.com,parallelmpp.dev,mesh.heurist.xyz,wolframalpha.x402.paysponge.com,stabletravel.dev,x402.api.agentmail.to,x402-gateway-production.up.railway.app"
+    )
       .split(",")
       .map((host) => host.trim())
       .filter(Boolean),
@@ -224,6 +227,9 @@ function normalizePaymentMode(paymentMode, endpoint) {
   const resolved = paymentMode || endpoint?.defaultPaymentMode || "agentkit_first";
   if (!["agentkit_first", "agentkit_only", "x402_only"].includes(resolved)) {
     throw new Error(`unsupported payment mode: ${resolved}`);
+  }
+  if (endpoint?.agentkit === false && resolved !== "x402_only") {
+    throw new Error(`endpoint ${endpoint.id} only supports x402_only payment mode`);
   }
   return resolved;
 }

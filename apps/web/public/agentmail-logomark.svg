@@ -1,0 +1,4 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="AgentMail">
+  <rect width="64" height="64" rx="14" fill="#262626"/>
+  <path d="M14 21h36v26H14V21Zm5 6v15h26V27L32 37 19 27Zm3-1 10 8 10-8H22Z" fill="#ffffff"/>
+</svg>

@@ -55,11 +55,19 @@ export function validateEndpointConfig(endpoint) {
     errors.push("description is required");
   }
   if (!isHttpsUrl(endpoint.url)) errors.push("url must be an https URL");
-  if (endpoint.method !== "POST") errors.push("method must be POST for MVP endpoints");
-  if (endpoint.agentkit !== true) errors.push("agentkit must be true");
+  if (!["GET", "POST"].includes(endpoint.method)) errors.push("method must be GET or POST");
   if (endpoint.x402 !== true) errors.push("x402 must be true");
-  if (!["free_trial", "discount", "access"].includes(endpoint.agentkit_value_type)) {
-    errors.push("agentkit_value_type must be free_trial, discount, or access");
+  if (endpoint.agentkit !== true && endpoint.defaultPaymentMode !== "x402_only") {
+    errors.push("endpoints without AgentKit must default to x402_only");
+  }
+  if (!["none", "free_trial", "discount", "access"].includes(endpoint.agentkit_value_type)) {
+    errors.push("agentkit_value_type must be none, free_trial, discount, or access");
+  }
+  if (endpoint.agentkit === true && endpoint.agentkit_value_type === "none") {
+    errors.push("AgentKit endpoints must define a concrete AgentKit value type");
+  }
+  if (endpoint.agentkit !== true && endpoint.agentkit_value_type !== "none") {
+    errors.push("x402-only endpoints must use agentkit_value_type none");
   }
   if (typeof endpoint.agentkit_value_label !== "string" || endpoint.agentkit_value_label.length === 0) {
     errors.push("agentkit_value_label is required");
@@ -92,7 +100,11 @@ export function validateEndpointConfig(endpoint) {
     }
   }
 
-  if (!isPlainObject(endpoint.agentkitHealthProbe)) {
+  if (endpoint.agentkit !== true) {
+    if (endpoint.agentkitHealthProbe !== null) {
+      errors.push("x402-only endpoints must not define agentkitHealthProbe");
+    }
+  } else if (!isPlainObject(endpoint.agentkitHealthProbe)) {
     errors.push("agentkitHealthProbe is required");
   } else {
     if (endpoint.agentkitHealthProbe.mode !== "agentkit_benefit") {
@@ -126,8 +138,8 @@ export function validateEndpointConfig(endpoint) {
     if (typeof endpoint.ui.primaryField !== "string" || endpoint.ui.primaryField.length === 0) {
       errors.push("ui.primaryField is required");
     }
-    if (!Array.isArray(endpoint.ui.fieldOrder) || endpoint.ui.fieldOrder.length === 0) {
-      errors.push("ui.fieldOrder must be a non-empty array");
+    if (!Array.isArray(endpoint.ui.fieldOrder)) {
+      errors.push("ui.fieldOrder must be an array");
     }
   }
 

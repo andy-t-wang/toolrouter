@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Firecrawl">
+  <rect width="64" height="64" rx="14" fill="#121212"/>
+  <path d="M32 50c-9 0-16-6-16-15 0-7 4-12 10-17 0 5 2 8 5 10 2-6 6-10 11-14 0 8 7 12 7 21 0 9-7 15-17 15Z" fill="#ff6a3d"/>
+  <path d="M32 45c-4 0-8-3-8-8 0-4 3-7 7-10 0 4 2 6 5 8 1-3 3-5 6-7 0 11-3 17-10 17Z" fill="#ffffff"/>
+</svg>

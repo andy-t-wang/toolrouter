@@ -1,10 +1,54 @@
 import { ENDPOINT_CATEGORY_DEFINITIONS, isEndpointCategory } from "./categories.ts";
+import { falImageFastEndpointDefinition } from "./ai_ml/fal/image-fast.ts";
 import { browserbaseSessionEndpointDefinition } from "./browser_usage/browserbase/session.ts";
+import { run402PrototypeEndpointDefinition } from "./compute/run402/prototype.ts";
+import { exaContentsEndpointDefinition } from "./data/exa/contents.ts";
+import { firecrawlExtractWebDataEndpointDefinition } from "./data/firecrawl/extract-web-data.ts";
+import { firecrawlScrapeUrlEndpointDefinition } from "./data/firecrawl/scrape-url.ts";
+import { wolframAlphaQueryEndpointDefinition } from "./knowledge/wolframalpha/query.ts";
+import { wolframAlphaResultEndpointDefinition } from "./knowledge/wolframalpha/result.ts";
+import { agentMailPodsEndpointDefinition } from "./productivity/agentmail/pods.ts";
 import { exaSearchEndpointDefinition } from "./search/exa/search.ts";
+import { parallelSearchEndpointDefinition } from "./search/parallel/search.ts";
+import { perplexitySearchEndpointDefinition } from "./search/perplexity/search.ts";
+import { amadeusActivitiesBySquareEndpointDefinition } from "./travel/amadeus/activities-by-square.ts";
+import { amadeusActivitiesSearchEndpointDefinition } from "./travel/amadeus/activities-search.ts";
+import { flightAwareAirportDelaysEndpointDefinition } from "./travel/flightaware/airport-delays.ts";
+import { flightAwareAirportDelayStatusEndpointDefinition } from "./travel/flightaware/airport-delay-status.ts";
+import { flightAwareAirportInfoEndpointDefinition } from "./travel/flightaware/airport-info.ts";
+import { flightAwareAirportsEndpointDefinition } from "./travel/flightaware/airports.ts";
+import { flightAwareArrivalsEndpointDefinition } from "./travel/flightaware/arrivals.ts";
+import { flightAwareDeparturesEndpointDefinition } from "./travel/flightaware/departures.ts";
+import { flightAwareDisruptionCountsAirlineEndpointDefinition } from "./travel/flightaware/disruption-counts-airline.ts";
+import { flightAwareFlightsBetweenAirportsEndpointDefinition } from "./travel/flightaware/flights-between-airports.ts";
+import { flightAwareFlightTrackEndpointDefinition } from "./travel/flightaware/flight-track.ts";
+import { flightAwareWeatherObservationsEndpointDefinition } from "./travel/flightaware/weather-observations.ts";
 
 const ENDPOINT_DEFINITIONS = Object.freeze([
+  falImageFastEndpointDefinition,
   browserbaseSessionEndpointDefinition,
+  run402PrototypeEndpointDefinition,
+  exaContentsEndpointDefinition,
+  firecrawlScrapeUrlEndpointDefinition,
+  firecrawlExtractWebDataEndpointDefinition,
+  wolframAlphaResultEndpointDefinition,
+  wolframAlphaQueryEndpointDefinition,
+  agentMailPodsEndpointDefinition,
   exaSearchEndpointDefinition,
+  perplexitySearchEndpointDefinition,
+  parallelSearchEndpointDefinition,
+  flightAwareAirportsEndpointDefinition,
+  flightAwareAirportDelaysEndpointDefinition,
+  flightAwareAirportInfoEndpointDefinition,
+  flightAwareArrivalsEndpointDefinition,
+  flightAwareDeparturesEndpointDefinition,
+  flightAwareWeatherObservationsEndpointDefinition,
+  flightAwareAirportDelayStatusEndpointDefinition,
+  flightAwareFlightsBetweenAirportsEndpointDefinition,
+  flightAwareDisruptionCountsAirlineEndpointDefinition,
+  flightAwareFlightTrackEndpointDefinition,
+  amadeusActivitiesSearchEndpointDefinition,
+  amadeusActivitiesBySquareEndpointDefinition,
 ]);
 
 function assertHttpUrl(value, fieldName) {
@@ -27,15 +71,29 @@ export function validateEndpoint(endpoint) {
     throw new RangeError(`endpoint ${endpoint.id} has unsupported category: ${endpoint.category}`);
   }
   assertHttpUrl(endpoint.url, `${endpoint.id}.url`);
-  if (endpoint.method !== "POST") throw new RangeError(`endpoint ${endpoint.id} must use POST for MVP`);
-  if (!endpoint.agentkit || !endpoint.x402) {
-    throw new Error(`endpoint ${endpoint.id} must support AgentKit and x402`);
+  if (!["GET", "POST"].includes(endpoint.method)) {
+    throw new RangeError(`endpoint ${endpoint.id} must use GET or POST`);
   }
-  if (!["free_trial", "discount", "access"].includes(endpoint.agentkit_value_type)) {
+  if (!endpoint.x402) {
+    throw new Error(`endpoint ${endpoint.id} must support x402`);
+  }
+  if (endpoint.agentkit !== true && endpoint.default_payment_mode !== "x402_only") {
+    throw new Error(`endpoint ${endpoint.id} without AgentKit must default to x402_only`);
+  }
+  if (!["none", "free_trial", "discount", "access"].includes(endpoint.agentkit_value_type)) {
     throw new Error(`endpoint ${endpoint.id} must define agentkit_value_type`);
+  }
+  if (endpoint.agentkit === true && endpoint.agentkit_value_type === "none") {
+    throw new Error(`endpoint ${endpoint.id} with AgentKit must define an AgentKit value type`);
+  }
+  if (endpoint.agentkit !== true && endpoint.agentkit_value_type !== "none") {
+    throw new Error(`endpoint ${endpoint.id} without AgentKit must use agentkit_value_type none`);
   }
   if (!endpoint.fixture_input) throw new Error(`endpoint ${endpoint.id} missing fixture_input`);
   if (!endpoint.health_probe) throw new Error(`endpoint ${endpoint.id} missing health_probe`);
+  if (endpoint.agentkit === true && !endpoint.agentkit_health_probe) {
+    throw new Error(`endpoint ${endpoint.id} missing agentkit_health_probe`);
+  }
   if (!endpoint.live_smoke) throw new Error(`endpoint ${endpoint.id} missing live_smoke`);
   if (typeof endpoint.builder !== "function") throw new Error(`endpoint ${endpoint.id} missing builder`);
   return true;
@@ -54,7 +112,7 @@ function materializeEndpoint(definition) {
   });
   return Object.freeze({
     ...definition,
-    enabled: true,
+    enabled: definition.enabled !== false,
     ui,
     defaultPaymentMode: definition.default_payment_mode || "agentkit_first",
     fixture: Object.freeze({
@@ -69,25 +127,28 @@ function materializeEndpoint(definition) {
       latencyBudgetMs: definition.health_probe.latency_budget_ms ?? definition.health_probe.latencyBudgetMs,
       timeoutMs: definition.health_probe.timeout_ms ?? definition.health_probe.timeoutMs,
     }),
-    agentkitHealthProbe: Object.freeze({
-      ...(definition.agentkit_health_probe || definition.health_probe),
-      maxUsd: definition.agentkit_health_probe?.max_usd || definition.agentkit_health_probe?.maxUsd || maxUsd,
-      paymentMode:
-        definition.agentkit_health_probe?.payment_mode ||
-        definition.agentkit_health_probe?.paymentMode ||
-        definition.default_payment_mode ||
-        "agentkit_first",
-      latencyBudgetMs:
-        definition.agentkit_health_probe?.latency_budget_ms ??
-        definition.agentkit_health_probe?.latencyBudgetMs ??
-        definition.health_probe.latency_budget_ms ??
-        definition.health_probe.latencyBudgetMs,
-      timeoutMs:
-        definition.agentkit_health_probe?.timeout_ms ??
-        definition.agentkit_health_probe?.timeoutMs ??
-        definition.health_probe.timeout_ms ??
-        definition.health_probe.timeoutMs,
-    }),
+    agentkitHealthProbe:
+      definition.agentkit === true
+        ? Object.freeze({
+            ...definition.agentkit_health_probe,
+            maxUsd: definition.agentkit_health_probe?.max_usd || definition.agentkit_health_probe?.maxUsd || maxUsd,
+            paymentMode:
+              definition.agentkit_health_probe?.payment_mode ||
+              definition.agentkit_health_probe?.paymentMode ||
+              definition.default_payment_mode ||
+              "agentkit_first",
+            latencyBudgetMs:
+              definition.agentkit_health_probe?.latency_budget_ms ??
+              definition.agentkit_health_probe?.latencyBudgetMs ??
+              definition.health_probe.latency_budget_ms ??
+              definition.health_probe.latencyBudgetMs,
+            timeoutMs:
+              definition.agentkit_health_probe?.timeout_ms ??
+              definition.agentkit_health_probe?.timeoutMs ??
+              definition.health_probe.timeout_ms ??
+              definition.health_probe.timeoutMs,
+          })
+        : null,
     liveSmoke: Object.freeze({
       ...definition.live_smoke,
     }),

@@ -388,6 +388,35 @@ describe("AgentKit/x402 executor", () => {
     assert.equal(seen.x402Calls.length, 1);
   });
 
+  it("rejects AgentKit payment modes for x402-only endpoints", async () => {
+    await assert.rejects(
+      () =>
+        executeEndpoint({
+          endpoint: {
+            id: "parallel.search",
+            agentkit: false,
+            defaultPaymentMode: "x402_only",
+          },
+          request: {
+            method: "POST",
+            url: "https://parallelmpp.dev/api/search",
+            headers: { "content-type": "application/json" },
+            json: { query: "AgentKit" },
+            estimatedUsd: "0.01",
+          },
+          maxUsd: "0.02",
+          traceId: "trace_x402_only_reject_agentkit",
+          paymentMode: "agentkit_first",
+          paymentDeps: fakePaymentDeps({
+            captures: captures(),
+            agentkitResponse: jsonResponse({ shouldNotBeUsed: true }),
+            x402Response: paymentResponse({ results: [] }),
+          }),
+        }),
+      /only supports x402_only payment mode/,
+    );
+  });
+
   it("sends Browserbase AgentKit proof headers through the x402 payment rail", async () => {
     process.env.X402_ALLOWED_HOSTS = "x402.browserbase.com";
     process.env.X402_ALLOWED_CHAINS = "eip155:8453";

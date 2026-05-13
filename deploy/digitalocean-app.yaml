@@ -100,7 +100,7 @@ services:
       - key: X402_ALLOWED_CHAINS
         value: eip155:8453,eip155:480
       - key: X402_ALLOWED_HOSTS
-        value: api.exa.ai,x402.browserbase.com
+        value: api.exa.ai,x402.browserbase.com,api.run402.com,pplx.x402.paysponge.com,parallelmpp.dev,mesh.heurist.xyz,wolframalpha.x402.paysponge.com,stabletravel.dev,x402.api.agentmail.to,x402-gateway-production.up.railway.app
       - key: X402_MAX_USD_PER_REQUEST
         value: "0.05"
       - key: TOOLROUTER_AGENTKIT_PREFLIGHT_TIMEOUT_MS
@@ -229,7 +229,7 @@ workers:
       - key: X402_ALLOWED_CHAINS
         value: eip155:8453,eip155:480
       - key: X402_ALLOWED_HOSTS
-        value: api.exa.ai,x402.browserbase.com
+        value: api.exa.ai,x402.browserbase.com,api.run402.com,pplx.x402.paysponge.com,parallelmpp.dev,mesh.heurist.xyz,wolframalpha.x402.paysponge.com,stabletravel.dev,x402.api.agentmail.to,x402-gateway-production.up.railway.app
       - key: X402_MAX_USD_PER_REQUEST
         value: "0.05"
       - key: TOOLROUTER_PAID_HEALTH_INTERVAL_MS

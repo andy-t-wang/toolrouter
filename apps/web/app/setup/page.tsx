@@ -91,8 +91,24 @@ export default function SetupPage() {
             </div>
             <div className="doc-list tool-list">
               <div>
+                <strong>ai_ml</strong>
+                <span>Recommended: Fal Image Fast for x402-paid image generation.</span>
+              </div>
+              <div>
                 <strong>search</strong>
-                <span>Recommended: Exa Search for fresh web results.</span>
+                <span>Recommended: Exa Search, with Perplexity and Parallel available explicitly.</span>
+              </div>
+              <div>
+                <strong>data</strong>
+                <span>Recommended: Exa Contents for clean URL text, with Firecrawl available for scraping and extraction.</span>
+              </div>
+              <div>
+                <strong>knowledge</strong>
+                <span>Recommended: WolframAlpha Result for short computed answers.</span>
+              </div>
+              <div>
+                <strong>travel</strong>
+                <span>Recommended: FlightAware Flight Track, with airports, delays, arrivals, departures, weather, and activities endpoints available explicitly.</span>
               </div>
               <div>
                 <strong>browser use</strong>

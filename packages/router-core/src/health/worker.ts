@@ -369,6 +369,16 @@ export async function runEndpointHealthCheck({
   force = false,
 }) {
   if (!endpoint) throw new TypeError("endpoint is required");
+  if (probeKind === "agentkit" && endpoint.agentkit !== true) {
+    return {
+      endpoint_id: endpoint.id,
+      status: "unverified",
+      skipped: true,
+      skip_reason: "agentkit_not_supported",
+      healthCheck: null,
+      endpointStatus: null,
+    };
+  }
   const checkedAt = now();
   const started = Date.now();
 

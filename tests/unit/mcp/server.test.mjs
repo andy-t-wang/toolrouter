@@ -46,8 +46,14 @@ describe("ToolRouter MCP server", () => {
     const listed = await handleJsonRpcMessage({ jsonrpc: "2.0", id: 2, method: "tools/list" });
     assert.ok(listed.result.tools.some((tool) => tool.name === "exa_search"));
     assert.ok(listed.result.tools.some((tool) => tool.name === "toolrouter_search"));
+    assert.ok(listed.result.tools.some((tool) => tool.name === "toolrouter_image_generate"));
     assert.ok(listed.result.tools.some((tool) => tool.name === "toolrouter_list_categories"));
     assert.ok(listed.result.tools.some((tool) => tool.name === "toolrouter_recommend_endpoint"));
+    assert.ok(listed.result.tools.some((tool) => tool.name === "toolrouter_fetch_content"));
+    assert.ok(listed.result.tools.some((tool) => tool.name === "toolrouter_answer"));
+    assert.ok(listed.result.tools.some((tool) => tool.name === "flightaware_flight_track"));
+    assert.ok(listed.result.tools.some((tool) => tool.name === "agentmail_pods"));
+    assert.ok(tools().some((tool) => tool.name === "fal_image_fast"));
     assert.ok(tools().some((tool) => tool.name === "browserbase_session_create"));
     const sessionTool = tools().find((tool) => tool.name === "browserbase_session_create");
     assert.equal(sessionTool.inputSchema.properties.estimated_minutes.minimum, 5);
@@ -171,6 +177,103 @@ describe("ToolRouter MCP server", () => {
         include_summary: false,
       },
       maxUsd: "0.01",
+    });
+
+    const fetchResult = await callTool("toolrouter_fetch_content", { urls: ["https://example.com"], summary: true }, {
+      env: { TOOLROUTER_API_URL: "http://router.test", TOOLROUTER_API_KEY: "tr_test" },
+      fetchImpl: async (url, init) => {
+        calls.push({ url, init });
+        return response({ id: "req_5", endpoint_id: "exa.contents", path: "agentkit", charged: false });
+      },
+    });
+    assert.equal(fetchResult.isError, false);
+    assert.deepEqual(JSON.parse(calls[1].init.body), {
+      endpoint_id: "exa.contents",
+      input: {
+        urls: ["https://example.com"],
+        text: true,
+        summary: true,
+      },
+      maxUsd: "0.01",
+    });
+  });
+
+  it("calls new named x402 endpoint tools through concrete endpoint ids", async () => {
+    const calls = [];
+    const result = await callTool("flightaware_flight_track", {
+      callsign: "UAL123",
+      payment_mode: "x402_only",
+    }, {
+      env: { TOOLROUTER_API_URL: "http://router.test", TOOLROUTER_API_KEY: "tr_test" },
+      fetchImpl: async (url, init) => {
+        calls.push({ url, init });
+        return response({ id: "req_flight", endpoint_id: "flightaware.flight_track", path: "x402", charged: true });
+      },
+    });
+
+    assert.equal(result.isError, false);
+    assert.deepEqual(JSON.parse(calls[0].init.body), {
+      endpoint_id: "flightaware.flight_track",
+      input: {
+        callsign: "UAL123",
+        ident_type: "designator",
+        max_pages: 1,
+      },
+      maxUsd: "0.02",
+      payment_mode: "x402_only",
+    });
+  });
+
+  it("calls Fal image tools through the x402-only endpoint", async () => {
+    const calls = [];
+    const result = await callTool("fal_image_fast", {
+      prompt: "a small deterministic test image",
+      width: 512,
+      height: 768,
+      seed: 123,
+    }, {
+      env: { TOOLROUTER_API_URL: "http://router.test", TOOLROUTER_API_KEY: "tr_test" },
+      fetchImpl: async (url, init) => {
+        calls.push({ url, init });
+        return response({ id: "req_fal", endpoint_id: "fal.image_fast", path: "x402", charged: true });
+      },
+    });
+
+    assert.equal(result.isError, false);
+    assert.deepEqual(JSON.parse(calls[0].init.body), {
+      endpoint_id: "fal.image_fast",
+      input: {
+        prompt: "a small deterministic test image",
+        width: 512,
+        height: 768,
+        seed: 123,
+      },
+      maxUsd: "0.02",
+      payment_mode: "x402_only",
+    });
+
+    const categoryResult = await callTool("toolrouter_image_generate", {
+      prompt: "a small deterministic category image",
+      width: 512,
+      height: 512,
+    }, {
+      env: { TOOLROUTER_API_URL: "http://router.test", TOOLROUTER_API_KEY: "tr_test" },
+      fetchImpl: async (url, init) => {
+        calls.push({ url, init });
+        return response({ id: "req_image", endpoint_id: "fal.image_fast", path: "x402", charged: true });
+      },
+    });
+
+    assert.equal(categoryResult.isError, false);
+    assert.deepEqual(JSON.parse(calls[1].init.body), {
+      endpoint_id: "fal.image_fast",
+      input: {
+        prompt: "a small deterministic category image",
+        width: 512,
+        height: 512,
+      },
+      maxUsd: "0.02",
+      payment_mode: "x402_only",
     });
   });
 

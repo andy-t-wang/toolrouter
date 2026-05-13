@@ -192,8 +192,17 @@ function titleCase(value: string) {
 function endpointMeta(endpointId: unknown) {
   const [provider = "", rawName = ""] = String(endpointId || "").split(".");
   const logos: Record<string, string> = {
+    agentmail: "/agentmail-logomark.svg",
+    amadeus: "/amadeus-logomark.svg",
     browserbase: "/browserbase-logomark.svg",
     exa: "/exa-logomark.svg",
+    fal: "/fal-logomark.svg",
+    firecrawl: "/firecrawl-logomark.svg",
+    flightaware: "/flightaware-logomark.svg",
+    parallel: "/parallel-logomark.svg",
+    perplexity: "/perplexity-logomark.svg",
+    run402: "/run402-logomark.svg",
+    wolframalpha: "/wolframalpha-logomark.svg",
   };
   return {
     logo: logos[provider] || "",

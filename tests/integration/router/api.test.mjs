@@ -17,6 +17,10 @@ process.env.TOOLROUTER_DEV_USER_ID = "00000000-0000-4000-8000-000000000001";
 const { createApiApp } = await import("../../../apps/api/src/app.ts");
 const { MemoryCache } = await import("../../../packages/cache/src/index.ts");
 const { LocalStore, createStore } = await import("../../../packages/db/src/index.ts");
+const { listCategories, listEndpoints } = await import("../../../packages/router-core/src/index.ts");
+
+const expectedEndpointIds = listEndpoints().map((endpoint) => endpoint.id);
+const expectedCategoryIds = listCategories().map((category) => category.id);
 
 function authHeaders() {
   return {
@@ -98,7 +102,7 @@ describe("router API", () => {
     const body = await response.json();
     assert.deepEqual(
       body.endpoints.map((endpoint) => endpoint.id),
-      ["exa.search"],
+      ["exa.search", "perplexity.search", "parallel.search"],
     );
     assert.ok(body.endpoints.every((endpoint) => endpoint.status));
 
@@ -106,7 +110,7 @@ describe("router API", () => {
     assert.equal(dashboardResponse.status, 200);
     assert.deepEqual(
       (await dashboardResponse.json()).endpoints.map((endpoint) => endpoint.id),
-      ["browserbase.session", "exa.search"],
+      expectedEndpointIds,
     );
   });
 
@@ -114,11 +118,14 @@ describe("router API", () => {
     const response = await fetch(`${baseUrl}/v1/categories`, { headers: authHeaders() });
     assert.equal(response.status, 200);
     const body = await response.json();
-    assert.deepEqual(body.categories.map((category) => category.id), ["search", "browser_usage"]);
+    assert.deepEqual(body.categories.map((category) => category.id), expectedCategoryIds);
     const search = body.categories.find((category) => category.id === "search");
     assert.equal(search.recommended_endpoint_id, "exa.search");
     assert.equal(search.recommended_endpoint.id, "exa.search");
     assert.ok(search.endpoints.every((endpoint) => endpoint.status));
+    const aiMl = body.categories.find((category) => category.id === "ai_ml");
+    assert.equal(aiMl.recommended_endpoint_id, "fal.image_fast");
+    assert.equal(aiMl.recommended_endpoint.id, "fal.image_fast");
 
     const dashboardResponse = await fetch(`${baseUrl}/v1/dashboard/categories?include_empty=true`, { headers: sessionHeaders() });
     assert.equal(dashboardResponse.status, 200);
@@ -170,11 +177,11 @@ describe("router API", () => {
     assert.equal(response.status, 200);
     const body = await response.json();
     assert.equal(body.status, "unverified");
-    assert.equal(body.summary.endpoint_count, 2);
+    assert.equal(body.summary.endpoint_count, expectedEndpointIds.length);
     assert.equal(body.summary.operational_count, 1);
     assert.deepEqual(
       body.endpoints.map((endpoint) => endpoint.id).sort(),
-      ["browserbase.session", "exa.search"].sort(),
+      expectedEndpointIds.toSorted(),
     );
     const exa = body.endpoints.find((endpoint) => endpoint.id === "exa.search");
     assert.equal(exa.status, "healthy");
@@ -1171,8 +1178,8 @@ describe("router API", () => {
     const body = await response.json();
     assert.ok(body.monitoring.requests_24h.total >= 1);
     assert.equal(body.monitoring.requests_24h.errors, 0);
-    assert.equal(body.monitoring.endpoint_health.total, 2);
-    assert.equal(body.monitoring.endpoint_health.unverified, 1);
+    assert.equal(body.monitoring.endpoint_health.total, expectedEndpointIds.length);
+    assert.equal(body.monitoring.endpoint_health.unverified, expectedEndpointIds.length - 1);
     assert.ok("error_rate" in body.monitoring.requests_24h);
   });
 

@@ -1950,6 +1950,64 @@ code {
   overflow: hidden;
 }
 
+.endpoint-filter-panel {
+  align-items: end;
+  background: var(--card);
+  border-bottom: 1px solid var(--line);
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(220px, 1.3fr) repeat(4, minmax(128px, 0.72fr)) auto;
+  padding: 10px var(--pad);
+}
+
+.endpoint-filter-control {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.endpoint-filter-control span {
+  color: var(--mute);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.endpoint-filter-control input,
+.endpoint-filter-control select {
+  background: var(--bone-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  color: var(--ink);
+  height: 34px;
+  min-width: 0;
+  padding: 0 9px;
+  width: 100%;
+}
+
+.endpoint-filter-control input:focus,
+.endpoint-filter-control select:focus {
+  border-color: var(--ink);
+  outline: 0;
+}
+
+.endpoint-filter-reset {
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 600;
+  height: 34px;
+  padding: 0 12px;
+}
+
+.endpoint-filter-reset:not(:disabled):hover {
+  background: #ffffff;
+}
+
 .mkt-uptime-grid {
   align-items: center;
   border-bottom: 1px solid var(--line);
@@ -2121,6 +2179,14 @@ code {
   line-height: 24px;
 }
 
+.endpoint-empty-state {
+  border-bottom: 1px solid var(--line);
+  color: var(--mute);
+  font-size: 14px;
+  padding: 28px var(--pad);
+  text-align: center;
+}
+
 .uptime-foot {
   align-items: center;
   background: var(--bone-2);
@@ -2128,8 +2194,36 @@ code {
   color: var(--mute);
   display: flex;
   font-size: 13px;
+  gap: 14px;
   justify-content: space-between;
   padding: 14px var(--pad);
+}
+
+.endpoint-pager {
+  align-items: center;
+  display: inline-flex;
+  flex: none;
+  gap: 8px;
+}
+
+.endpoint-pager button {
+  align-items: center;
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  color: var(--ink);
+  display: inline-flex;
+  font-size: 17px;
+  font-weight: 600;
+  height: 30px;
+  justify-content: center;
+  line-height: 1;
+  padding: 0;
+  width: 34px;
+}
+
+.endpoint-pager button:not(:disabled):hover {
+  background: #ffffff;
 }
 
 .mkt-cta {
@@ -2444,6 +2538,18 @@ code {
     justify-content: flex-start;
   }
 
+  .endpoint-filter-panel {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .endpoint-filter-search {
+    grid-column: 1 / -1;
+  }
+
+  .endpoint-filter-reset {
+    width: 100%;
+  }
+
   .mkt-uptime-grid {
     grid-template-columns: 1.6fr 1fr 0.9fr 0.7fr;
   }
@@ -2699,6 +2805,16 @@ code {
     grid-template-columns: 1fr;
     padding-left: 10px;
     padding-right: 10px;
+  }
+
+  .endpoint-filter-panel {
+    grid-template-columns: 1fr;
+    padding-left: 10px;
+    padding-right: 10px;
+  }
+
+  .endpoint-filter-search {
+    grid-column: auto;
   }
 
   .uptime-grid-head {

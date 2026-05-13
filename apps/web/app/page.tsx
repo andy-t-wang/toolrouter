@@ -1,3 +1,5 @@
+import { EndpointStatusPanel } from "./endpoint-status-panel.tsx";
+
 export const dynamic = "force-dynamic";
 
 type LandingEndpoint = {
@@ -164,10 +166,6 @@ async function loadLandingStatus(): Promise<LandingStatus> {
   }
 }
 
-function titleCase(value: string) {
-  return value ? `${value.slice(0, 1).toUpperCase()}${value.slice(1)}` : value;
-}
-
 function fleetLabel(status: string) {
   if (status === "healthy") return "All systems live";
   if (status === "degraded") return "Some endpoints degraded";
@@ -195,123 +193,6 @@ function formatProbeAge(value?: string | null) {
   if (diffHours < 48) return `Last probe ${diffHours} hr ago`;
   const diffDays = Math.floor(diffHours / 24);
   return `Last probe ${diffDays} days ago`;
-}
-
-function StatusDot({ status }: { status: string }) {
-  const map: Record<string, { dot: string; label: string }> = {
-    degraded: { dot: "warn", label: "Degraded" },
-    failing: { dot: "bad", label: "Outage" },
-    healthy: { dot: "good", label: "Operational" },
-    unverified: { dot: "", label: "Unverified" },
-  };
-  const resolved = map[status] || map.unverified;
-  return (
-    <span className="row status-dot-label">
-      <span className={`dot ${resolved.dot}`} />
-      <span>{resolved.label}</span>
-    </span>
-  );
-}
-
-function providerLogoSrc(provider: string) {
-  if (provider === "exa") return "/exa-logomark.svg";
-  if (provider === "browserbase") return "/browserbase-logomark.svg";
-  return null;
-}
-
-function displayEndpointId(provider: LandingEndpoint) {
-  const prefix = `${provider.provider}.`;
-  return provider.id.startsWith(prefix)
-    ? provider.id.slice(prefix.length)
-    : provider.id;
-}
-
-function ProviderMark({ provider }: { provider: LandingEndpoint }) {
-  const src = providerLogoSrc(provider.provider);
-  const label = titleCase(provider.provider);
-  return (
-    <span className={`prov-mark ${src ? "prov-logo" : ""}`} aria-hidden="true">
-      {src ? <img src={src} alt="" /> : label.slice(0, 2).toUpperCase()}
-    </span>
-  );
-}
-
-function statusReason(provider: LandingEndpoint) {
-  const status = publicEndpointStatus(provider);
-  if (status === "healthy") return "Latest check passed";
-  const error = String(provider.last_error || "");
-  if (error.includes("timed out")) return "Provider timed out";
-  if (error.includes("minimum charge amount")) return "Provider payment error";
-  if (status === "degraded" && Number(provider.status_code) === 200) {
-    return "Latest check was slow";
-  }
-  if (Number(provider.status_code) >= 500) return "Provider error";
-  if (status === "unverified") return "Awaiting first check";
-  return "Needs recovery check";
-}
-
-function agentKitBenefit(provider: LandingEndpoint) {
-  const type = String(
-    provider.agentkit_value_type || provider.agentkit_value_label || "",
-  ).toLowerCase();
-  if (type.includes("free")) {
-    return {
-      label: "Free trial",
-    };
-  }
-  if (type.includes("discount")) {
-    return {
-      label: "Discount",
-    };
-  }
-  if (type.includes("access")) {
-    return {
-      label: "Access",
-    };
-  }
-  return {
-    label: "AgentKit",
-  };
-}
-
-function AgentKitBenefit({ provider }: { provider: LandingEndpoint }) {
-  const benefit = agentKitBenefit(provider);
-  return (
-    <div className="agentkit-status-benefit">
-      <span className="agentkit-status-pill">
-        <img src="/human.svg" alt="" aria-hidden="true" />
-        {benefit.label}
-      </span>
-    </div>
-  );
-}
-
-function UptimeRow({ provider }: { provider: LandingEndpoint }) {
-  return (
-    <div className="mkt-uptime-grid mkt-uptime-row">
-      <div>
-        <div className="row provider-cell">
-          <ProviderMark provider={provider} />
-          <span>
-            <span className="provider-name">{provider.name}</span>
-            <span className="provider-meta">
-              <span className="mono muted provider-id">
-                {displayEndpointId(provider)}
-              </span>
-            </span>
-          </span>
-        </div>
-      </div>
-      <AgentKitBenefit provider={provider} />
-      <div>
-        <StatusDot status={publicEndpointStatus(provider)} />
-        <span className="status-reason">{statusReason(provider)}</span>
-      </div>
-      <div className="mono muted check-age">
-        {formatProbeAge(provider.last_checked_at)}
-      </div>
-    </div>
-  );
 }
 
 function BillingArt() {
@@ -361,6 +242,7 @@ function HumanBoostArt() {
 export default async function LandingPage() {
   const statusData = await loadLandingStatus();
   const providers = statusData.endpoints;
+  const now = Date.now();
   const operational = statusData.summary.operational_count;
   const endpointCount = statusData.summary.endpoint_count || providers.length;
   const probedCount = providers.reduce(
@@ -425,9 +307,9 @@ export default async function LandingPage() {
             </h1>
             <p className="mkt-lede">
               ToolRouter is an MCP server your agent connects to once. Every
-              endpoint behind it is verified, paid through AgentKit, and traced
-              end-to-end, so when the model calls a tool, you know it works
-              before you spend a cent.
+              endpoint behind it is verified, paid through AgentKit or x402,
+              and traced end-to-end, so when the model calls a tool, you know
+              it works before you spend a cent.
             </p>
             <div className="mkt-actions">
               <a className="mkt-btn" href="/dashboard">
@@ -651,25 +533,7 @@ export default async function LandingPage() {
               </div>
             </div>
 
-            <div className="mkt-uptime-card">
-              <div className="mkt-uptime-grid uptime-grid-head">
-                <div>Endpoint</div>
-                <div>Benefit</div>
-                <div>Status</div>
-                <div>Last check</div>
-              </div>
-              {providers.map((provider) => (
-                <UptimeRow key={provider.id} provider={provider} />
-              ))}
-              <div className="uptime-foot">
-                <span>
-                  {probedCount
-                    ? `Showing ${providers.length} endpoints from live health checks.`
-                    : `Showing ${providers.length} endpoints from the live registry. Awaiting probe history.`}
-                </span>
-                <span className="mono">v0.1.0</span>
-              </div>
-            </div>
+            <EndpointStatusPanel endpoints={providers} now={now} probedCount={probedCount} />
           </div>
         </section>
 

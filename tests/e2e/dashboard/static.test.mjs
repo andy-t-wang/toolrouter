@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 const landingPage = readFileSync(new URL("../../../apps/web/app/page.tsx", import.meta.url), "utf8");
+const endpointStatusPanel = readFileSync(new URL("../../../apps/web/app/endpoint-status-panel.tsx", import.meta.url), "utf8");
 const setupPage = readFileSync(new URL("../../../apps/web/app/setup/page.tsx", import.meta.url), "utf8");
 const docsPage = readFileSync(new URL("../../../apps/web/app/docs/page.tsx", import.meta.url), "utf8");
 const mcpClientTabs = readFileSync(new URL("../../../apps/web/app/mcp-client-tabs.tsx", import.meta.url), "utf8");
@@ -18,6 +19,7 @@ const css = readFileSync(new URL("../../../apps/web/app/globals.css", import.met
 
 describe("web dashboard static wiring", () => {
   it("keeps the public landing page at the root route", () => {
+    const landingSurface = `${landingPage}\n${endpointStatusPanel}`;
     assert.match(landingPage, /ToolRouter/);
     assert.match(landingPage, /\/logo\.png/);
     assert.match(landingPage, /Tools your agent/);
@@ -38,19 +40,26 @@ describe("web dashboard static wiring", () => {
     assert.match(landingPage, /Claude/);
     assert.match(landingPage, /\/dashboard/);
     assert.match(landingPage, /\/v1\/status/);
-    assert.match(landingPage, /publicEndpointStatus\(provider\)/);
-    assert.match(landingPage, /statusReason\(provider\)/);
-    assert.match(landingPage, /agentKitBenefit\(provider\)/);
-    assert.match(landingPage, /Free trial/);
-    assert.match(landingPage, /Access/);
-    assert.match(landingPage, /<div>Benefit<\/div>/);
-    assert.match(landingPage, /Last check/);
+    assert.match(landingPage, /<EndpointStatusPanel/);
+    assert.match(landingSurface, /publicEndpointStatus\(endpoint\)/);
+    assert.match(landingSurface, /statusReason\(endpoint\)/);
+    assert.match(landingSurface, /agentKitBenefit\(endpoint\)/);
+    assert.match(landingSurface, /Free trial/);
+    assert.match(landingSurface, /Access/);
+    assert.match(landingSurface, /<div>Benefit<\/div>/);
+    assert.match(landingSurface, /Last check/);
+    assert.match(landingSurface, /Endpoint filters/);
+    assert.match(landingSurface, /All providers/);
+    assert.match(landingSurface, /All categories/);
+    assert.match(landingSurface, /sorted by provider/);
+    assert.match(landingSurface, /ENDPOINTS_PER_PAGE = 10/);
+    assert.match(landingSurface, /Endpoint pagination/);
     assert.match(landingPage, /Checked at least once/);
     assert.doesNotMatch(landingPage, /Fleet uptime/);
     assert.doesNotMatch(landingPage, /Last 30 days/);
     assert.doesNotMatch(landingPage, /<div>Path<\/div>/);
     assert.doesNotMatch(landingPage, /<div>Latency<\/div>/);
-    assert.match(landingPage, /displayEndpointId\(provider\)/);
+    assert.match(landingSurface, /displayEndpointId\(endpoint\)/);
     assert.doesNotMatch(landingPage, /AgentKitStatusBadge/);
     assert.doesNotMatch(landingPage, /status-human-badge/);
     assert.doesNotMatch(landingPage, /Agentation/);
@@ -140,7 +149,16 @@ describe("web dashboard static wiring", () => {
     assert.match(dashboardPage, /human-badge-mark/);
     assert.match(dashboardPage, /endpointCell\(row\.endpoint_id\)/);
     assert.match(dashboardPage, /\/exa-logomark\.svg/);
+    assert.match(dashboardPage, /\/fal-logomark\.svg/);
     assert.match(dashboardPage, /\/browserbase-logomark\.svg/);
+    assert.match(dashboardPage, /\/run402-logomark\.svg/);
+    assert.match(dashboardPage, /\/perplexity-logomark\.svg/);
+    assert.match(dashboardPage, /\/parallel-logomark\.svg/);
+    assert.match(dashboardPage, /\/firecrawl-logomark\.svg/);
+    assert.match(dashboardPage, /\/wolframalpha-logomark\.svg/);
+    assert.match(dashboardPage, /\/flightaware-logomark\.svg/);
+    assert.match(dashboardPage, /\/amadeus-logomark\.svg/);
+    assert.match(dashboardPage, /\/agentmail-logomark\.svg/);
     assert.match(dashboardPage, /<th>Protocol<\/th>/);
     assert.match(dashboardPage, /<th>Benefit<\/th>/);
     assert.match(dashboardPage, /protocolChip\(row\)/);
@@ -255,7 +273,8 @@ describe("web dashboard static wiring", () => {
     assert.match(css, /\.billing-grid/);
     assert.match(css, /\.endpoint-cell\s*\{[^}]*display:\s*inline-flex/);
     assert.doesNotMatch(css, /\.endpoint-cell\s*\{[^}]*display:\s*grid/);
-    assert.match(layout, /rel="icon"/);
+    assert.match(layout, /icons:/);
+    assert.match(layout, /\/favicon\.ico/);
     assert.match(layout, /\/logo\.png/);
   });
 
@@ -263,7 +282,7 @@ describe("web dashboard static wiring", () => {
     assert.match(layout, /metadataBase:\s*new URL\(appUrl\)/);
     assert.match(layout, /openGraph:/);
     assert.match(layout, /twitter:/);
-    assert.match(layout, /\/og\.png/);
+    assert.match(layout, /\/og\?path=\//);
     assert.match(setupPage, /export const metadata/);
     assert.match(setupPage, /\/og\?path=\/setup/);
     assert.match(setupPage, /Connect any MCP-capable agent\./);
