@@ -31,7 +31,7 @@ describe("Datadog metrics helper", () => {
     assert.equal(called, false);
   });
 
-  it("sends count and gauge metric payloads with safe tags", async () => {
+  it("sends metric payloads with safe low-cardinality tags", async () => {
     const payloads = [];
     const client = createDatadogClient({
       env: {
@@ -49,9 +49,12 @@ describe("Datadog metrics helper", () => {
 
     await client.increment("toolrouter.requests.count", {
       status: "success",
+      endpoint: "exa.search",
+      path: "agentkit",
+      authorization: "Bearer tr_secret",
+      payment_header: "x402_secret",
       request_id: "req_123",
-      authorization: "",
-      payment_header: undefined,
+      trace_id: "trace_123",
     });
     await client.gauge("toolrouter.requests.timestamp", 1_746_950_400, {
       status: "success",
@@ -65,10 +68,13 @@ describe("Datadog metrics helper", () => {
     assert.equal(payloads[1].series[0].metric, "toolrouter.requests.timestamp");
     assert.equal(payloads[1].series[0].type, 3);
     assert.equal(payloads[1].series[0].points[0].value, 1_746_950_400);
-    assert.ok(payloads[0].series[0].tags.includes("request_id:req_123"));
-    assert.ok(payloads[1].series[0].tags.includes("request_time:2026-05-11t08:00:00z"));
+    assert.ok(payloads[0].series[0].tags.includes("endpoint:exa.search"));
+    assert.ok(payloads[0].series[0].tags.includes("path:agentkit"));
+    assert.ok(!payloads[0].series[0].tags.some((tag) => tag.includes("request_id")));
+    assert.ok(!payloads[0].series[0].tags.some((tag) => tag.includes("trace_id")));
     assert.ok(!payloads[0].series[0].tags.some((tag) => tag.includes("authorization")));
     assert.ok(!payloads[0].series[0].tags.some((tag) => tag.includes("payment_header")));
+    assert.ok(!payloads[1].series[0].tags.some((tag) => tag.includes("request_time")));
   });
 
   it("keeps base tags stable", () => {
@@ -83,20 +89,22 @@ describe("Datadog metrics helper", () => {
     );
   });
 
-  it("sorts the recent requests table by request timestamp", () => {
-    assert.match(datadogDashboardScript, /by \{request_time,request_id,trace_id,endpoint,status,status_code,path\}/);
-    assert.match(datadogDashboardScript, /title: "Recent requests by time"/);
+  it("keeps request tables low-cardinality", () => {
+    assert.match(datadogDashboardScript, /by \{endpoint,status,status_code,path\}/);
+    assert.match(datadogDashboardScript, /title: "Requests by endpoint and status"/);
     assert.doesNotMatch(datadogDashboardScript, /max:toolrouter\.requests\.timestamp/);
-    assert.match(datadogDashboardScript, /type: "group",\s+name: "request_time",\s+order: "desc"/);
+    assert.doesNotMatch(datadogDashboardScript, /request_id/);
+    assert.doesNotMatch(datadogDashboardScript, /trace_id/);
+    assert.doesNotMatch(datadogDashboardScript, /request_time/);
   });
 
   it("keeps the request chart to success and fail only", () => {
     assert.match(datadogDashboardScript, /status:fail,!status_code:402/);
     assert.match(datadogDashboardScript, /THIRTY_MINUTES_SECONDS = 1800/);
     assert.match(datadogDashboardScript, /Requests: success vs fail/);
-    assert.match(datadogDashboardScript, /metricFormulaQuery\("success"[\s\S]+"Success"/);
-    assert.match(datadogDashboardScript, /metricFormulaQuery\("fail"[\s\S]+"Fail"/);
-    assert.match(datadogDashboardScript, /formula: name,\s+alias/);
+    assert.match(datadogDashboardScript, /metricFormulaQueries\(\[/);
+    assert.match(datadogDashboardScript, /formula: item\.name,\s+alias: item\.alias/);
+    assert.match(datadogDashboardScript, /palette_index: item\.paletteIndex \?\? 0/);
     assert.match(datadogDashboardScript, /status:success[\s\S]+palette: "green"/);
     assert.match(datadogDashboardScript, /status:fail,!status_code:402[\s\S]+palette: "red"/);
     assert.doesNotMatch(datadogDashboardScript, /status_code:402[\s\S]+palette: "gray"/);

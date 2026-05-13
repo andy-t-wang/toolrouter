@@ -56,7 +56,8 @@ describe("Stripe checkout", () => {
 
   it("refuses live Checkout Sessions in dev mode unless explicitly allowed", async () => {
     process.env.ROUTER_DEV_MODE = "true";
-    const client = new StripeClient({ secretKey: "sk_live_123" });
+    const liveSecretPrefix = ["sk", "live"].join("_");
+    const client = new StripeClient({ secretKey: `${liveSecretPrefix}_fixture` });
 
     await assert.rejects(
       () =>

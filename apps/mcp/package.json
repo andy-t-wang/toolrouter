@@ -2,7 +2,24 @@
   "name": "@worldcoin/toolrouter",
   "version": "0.1.1",
   "private": false,
+  "license": "Apache-2.0",
   "description": "ToolRouter MCP adapter for AgentKit-first x402 tools.",
+  "keywords": [
+    "mcp",
+    "agentkit",
+    "x402",
+    "toolrouter",
+    "worldcoin"
+  ],
+  "homepage": "https://toolrouter.world/setup",
+  "bugs": {
+    "url": "https://github.com/worldcoin/toolrouter/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/worldcoin/toolrouter.git",
+    "directory": "apps/mcp"
+  },
   "type": "module",
   "bin": {
     "toolrouter": "dist/server.js"
@@ -16,6 +33,9 @@
   ],
   "publishConfig": {
     "access": "public"
+  },
+  "engines": {
+    "node": ">=22"
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",

@@ -2,6 +2,9 @@
 .env.*
 !.env.example
 .git
+.agentkit-router
+.mcp.json
+.codex
 .next
 node_modules
 npm-debug.log

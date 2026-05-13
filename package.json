@@ -2,6 +2,7 @@
   "name": "toolrouter",
   "version": "0.1.0",
   "private": true,
+  "license": "Apache-2.0",
   "type": "module",
   "description": "AgentKit-first x402 tool router for agent endpoints.",
   "workspaces": [
@@ -40,13 +41,8 @@
     "tsx": "^4.21.0",
     "typescript": "^6.0.3"
   },
-  "overrides": {
-    "postcss": "8.5.14"
-  },
   "engines": {
     "node": ">=22"
   },
-  "dependencies": {
-    "agentation": "^3.0.2"
-  }
+  "dependencies": {}
 }

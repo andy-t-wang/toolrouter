@@ -19,7 +19,7 @@ Before enabling this in Supabase, verify `toolrouter.world` in Resend and add th
 Set these locally, not in the browser bundle:
 
 ```sh
-SUPABASE_PROJECT_REF=wdgsbgyaqltvcvyatkpp
+SUPABASE_PROJECT_REF=<your-project-ref>
 SUPABASE_ACCESS_TOKEN=<supabase-management-token>
 SUPABASE_AUTH_SITE_URL=https://toolrouter.world
 SUPABASE_AUTH_REDIRECT_URLS=https://toolrouter.world/dashboard,https://toolrouter.world/**,http://localhost:3000/**,http://127.0.0.1:3000/**

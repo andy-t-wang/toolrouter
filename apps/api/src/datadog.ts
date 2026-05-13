@@ -10,6 +10,16 @@ type MetricTags = Record<string, string | number | boolean | null | undefined>;
 
 const METRIC_TYPE_COUNT = 1;
 const METRIC_TYPE_GAUGE = 3;
+const BLOCKED_TAG_KEYS = new Set([
+  "api_key",
+  "authorization",
+  "payment_header",
+  "request_id",
+  "request_time",
+  "signature",
+  "trace_id",
+  "wallet_address",
+]);
 
 function trimSlash(value: string) {
   return value.replace(/\/$/u, "");
@@ -37,7 +47,10 @@ export function datadogTags(tags: MetricTags = {}, env: DatadogEnv = process.env
     ...tags,
   };
   return Object.entries(baseTags)
-    .filter(([_key, value]) => value !== undefined && value !== null && value !== "")
+    .filter(([key, value]) => {
+      if (value === undefined || value === null || value === "") return false;
+      return !BLOCKED_TAG_KEYS.has(tagValue(key));
+    })
     .map(([key, value]) => `${tagValue(key)}:${tagValue(value)}`);
 }
 
@@ -74,11 +87,9 @@ export function createDatadogClient({
       }),
     });
     if (!response.ok) {
-      const text = await response.text().catch(() => "");
       throw Object.assign(new Error(`Datadog metric submit failed: ${response.status}`), {
         statusCode: response.status >= 500 ? 502 : 400,
         code: "datadog_metric_error",
-        details: text.slice(0, 300),
       });
     }
     return { sent: true, skipped: false };

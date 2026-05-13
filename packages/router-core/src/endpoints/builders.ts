@@ -22,23 +22,6 @@
  */
 
 /**
- * @typedef {object} ExaContentsInput
- * @property {string[]} urls
- * @property {boolean} [text]
- * @property {boolean} [summary]
- */
-
-/**
- * @typedef {object} BrowserbaseSearchInput
- * @property {string} query
- */
-
-/**
- * @typedef {object} BrowserbaseFetchInput
- * @property {string} url
- */
-
-/**
  * @typedef {object} BrowserbaseSessionInput
  * @property {number} [estimatedMinutes]
  * @property {number} [estimated_minutes]
@@ -103,33 +86,6 @@ function readInteger(input, names, label, { defaultValue, min, max }) {
   return resolved;
 }
 
-function assertHttpUrl(value, label) {
-  let parsed;
-  try {
-    parsed = new URL(value);
-  } catch {
-    throw new TypeError(`${label} must be a valid URL`);
-  }
-  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-    throw new TypeError(`${label} must use http or https`);
-  }
-  return parsed.toString();
-}
-
-function readUrlArray(input, names, label, { min = 1, max = 10 } = {}) {
-  const value = firstDefined(input, names);
-  if (!Array.isArray(value)) throw new TypeError(`${label} must be an array`);
-  if (value.length < min || value.length > max) {
-    throw new RangeError(`${label} must contain between ${min} and ${max} URLs`);
-  }
-  return value.map((item, index) => {
-    if (typeof item !== "string" || !item.trim()) {
-      throw new TypeError(`${label}[${index}] must be a URL string`);
-    }
-    return assertHttpUrl(item.trim(), `${label}[${index}]`);
-  });
-}
-
 function toUsdString(value) {
   const rounded = Math.round((Number(value) + Number.EPSILON) * 1_000_000) / 1_000_000;
   return String(rounded).replace(/(\.\d*?)0+$/u, "$1").replace(/\.$/u, "");
@@ -185,49 +141,6 @@ export function buildExaSearchRequest(input, endpoint) {
 
   const summaryCost = includeSummary ? 0.001 * numResults : 0;
   return providerRequest(endpoint, json, EXA_SEARCH_PRICES[searchType] + summaryCost);
-}
-
-/**
- * @param {ExaContentsInput} input
- * @param {{ method: "POST", url: string }} endpoint
- * @returns {ProviderRequest}
- */
-export function buildExaContentsRequest(input, endpoint) {
-  const data = assertInputRecord(input);
-  const urls = readUrlArray(data, ["urls"], "urls", { min: 1, max: 10 });
-  const includeText = readBoolean(data, ["text", "includeText", "include_text"], "text", true);
-  const includeSummary = readBoolean(data, ["summary", "includeSummary", "include_summary"], "summary", false);
-  if (!includeText && !includeSummary) {
-    throw new RangeError("at least one Exa contents output must be enabled");
-  }
-
-  const contents: Record<string, unknown> = {};
-  if (includeText) contents.text = true;
-  if (includeSummary) contents.summary = true;
-  const enabledContentTypes = Object.keys(contents).length;
-  return providerRequest(endpoint, { urls, contents }, 0.001 * urls.length * enabledContentTypes);
-}
-
-/**
- * @param {BrowserbaseSearchInput} input
- * @param {{ method: "POST", url: string }} endpoint
- * @returns {ProviderRequest}
- */
-export function buildBrowserbaseSearchRequest(input, endpoint) {
-  const data = assertInputRecord(input);
-  const query = readString(data, ["query"], "query", { required: true });
-  return providerRequest(endpoint, { query }, 0.01);
-}
-
-/**
- * @param {BrowserbaseFetchInput} input
- * @param {{ method: "POST", url: string }} endpoint
- * @returns {ProviderRequest}
- */
-export function buildBrowserbaseFetchRequest(input, endpoint) {
-  const data = assertInputRecord(input);
-  const url = readString(data, ["url"], "url", { required: true });
-  return providerRequest(endpoint, { url: assertHttpUrl(url, "url") }, 0.01);
 }
 
 /**

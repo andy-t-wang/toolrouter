@@ -9,7 +9,7 @@ These are durable project decisions for future agents working in this repo.
 - Agents call named endpoints explicitly through `POST /v1/requests`; do not add intent routing until the product has enough real endpoint volume to justify it.
 - Categories are the agent-facing discovery layer, not hidden intent routing. Agents can ask for generic categories like `search`, `browser_usage`, or `data`, inspect the recommended endpoint, then call the selected endpoint explicitly so traces and billing stay concrete.
 - Category discovery is exposed through `GET /v1/categories` and MCP tools like `toolrouter_list_categories` and `toolrouter_recommend_endpoint`.
-- The launch registry should stay small and reliable. As of this note, active public endpoints are `exa.search` and `browserbase.session`. `browserbase.search` and `browserbase.fetch` are parked until Browserbase's x402 payment-intent/minimum-charge failure is resolved.
+- The launch registry should stay small and reliable. As of this note, active public endpoints are `exa.search` and `browserbase.session`.
 
 ## Endpoint Template
 
@@ -48,7 +48,7 @@ These are durable project decisions for future agents working in this repo.
 ## Browserbase Endpoint Decisions
 
 - Browserbase endpoints use `https://x402.browserbase.com`.
-- Active Browserbase endpoint is `browserbase.session` (`POST /browser/session/create`, about `$0.12/hour`). `browserbase.search` (`POST /search`, about `$0.01`) and `browserbase.fetch` (`POST /fetch`, about `$0.01`) remain module templates only until Browserbase's x402 payment-intent/minimum-charge failure is resolved.
+- Active Browserbase endpoint is `browserbase.session` (`POST /browser/session/create`, about `$0.12/hour`).
 - Browserbase is an AgentKit-verified access path, not a free-trial path. Its endpoint metadata should use `agentkit_value_type: "access"` and label `AgentKit-Access`.
 - Dashboard tables should distinguish AgentKit value labels: `AgentKit-Free Trial`, `AgentKit-Discount`, and `AgentKit-Access`.
 
@@ -79,7 +79,7 @@ These are durable project decisions for future agents working in this repo.
 
 - Normal PR tests must be deterministic and must not spend money.
 - Live provider tests belong under `tests/live/**` and run through `npm run test:live:endpoints`.
-- Live Exa tests are skipped unless `RUN_LIVE_EXA_TESTS=true` and `AGENT_WALLET_PRIVATE_KEY` are present.
+- Live Exa tests are skipped unless `RUN_LIVE_EXA_TESTS=true` and either `AGENT_WALLET_PRIVATE_KEY` or Crossmint live signer env is present.
 - Forced paid Exa smoke is additionally gated by `RUN_LIVE_EXA_PAID_SMOKE=true`.
 - Live Browserbase tests are skipped unless `RUN_LIVE_BROWSERBASE_TESTS=true`; forced paid Browserbase smoke is additionally gated by `RUN_LIVE_BROWSERBASE_PAID_SMOKE=true`.
 - Daily live smoke should use strict spend caps and safe logs.
@@ -88,8 +88,8 @@ These are durable project decisions for future agents working in this repo.
 
 ## Supabase
 
-- Use the Supabase project named `agent-router`.
-- Its project ref is `wdgsbgyaqltvcvyatkpp`, and the project MCP URL is `https://mcp.supabase.com/mcp?project_ref=wdgsbgyaqltvcvyatkpp`.
+- Use the Supabase project configured in the deployment environment.
+- Keep project refs and Supabase MCP URLs in local/private config, not committed repo files.
 - Remote migrations are applied through Supabase MCP using the repo files in `supabase/migrations`.
 - Supabase Auth must use a custom SMTP provider in production. The MVP default is Resend SMTP (`smtp.resend.com:587`, user `resend`) with `auth@toolrouter.world` as the sender and `https://toolrouter.world` as the Site URL. Apply this through `npm run supabase:auth-config`; do not leave the hosted Auth config pointing at `localhost`. If Resend DNS is not verified yet, use `npm run supabase:auth-config -- --url-only` to fix redirects without enabling SMTP.
 - Supabase Auth emails should not expose the raw Supabase verify URL. The confirmation and magic-link templates use `{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=...&redirect_to={{ .RedirectTo }}`, and the Next route at `/auth/confirm` calls `verifyOtp` before redirecting to the dashboard with the session fragment.

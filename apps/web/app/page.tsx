@@ -1,5 +1,3 @@
-import { AgentationDev } from "./agentation-dev.tsx";
-
 export const dynamic = "force-dynamic";
 
 type LandingEndpoint = {
@@ -385,6 +383,17 @@ export default async function LandingPage() {
               <span>ToolRouter</span>
             </a>
             <div className="mkt-nav-actions">
+              <a
+                className="mkt-icon-link"
+                href="https://github.com/andy-t-wang/toolrouter"
+                target="_blank"
+                rel="noreferrer"
+                aria-label="GitHub"
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M12 .5a12 12 0 0 0-3.8 23.39c.6.11.82-.26.82-.58v-2.04c-3.34.73-4.04-1.61-4.04-1.61-.55-1.39-1.34-1.76-1.34-1.76-1.09-.75.08-.73.08-.73 1.2.08 1.84 1.24 1.84 1.24 1.07 1.83 2.8 1.3 3.49.99.11-.78.42-1.3.76-1.6-2.66-.3-5.46-1.33-5.46-5.93 0-1.31.47-2.38 1.24-3.22-.12-.3-.54-1.52.12-3.18 0 0 1.01-.32 3.3 1.23A11.5 11.5 0 0 1 12 5.8c1.02 0 2.04.14 3 .4 2.29-1.55 3.3-1.23 3.3-1.23.66 1.66.24 2.88.12 3.18.77.84 1.23 1.91 1.23 3.22 0 4.61-2.8 5.63-5.48 5.93.43.37.82 1.1.82 2.23v3.31c0 .32.22.7.83.58A12 12 0 0 0 12 .5Z" />
+                </svg>
+              </a>
               <a className="mkt-btn ghost sm" href="/setup">
                 Setup
               </a>
@@ -545,9 +554,8 @@ export default async function LandingPage() {
                 </div>
                 <h3>Higher availability</h3>
                 <p>
-                  If a provider goes down, ToolRouter routes to a verified
-                  equivalent. Your agent keeps working through the incident, and
-                  you see the failover in the trace.
+                  ToolRouter keeps live status and traces for each named tool,
+                  so agents can choose a healthy endpoint before they spend.
                 </p>
               </div>
 
@@ -575,9 +583,9 @@ export default async function LandingPage() {
                 </div>
                 <h3>Verified reliability</h3>
                 <p>
-                  Every endpoint is probed end-to-end every 12 hours with a real
-                  paid call. No mocks. If it does not work for us, it does not
-                  ship to your agent.
+                  Paid paths are checked hourly and AgentKit boosts are checked
+                  every 12 hours. No mocks. If it does not work for us, it does
+                  not ship to your agent.
                 </p>
               </div>
             </div>
@@ -694,7 +702,6 @@ export default async function LandingPage() {
           </div>
         </footer>
       </main>
-      <AgentationDev />
     </>
   );
 }

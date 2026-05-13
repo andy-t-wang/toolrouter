@@ -43,6 +43,25 @@ describe("API error normalization", () => {
     });
   });
 
+  it("hides unexpected server error messages", () => {
+    const raw = Object.assign(new Error("database password leaked in stack"), {
+      statusCode: 500,
+      code: "supabase_error",
+      details: "raw backend details",
+      exposeDetails: true,
+      trace_id: "trace_123",
+    });
+
+    assert.deepEqual(normalizeApiError(raw), {
+      statusCode: 500,
+      code: "internal_error",
+      message: "Internal server error",
+      details: undefined,
+      trace_id: "trace_123",
+    });
+  });
+
+
   it("hides raw database constraint names for unknown uniqueness errors", () => {
     const raw = Object.assign(
       new Error('duplicate key value violates unique constraint "some_table_slug_key"'),

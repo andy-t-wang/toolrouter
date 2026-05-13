@@ -23,7 +23,7 @@ describe("operational alerts", () => {
 
   it("sends alerts through Resend when configured", async () => {
     process.env.RESEND_API_KEY = "re_test";
-    process.env.TOOLROUTER_ALERT_EMAIL = "andy.wang@toolsforhumanity.com";
+    process.env.TOOLROUTER_ALERT_EMAIL = "ops@toolrouter.world";
     const calls = [];
     const alert = createAlertClient({
       fetchImpl: async (url, init) => {
@@ -41,7 +41,7 @@ describe("operational alerts", () => {
     assert.equal(calls[0].url, "https://api.resend.com/emails");
     assert.equal(calls[0].init.headers.authorization, "Bearer re_test");
     const body = JSON.parse(calls[0].init.body);
-    assert.equal(body.to, "andy.wang@toolsforhumanity.com");
+    assert.equal(body.to, "ops@toolrouter.world");
     assert.equal(body.subject, "Funding failed");
   });
 });

@@ -7,6 +7,7 @@
 # Local agent/runtime state
 .agentkit-router/
 .mcp.json
+.codex/
 
 # Dependencies
 node_modules/

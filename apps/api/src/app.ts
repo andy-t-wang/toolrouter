@@ -72,12 +72,30 @@ function decodeRequestCursor(value: any) {
 async function requestPage(store: any, filters: any) {
   const limit = requestPageLimit(filters.limit);
   const rows = await store.listRequests({ ...filters, limit: limit + 1 });
-  const requests = rows.slice(0, limit);
+  const requests = rows.slice(0, limit).map(publicRequestRow);
   return {
     requests,
     next_cursor: rows.length > limit ? encodeRequestCursor(requests[requests.length - 1]) : null,
     has_more: rows.length > limit,
   };
+}
+
+function publicRequestRow(row: any) {
+  if (!row || typeof row !== "object") return row;
+  const { body: _body, ...safe } = row;
+  return safe;
+}
+
+function publicStatusError(row: any) {
+  const error = String(row?.last_error || row?.error || "");
+  const statusCode = Number(row?.status_code);
+  if (!error && (!Number.isFinite(statusCode) || statusCode < 400)) return null;
+  if (statusCode === 402) return "Provider payment required";
+  if (statusCode === 429) return "Provider rate limited";
+  if (statusCode === 504 || /timed out|timeout/iu.test(error)) return "Provider timed out";
+  if (Number.isFinite(statusCode) && statusCode >= 500) return "Provider error";
+  if (/payment|stripe|x402/iu.test(error)) return "Provider payment error";
+  return "Latest check failed";
 }
 
 function publicEndpoint(endpoint: any, statusByEndpoint: Map<string, any>) {
@@ -87,7 +105,7 @@ function publicEndpoint(endpoint: any, statusByEndpoint: Map<string, any>) {
     status: status?.status || "unverified",
     last_checked_at: status?.last_checked_at || null,
     latency_ms: status?.latency_ms || null,
-    last_error: status?.last_error || null,
+    last_error: publicStatusError(status),
   };
 }
 
@@ -95,12 +113,28 @@ function publicTopUp(purchase: any) {
   return {
     id: purchase.id,
     provider: purchase.provider || "stripe",
-    provider_reference: purchase.provider_checkout_session_id || null,
     amount_usd: purchase.amount_usd,
     status: purchase.status,
     created_at: purchase.created_at || null,
     updated_at: purchase.updated_at || null,
-    error: purchase.error || null,
+    error: publicTopUpError(purchase),
+  };
+}
+
+function publicTopUpError(purchase: any) {
+  const status = String(purchase?.status || "");
+  if (!purchase?.error) return null;
+  if (status === "funding_failed") return "Credits could not be funded yet. We will retry automatically.";
+  if (status === "checkout_failed") return "Checkout failed.";
+  return "Top-up failed.";
+}
+
+function publicLedgerEntry(entry: any) {
+  return {
+    id: entry.id,
+    ts: entry.ts || entry.created_at || null,
+    type: entry.type,
+    amount_usd: entry.amount_usd ?? null,
   };
 }
 
@@ -174,37 +208,18 @@ function requestMetricStatus(row: any) {
   return isErrorRequest(row) ? "fail" : "success";
 }
 
-function datadogRequestTime(row: any) {
-  const parsed = Date.parse(row.ts || "");
-  if (!Number.isFinite(parsed)) return "unknown";
-  return new Date(parsed).toISOString().replace(/\.\d{3}Z$/u, "Z");
-}
-
-function datadogRequestTimestamp(row: any) {
-  const parsed = Date.parse(row.ts || "");
-  return Number.isFinite(parsed) ? Math.floor(parsed / 1000) : null;
-}
-
 function requestMetricTags(row: any) {
   return {
     status: requestMetricStatus(row),
     endpoint: row.endpoint_id,
     path: row.path || "unknown",
     status_code: row.status_code || "unknown",
-    request_time: datadogRequestTime(row),
-    request_id: row.id,
-    trace_id: row.trace_id,
   };
 }
 
 function recordRequestMetrics(datadog: any, row: any) {
   const tags = requestMetricTags(row);
   datadog?.increment?.("toolrouter.requests.count", tags).catch(() => undefined);
-  const requestTimestamp = datadogRequestTimestamp(row);
-  if (requestTimestamp !== null) {
-    datadog?.gauge?.("toolrouter.requests.timestamp", requestTimestamp, tags)
-      .catch(() => undefined);
-  }
   if (!isErrorRequest(row) && isAgentKitUse(row)) {
     datadog?.increment?.("toolrouter.agentkit.uses.count", {
       endpoint: row.endpoint_id,
@@ -309,16 +324,25 @@ export function normalizeApiError(error: any) {
       : statusCode === 409
         ? "conflict"
         : "bad_request";
+  const publicCode =
+    knownConstraint?.code ||
+    (constraint ? "conflict" : statusCode >= 500 ? fallbackCode : error.code || fallbackCode);
+  const publicMessage =
+    knownConstraint?.message ||
+    (constraint ? "That value is already in use. Try a different value." : null) ||
+    (statusCode >= 500
+      ? "Internal server error"
+      : error instanceof Error
+        ? error.message
+        : String(error));
   return {
     statusCode,
-    code:
-      knownConstraint?.code ||
-      (constraint ? "conflict" : error.code || fallbackCode),
-    message:
-      knownConstraint?.message ||
-      (constraint ? "That value is already in use. Try a different value." : null) ||
-      (error instanceof Error ? error.message : String(error)),
-    details: constraint ? undefined : error.details || undefined,
+    code: publicCode,
+    message: publicMessage,
+    details:
+      statusCode < 500 && !constraint && error.exposeDetails === true
+        ? error.details || undefined
+        : undefined,
     trace_id: error.trace_id || null,
   };
 }
@@ -555,7 +579,7 @@ function healthSummaryForEndpoint(
     agentkit_last_checked_at: checkedAt(latestAgentKitEvidence),
     agentkit_path: latestAgentKitEvidence?.path || null,
     agentkit_charged: Boolean(latestAgentKitEvidence?.charged || false),
-    last_error: status?.last_error || latestCheck?.error || null,
+    last_error: publicStatusError(status || latestCheck),
   };
 }
 
@@ -703,7 +727,7 @@ function createRequestRow({
     credit_released_usd: credit?.credit_released_usd || null,
     latency_ms: result.latency_ms ?? null,
     error: result.error || null,
-    body: result.body ?? null,
+    body: null,
   };
 }
 
@@ -805,8 +829,14 @@ function safeAgentKitVerification(wallet: any) {
     verified: Boolean(wallet?.agentkit_verified),
     verified_at: wallet?.agentkit_verified_at || null,
     last_checked_at: wallet?.agentkit_last_checked_at || null,
-    error: wallet?.agentkit_verification_error || null,
+    error: safeAgentKitVerificationError(wallet?.agentkit_verification_error),
   };
+}
+
+function safeAgentKitVerificationError(error: any) {
+  if (!error) return null;
+  if (String(error) === "Not Verified") return "Not Verified";
+  return "Verification unavailable.";
 }
 
 function hashHumanId(value: string) {
@@ -1193,7 +1223,7 @@ export function createApiApp({
     const normalized = normalizeApiError(error);
     if (normalized.statusCode >= 500) {
       request.log.error(
-        { code: normalized.code, details: normalized.details },
+        { code: normalized.code, trace_id: normalized.trace_id },
         normalized.message,
       );
     }
@@ -1251,7 +1281,7 @@ export function createApiApp({
   app.get("/v1/requests", async (request: any) => {
     const auth = await authenticateApiKey(request.headers, store);
     const filters = requestFilters(request.query || {});
-    if (!filters.api_key_id) filters.api_key_id = auth.api_key_id;
+    filters.api_key_id = auth.api_key_id;
     return requestPage(store, filters);
   });
 
@@ -1329,11 +1359,13 @@ export function createApiApp({
       Math.min(Number(request.query?.limit || 100), 500),
     );
     return {
-      entries: await store.listCreditLedgerEntries({
-        user_id: user.user_id,
-        limit,
-        source_not: request.query?.activity_only === "true" ? "request" : undefined,
-      }),
+      entries: (
+        await store.listCreditLedgerEntries({
+          user_id: user.user_id,
+          limit,
+          source_not: request.query?.activity_only === "true" ? "request" : undefined,
+        })
+      ).map(publicLedgerEntry),
     };
   });
 
@@ -1382,7 +1414,6 @@ export function createApiApp({
       top_up: {
         id: updated.id,
         provider: "stripe",
-        provider_reference: updated.provider_checkout_session_id,
         amount_usd: amountUsd,
         checkout_url: updated.checkout_url,
         status: updated.status,
@@ -1399,7 +1430,7 @@ export function createApiApp({
         code: "not_found",
       });
     }
-    return { request: row };
+    return { request: publicRequestRow(row) };
   });
 
   app.post("/v1/requests", async (request: any) => {

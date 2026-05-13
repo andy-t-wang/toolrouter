@@ -5,7 +5,7 @@ type AlertPayload = {
 };
 
 function configuredRecipient() {
-  return process.env.TOOLROUTER_ALERT_EMAIL || "andy.wang@toolsforhumanity.com";
+  return process.env.TOOLROUTER_ALERT_EMAIL || "ops@toolrouter.world";
 }
 
 function configuredSender() {
@@ -48,18 +48,10 @@ export function createAlertClient({ fetchImpl = fetch }: { fetchImpl?: typeof fe
           tags: [{ name: "kind", value: "funding_failure" }],
         }),
       });
-      const body = await response.text();
       if (!response.ok) {
-        let details: unknown = body;
-        try {
-          details = body ? JSON.parse(body) : null;
-        } catch {
-          details = body;
-        }
         throw Object.assign(new Error(`alert email failed: ${response.status}`), {
           statusCode: 502,
           code: "alert_email_failed",
-          details,
         });
       }
       return { sent: true, skipped: false };

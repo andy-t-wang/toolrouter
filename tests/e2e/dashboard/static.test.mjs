@@ -3,7 +3,6 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 const landingPage = readFileSync(new URL("../../../apps/web/app/page.tsx", import.meta.url), "utf8");
-const agentationDev = readFileSync(new URL("../../../apps/web/app/agentation-dev.tsx", import.meta.url), "utf8");
 const setupPage = readFileSync(new URL("../../../apps/web/app/setup/page.tsx", import.meta.url), "utf8");
 const docsPage = readFileSync(new URL("../../../apps/web/app/docs/page.tsx", import.meta.url), "utf8");
 const mcpClientTabs = readFileSync(new URL("../../../apps/web/app/mcp-client-tabs.tsx", import.meta.url), "utf8");
@@ -54,18 +53,18 @@ describe("web dashboard static wiring", () => {
     assert.match(landingPage, /displayEndpointId\(provider\)/);
     assert.doesNotMatch(landingPage, /AgentKitStatusBadge/);
     assert.doesNotMatch(landingPage, /status-human-badge/);
-    assert.match(landingPage, /<AgentationDev \/>/);
+    assert.doesNotMatch(landingPage, /Agentation/);
     assert.doesNotMatch(landingPage, /http:\/\/127\.0\.0\.1:9402/);
     assert.doesNotMatch(landingPage, /Get an MCP key/);
     assert.doesNotMatch(landingPage, /Pricing/);
     assert.doesNotMatch(landingPage, /Changelog/);
   });
 
-  it("mounts Agentation on the public landing page in development", () => {
-    assert.match(agentationDev, /"use client"/);
-    assert.match(agentationDev, /import \{ Agentation \} from "agentation"/);
-    assert.match(agentationDev, /process\.env\.NODE_ENV !== "development"/);
-    assert.match(agentationDev, /<Agentation \/>/);
+  it("does not ship dev-only widgets", () => {
+    assert.doesNotMatch(landingPage, /Agentation/);
+    assert.doesNotMatch(setupPage, /Agentation/);
+    assert.doesNotMatch(docsPage, /Agentation/);
+    assert.doesNotMatch(dashboardPage, /Agentation/);
   });
 
   it("presents setup around generic tool categories before provider-specific endpoints", () => {
@@ -203,7 +202,7 @@ describe("web dashboard static wiring", () => {
     assert.match(dashboardPage, /\/v1\/top-ups/);
     assert.match(mcpContent, /https:\/\/toolrouter\.world/);
     assert.match(dashboardPage, /<McpClientTabs apiKey=\{quickstartApiKey\} compact \/>/);
-    assert.match(dashboardPage, /toolrouter\.dashboard\.apiKeys\.v1/);
+    assert.doesNotMatch(dashboardPage, /toolrouter\.dashboard\.apiKeys\.v1/);
     assert.match(dashboardPage, /toolrouter\.dashboard\.quickstartSeen\.v1/);
     assert.match(mcpClientTabs, /selectedCode/);
     assert.match(mcpClientTabs, /API key injected/);
@@ -264,7 +263,7 @@ describe("web dashboard static wiring", () => {
     assert.match(layout, /metadataBase:\s*new URL\(appUrl\)/);
     assert.match(layout, /openGraph:/);
     assert.match(layout, /twitter:/);
-    assert.match(layout, /\/og\?path=\//);
+    assert.match(layout, /\/og\.png/);
     assert.match(setupPage, /export const metadata/);
     assert.match(setupPage, /\/og\?path=\/setup/);
     assert.match(setupPage, /Connect any MCP-capable agent\./);

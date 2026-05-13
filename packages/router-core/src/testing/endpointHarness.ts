@@ -84,6 +84,12 @@ export function validateEndpointConfig(endpoint) {
     ) {
       errors.push("healthProbe.latencyBudgetMs must be a positive number");
     }
+    if (
+      endpoint.healthProbe.timeoutMs !== undefined &&
+      (!Number.isFinite(endpoint.healthProbe.timeoutMs) || endpoint.healthProbe.timeoutMs <= 0)
+    ) {
+      errors.push("healthProbe.timeoutMs must be a positive number");
+    }
   }
 
   if (!isPlainObject(endpoint.agentkitHealthProbe)) {
@@ -94,6 +100,12 @@ export function validateEndpointConfig(endpoint) {
     }
     if (endpoint.agentkitHealthProbe.paymentMode !== "agentkit_first") {
       errors.push("agentkitHealthProbe.paymentMode must be agentkit_first");
+    }
+    if (
+      endpoint.agentkitHealthProbe.timeoutMs !== undefined &&
+      (!Number.isFinite(endpoint.agentkitHealthProbe.timeoutMs) || endpoint.agentkitHealthProbe.timeoutMs <= 0)
+    ) {
+      errors.push("agentkitHealthProbe.timeoutMs must be a positive number");
     }
   }
 

@@ -72,7 +72,8 @@ describe("Browserbase live AgentKit/x402 smoke", () => {
     });
 
     assert.equal(result.ok, true);
-    assert.ok(["agentkit", "agentkit_to_x402"].includes(result.path));
+    assert.equal(result.path, "agentkit_to_x402");
+    assert.equal(result.charged, true);
     assert.equal(result.status_code, 200);
     assert.ok(result.body);
   });

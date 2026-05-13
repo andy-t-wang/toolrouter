@@ -22,7 +22,7 @@ This keeps operations simple: one App Platform app for runtime, one Supabase pro
 
 - `apps/api`: dedicated CPU App Platform service, minimum 2 containers, autoscale to 8.
 - `apps/web`: fixed 1-container App Platform service.
-- `apps/worker`: fixed 1-container App Platform worker running 12-hour health probes.
+- `apps/worker`: fixed 1-container App Platform worker running hourly paid checks and 12-hour AgentKit benefit checks.
 - Supabase: hosted Postgres, Auth, migrations, RLS, request traces, API keys, endpoint status.
 - DigitalOcean Managed Valkey: per-IP limits, per-key limits, and rolling spend counters.
 
@@ -47,14 +47,14 @@ This keeps operations simple: one App Platform app for runtime, one Supabase pro
 - The worker exposes `/health` so App Platform can restart it if it wedges.
 - App Platform alerts are enabled for deploy/domain failures plus CPU and memory pressure.
 - Durable request traces record endpoint, path, status, latency, charge status, spend estimate, and error.
-- Endpoint probes run every 12 hours and update both latest status and health-check history.
+- Paid endpoint probes run hourly. AgentKit benefit probes run every 12 hours. Both update health-check history, and paid probes update latest public status.
 
 ## Launch Checklist
 
 - Create Supabase project and apply migrations in `supabase/migrations`.
 - Create DigitalOcean Managed Valkey and set `VALKEY_URL`.
 - Set App Platform secrets from `.env.example`.
-- Replace `YOUR_GITHUB_ORG/toolrouter` in `deploy/digitalocean-app.yaml`.
+- Replace `your-org/toolrouter` in `deploy/digitalocean-app.yaml`.
 - Set `TOOLROUTER_CORS_ORIGIN` to the public dashboard origin.
 - Deploy the App Platform spec.
 - Confirm `/health`, dashboard login, API key creation, and one low-spend endpoint test.

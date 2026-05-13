@@ -5,7 +5,7 @@ import { stdin, stdout } from "node:process";
 import { fileURLToPath } from "node:url";
 
 const PROTOCOL_VERSION = "2025-11-25";
-const SERVER_INFO = Object.freeze({ name: "toolrouter-mcp", version: "0.1.0" });
+const SERVER_INFO = Object.freeze({ name: "toolrouter-mcp", version: "0.1.1" });
 const CANONICAL_API_BASE = "https://toolrouter.world";
 const API_BASE_ALIASES = new Map([
   ["https://api.toolrouter.com", CANONICAL_API_BASE],

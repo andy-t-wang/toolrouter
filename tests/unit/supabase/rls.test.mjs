@@ -37,6 +37,23 @@ describe("Supabase RLS migration", () => {
     );
   });
 
+  it("keeps raw provider health errors and payment references out of browser grants", () => {
+    const endpointGrant =
+      migration.match(/grant select \([\s\S]*?\) on table endpoint_status to authenticated;/)?.[0] || "";
+    const healthGrant =
+      migration.match(/grant select \([\s\S]*?\) on table health_checks to authenticated;/)?.[0] || "";
+
+    assert.match(endpointGrant, /endpoint_id/);
+    assert.match(healthGrant, /endpoint_id/);
+    for (const grant of [endpointGrant, healthGrant]) {
+      assert.doesNotMatch(grant, /payment_reference/);
+      assert.doesNotMatch(grant, /payment_error/);
+      assert.doesNotMatch(grant, /\berror\b/);
+    }
+    assert.doesNotMatch(endpointGrant, /last_error/);
+  });
+
+
   it("scopes user-owned data by auth.uid", () => {
     assert.match(migration, /api_keys_select_own/);
     assert.match(migration, /requests_select_own/);

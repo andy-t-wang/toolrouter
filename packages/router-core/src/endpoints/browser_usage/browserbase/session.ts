@@ -26,7 +26,8 @@ export const browserbaseSessionEndpointDefinition = Object.freeze({
     mode: "paid_availability",
     payment_mode: "x402_only",
     max_usd: "0.02",
-    latency_budget_ms: 5000,
+    timeout_ms: 15000,
+    latency_budget_ms: 10000,
     input: {
       estimated_minutes: 5,
     },
@@ -35,7 +36,8 @@ export const browserbaseSessionEndpointDefinition = Object.freeze({
     mode: "agentkit_benefit",
     payment_mode: "agentkit_first",
     max_usd: "0.02",
-    latency_budget_ms: 5000,
+    timeout_ms: 15000,
+    latency_budget_ms: 10000,
     input: {
       estimated_minutes: 5,
     },

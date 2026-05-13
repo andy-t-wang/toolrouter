@@ -25,8 +25,35 @@ grant select (
 ) on table api_keys to authenticated;
 
 grant select on table requests to authenticated;
-grant select on table endpoint_status to authenticated;
-grant select on table health_checks to authenticated;
+grant select (
+  endpoint_id,
+  status,
+  last_checked_at,
+  status_code,
+  latency_ms,
+  path,
+  charged,
+  estimated_usd,
+  amount_usd,
+  currency,
+  payment_network,
+  updated_at
+) on table endpoint_status to authenticated;
+
+grant select (
+  id,
+  endpoint_id,
+  checked_at,
+  status,
+  status_code,
+  latency_ms,
+  path,
+  charged,
+  estimated_usd,
+  amount_usd,
+  currency,
+  payment_network
+) on table health_checks to authenticated;
 grant select on table wallet_accounts to authenticated;
 grant select on table credit_accounts to authenticated;
 grant select on table credit_ledger_entries to authenticated;
@@ -95,10 +122,10 @@ comment on table requests is
   'RLS enabled. Authenticated users can read only request rows owned by their auth.uid(). Router writes use the service role.';
 
 comment on table endpoint_status is
-  'RLS enabled. Authenticated users can read global endpoint status. Writes use the service role.';
+  'RLS enabled. Authenticated users can read safe global endpoint status. Raw provider errors and payment references are not granted to client roles. Writes use the service role.';
 
 comment on table health_checks is
-  'RLS enabled. Authenticated users can read global health-check history. Writes use the service role.';
+  'RLS enabled. Authenticated users can read safe global health-check history. Raw provider errors and payment references are not granted to client roles. Writes use the service role.';
 
 comment on table wallet_accounts is
   'RLS enabled. Authenticated users can read only their own Crossmint wallet metadata. Writes use the service role.';

@@ -51,7 +51,7 @@ function throwIfTimedOut(signal) {
   throw signal.reason || new Error("provider request aborted");
 }
 
-function isTimeoutError(error, signal) {
+function isTimeoutError(signal) {
   return Boolean(signal?.aborted);
 }
 
@@ -307,10 +307,10 @@ function registerPaymentSchemes({ client, deps, account }) {
 function createPaymentFetch({ x402Client, ExactEvmScheme, registerExactEvmScheme, wrapFetchWithPayment, account, maxUsd, events, baseFetch = fetch }) {
   const client = new x402Client();
   registerPaymentSchemes({ client, deps: { ExactEvmScheme, registerExactEvmScheme }, account });
-  client.registerPolicy((version, requirements) =>
+  client.registerPolicy((_version, requirements) =>
     requirements.filter((requirement) => allowedChains().has(requirement.network)),
   );
-  client.registerPolicy((version, requirements) =>
+  client.registerPolicy((_version, requirements) =>
     requirements.filter((requirement) => BigInt(requirementAtomicAmount(requirement)) <= decimalUsdToAtomic(maxUsd)),
   );
   client.onBeforePaymentCreation((context) => {
@@ -432,7 +432,7 @@ export async function executeEndpoint({ endpoint, request, maxUsd, traceId, paym
       body: await readResponseBody(response),
     };
   } catch (error) {
-    if (timeout.timeoutMs && isTimeoutError(error, timeout.signal)) {
+    if (timeout.timeoutMs && isTimeoutError(timeout.signal)) {
       return timeoutResult({
         endpoint,
         request,

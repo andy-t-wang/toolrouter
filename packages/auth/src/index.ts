@@ -130,7 +130,7 @@ async function findDevSupabaseUser(email: string) {
 
 async function ensureDevSupabaseSession() {
   const configuredUserId = process.env.TOOLROUTER_DEV_SUPABASE_USER_ID || process.env.TOOLROUTER_DEV_USER_ID;
-  const email = process.env.TOOLROUTER_DEV_SUPABASE_EMAIL || "toolrouter-dev@example.com";
+  const email = process.env.TOOLROUTER_DEV_SUPABASE_EMAIL || "dev@toolrouter.world";
   if (configuredUserId) {
     if (!isUuid(configuredUserId)) {
       throw Object.assign(new Error("TOOLROUTER_DEV_SUPABASE_USER_ID must be a UUID when set"), {

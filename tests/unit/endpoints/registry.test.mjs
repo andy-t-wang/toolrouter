@@ -88,4 +88,12 @@ describe("endpoint registry", () => {
     assert.deepEqual(session.json, { estimatedMinutes: 5 });
     assert.equal(session.estimatedUsd, "0.01");
   });
+
+  it("uses a longer Browserbase session health timeout than fast endpoints", () => {
+    const probe = buildEndpointHealthProbeRequest("browserbase.session");
+    assert.equal(probe.maxUsd, "0.02");
+    assert.equal(probe.paymentMode, "x402_only");
+    assert.equal(probe.timeoutMs, 15_000);
+    assert.equal(probe.latencyBudgetMs, 10_000);
+  });
 });

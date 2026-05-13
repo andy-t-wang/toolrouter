@@ -89,11 +89,11 @@ function queryTable(title, queryString) {
   };
 }
 
-function recentRequestsTable() {
+function requestBreakdownTable() {
   return {
     definition: {
       type: "query_table",
-      title: "Recent requests by time",
+      title: "Requests by endpoint and status",
       requests: [
         {
           response_format: "scalar",
@@ -101,7 +101,7 @@ function recentRequestsTable() {
             {
               data_source: "metrics",
               name: "request_count",
-              query: "sum:toolrouter.requests.count{env:production,source:toolrouter} by {request_time,request_id,trace_id,endpoint,status,status_code,path}.as_count().rollup(sum, 60)",
+              query: "sum:toolrouter.requests.count{env:production,source:toolrouter} by {endpoint,status,status_code,path}.as_count().rollup(sum, 1800)",
               aggregator: "sum",
             },
           ],
@@ -115,8 +115,8 @@ function recentRequestsTable() {
             count: 100,
             order_by: [
               {
-                type: "group",
-                name: "request_time",
+                type: "formula",
+                index: 0,
                 order: "desc",
               },
             ],
@@ -148,30 +148,29 @@ function query(q, displayType = "bars", options = {}) {
   return request;
 }
 
-function metricFormulaQuery(name, q, alias, displayType = "bars", options = {}) {
-  const request = {
+function metricFormulaQueries(items, displayType = "bars") {
+  return {
     display_type: displayType,
     response_format: "timeseries",
-    queries: [
-      {
-        data_source: "metrics",
-        name,
-        query: q,
-      },
-    ],
-    formulas: [
-      {
-        formula: name,
-        alias,
-      },
-    ],
+    queries: items.map((item) => ({
+      data_source: "metrics",
+      name: item.name,
+      query: item.q,
+    })),
+    formulas: items.map((item) => {
+      const formula = {
+        formula: item.name,
+        alias: item.alias,
+      };
+      if (item.palette) {
+        formula.style = {
+          palette: item.palette,
+          palette_index: item.paletteIndex ?? 0,
+        };
+      }
+      return formula;
+    }),
   };
-  if (options.palette) {
-    request.style = {
-      palette: options.palette,
-    };
-  }
-  return request;
 }
 
 const THIRTY_MINUTES_SECONDS = 1800;
@@ -182,10 +181,22 @@ const dashboard = {
   layout_type: "ordered",
   widgets: [
     timeseries("Requests: success vs fail", [
-      metricFormulaQuery("success", `sum:toolrouter.requests.count{env:production,source:toolrouter,status:success}.as_count().rollup(sum, ${THIRTY_MINUTES_SECONDS})`, "Success", "bars", { palette: "green" }),
-      metricFormulaQuery("fail", `sum:toolrouter.requests.count{env:production,source:toolrouter,status:fail,!status_code:402}.as_count().rollup(sum, ${THIRTY_MINUTES_SECONDS})`, "Fail", "bars", { palette: "red" }),
+      metricFormulaQueries([
+        {
+          name: "success",
+          q: `sum:toolrouter.requests.count{env:production,source:toolrouter,status:success}.as_count().rollup(sum, ${THIRTY_MINUTES_SECONDS})`,
+          alias: "Success",
+          palette: "green",
+        },
+        {
+          name: "fail",
+          q: `sum:toolrouter.requests.count{env:production,source:toolrouter,status:fail,!status_code:402}.as_count().rollup(sum, ${THIRTY_MINUTES_SECONDS})`,
+          alias: "Fail",
+          palette: "red",
+        },
+      ]),
     ]),
-    recentRequestsTable(),
+    requestBreakdownTable(),
     timeseries("AgentKit uses per 30 min", [
       query(`sum:toolrouter.agentkit.uses.count{env:production,source:toolrouter}.as_count().rollup(sum, ${THIRTY_MINUTES_SECONDS})`),
     ]),

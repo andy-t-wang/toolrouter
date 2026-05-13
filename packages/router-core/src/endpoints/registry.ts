@@ -67,6 +67,7 @@ function materializeEndpoint(definition) {
       maxUsd,
       paymentMode: definition.health_probe.payment_mode || definition.default_payment_mode || "agentkit_first",
       latencyBudgetMs: definition.health_probe.latency_budget_ms ?? definition.health_probe.latencyBudgetMs,
+      timeoutMs: definition.health_probe.timeout_ms ?? definition.health_probe.timeoutMs,
     }),
     agentkitHealthProbe: Object.freeze({
       ...(definition.agentkit_health_probe || definition.health_probe),
@@ -81,6 +82,11 @@ function materializeEndpoint(definition) {
         definition.agentkit_health_probe?.latencyBudgetMs ??
         definition.health_probe.latency_budget_ms ??
         definition.health_probe.latencyBudgetMs,
+      timeoutMs:
+        definition.agentkit_health_probe?.timeout_ms ??
+        definition.agentkit_health_probe?.timeoutMs ??
+        definition.health_probe.timeout_ms ??
+        definition.health_probe.timeoutMs,
     }),
     liveSmoke: Object.freeze({
       ...definition.live_smoke,
@@ -174,7 +180,10 @@ export function buildEndpointHealthProbeRequest(endpointOrId) {
   const endpoint = typeof endpointOrId === "string" ? getEndpoint(endpointOrId) : endpointOrId;
   return {
     request: endpoint.buildRequest(endpoint.healthProbe.input),
-    maxUsd: endpoint.healthProbe.max_usd || endpoint.healthProbe.maxUsd,
+    maxUsd: endpoint.healthProbe.maxUsd || endpoint.healthProbe.max_usd,
+    paymentMode: endpoint.healthProbe.paymentMode || endpoint.healthProbe.payment_mode,
+    latencyBudgetMs: endpoint.healthProbe.latencyBudgetMs || endpoint.healthProbe.latency_budget_ms,
+    timeoutMs: endpoint.healthProbe.timeoutMs || endpoint.healthProbe.timeout_ms,
   };
 }
 

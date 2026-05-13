@@ -331,6 +331,31 @@ describe("endpoint health worker", () => {
     }
   });
 
+  it("passes endpoint-specific health probe timeouts to the executor", async () => {
+    const endpoint = getEndpoint("browserbase.session");
+    const db = createDb();
+    let timeoutMs;
+
+    await runEndpointHealthCheck({
+      endpoint,
+      db,
+      executor: async (payload) => {
+        timeoutMs = payload.timeoutMs;
+        return {
+          ok: true,
+          status_code: 200,
+          path: "agentkit_to_x402",
+          charged: true,
+          latency_ms: 40,
+        };
+      },
+      now: () => new Date("2026-05-09T11:00:00.000Z"),
+      useRecentRequests: false,
+    });
+
+    assert.equal(timeoutMs, 15_000);
+  });
+
   it("marks slow successful probes above the endpoint latency budget as degraded", async () => {
     const endpoint = getEndpoint("exa.search");
     const db = createDb();
@@ -498,7 +523,7 @@ describe("endpoint health worker", () => {
     assert.equal(db.insertedHealthChecks[0].charged, true);
   });
 
-  it("persists safe provider body errors for failed health probes", async () => {
+  it("sanitizes provider body errors for failed health probes", async () => {
     const endpoint = getEndpoint("browserbase.session");
     const db = createDb();
 
@@ -523,7 +548,7 @@ describe("endpoint health worker", () => {
     assert.equal(result.status, "failing");
     assert.equal(
       db.insertedHealthChecks[0].error,
-      "Failed to create payment intent: amount is below provider minimum",
+      "Provider payment error",
     );
     assert.equal(db.upsertedStatuses[0].last_error, db.insertedHealthChecks[0].error);
   });

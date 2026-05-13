@@ -69,7 +69,7 @@ function pick(result, snakeName, camelName) {
   return result?.[snakeName] ?? result?.[camelName] ?? null;
 }
 
-function providerBodyError(result) {
+function providerBodyMessage(result) {
   const body = result?.body;
   if (!body) return null;
   if (typeof body === "string") return body;
@@ -78,6 +78,23 @@ function providerBodyError(result) {
   const details = body.details;
   if (message && details) return `${message}: ${details}`;
   return message || details || null;
+}
+
+function safePaymentError(value) {
+  if (!value) return null;
+  return "Provider payment error";
+}
+
+function safeHealthError(result) {
+  const statusCode = maybeNumber(pick(result, "status_code", "statusCode"));
+  const error = String(result?.error ?? providerBodyMessage(result) ?? result?.payment_error ?? "");
+  if (!error && (!Number.isFinite(statusCode) || statusCode < 400)) return null;
+  if (statusCode === 402) return "Provider payment required";
+  if (statusCode === 429) return "Provider rate limited";
+  if (statusCode === 504 || /timed out|timeout/iu.test(error)) return "Provider timed out";
+  if (/payment|stripe|x402/iu.test(error)) return "Provider payment error";
+  if (Number.isFinite(statusCode) && statusCode >= 500) return "Provider error";
+  return "Provider check failed";
 }
 
 function normalizeExecutionResult(result, fallbackLatencyMs) {
@@ -98,8 +115,8 @@ function normalizeExecutionResult(result, fallbackLatencyMs) {
       pick(result, "payment_reference", "paymentReference") ?? payment.reference ?? payment.paymentReference,
     ),
     payment_network: maybeString(pick(result, "payment_network", "paymentNetwork") ?? payment.network),
-    payment_error: maybeString(pick(result, "payment_error", "paymentError") ?? payment.error),
-    error: maybeString(result?.error ?? providerBodyError(result)),
+    payment_error: safePaymentError(pick(result, "payment_error", "paymentError") ?? payment.error),
+    error: safeHealthError(result),
   };
 }
 
@@ -246,10 +263,10 @@ function rowFromRequest(endpoint, requestRow, checkedAt, { probeKind = "availabi
     estimated_usd: maybeString(requestRow.estimated_usd ?? endpoint.estimated_cost_usd),
     amount_usd: maybeString(requestRow.amount_usd),
     currency: maybeString(requestRow.currency),
-    payment_reference: maybeString(requestRow.payment_reference),
+    payment_reference: null,
     payment_network: maybeString(requestRow.payment_network),
-    payment_error: normalized.payment_error,
-    error: maybeString(requestRow.error),
+    payment_error: safePaymentError(normalized.payment_error),
+    error: safeHealthError(requestRow),
   };
 }
 
@@ -269,7 +286,7 @@ function rowFromError(endpoint, checkedAt, error, latencyMs) {
     payment_reference: null,
     payment_network: null,
     payment_error: null,
-    error: error instanceof Error ? error.message : String(error),
+    error: safeHealthError({ error }),
   };
 }
 
@@ -424,7 +441,7 @@ export async function runEndpointHealthCheck({
           maxUsd: probe.maxUsd,
           paymentMode: probe.paymentMode || endpoint.defaultPaymentMode || "agentkit_first",
           traceId,
-          timeoutMs: healthProbeTimeoutMs(timeoutMs),
+          timeoutMs: healthProbeTimeoutMs(timeoutMs ?? probe.timeoutMs ?? probe.timeout_ms),
         });
         const normalized = normalizeExecutionResult(result, Date.now() - started);
         healthCheckRow = {
@@ -441,7 +458,7 @@ export async function runEndpointHealthCheck({
           estimated_usd: normalized.estimated_usd ?? request.estimatedUsd,
           amount_usd: normalized.amount_usd,
           currency: normalized.currency,
-          payment_reference: normalized.payment_reference,
+          payment_reference: null,
           payment_network: normalized.payment_network,
           payment_error: normalized.payment_error,
           error: normalized.error,
@@ -503,7 +520,7 @@ export async function runEndpointHealthChecks({
       path: result.healthCheck?.path ?? null,
       charged: Boolean(result.healthCheck?.charged),
       latency_ms: result.healthCheck?.latency_ms ?? null,
-      timeout: String(result.healthCheck?.error || "").includes("timed out after"),
+      timeout: result.healthCheck?.error === "Provider timed out",
       skipped: Boolean(result.skipped),
       skip_reason: result.skip_reason ?? null,
       next_check_after_ms: result.next_check_after_ms ?? null,

@@ -1,6 +1,5 @@
 "use client";
 
-import { Agentation } from "agentation";
 import { createClient } from "@supabase/supabase-js";
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
@@ -24,7 +23,6 @@ const unverifiedAgentKitStatus = ["Not", "Verified"].join(" ");
 const recentCheckoutWindowMs = 15 * 60 * 1000;
 const x402ChallengeWindowMs = 2 * 60 * 1000;
 const recentCallsPageSize = 20;
-const dashboardApiKeyStorageKey = "toolrouter.dashboard.apiKeys.v1";
 const dashboardQuickstartSeenKey = "toolrouter.dashboard.quickstartSeen.v1";
 const supabase =
   supabaseUrl && supabaseAnonKey
@@ -55,26 +53,6 @@ function allowLocalDevSession() {
     window.location.hostname === "127.0.0.1" ||
     window.location.hostname === "localhost";
   return localHost && (!supabase || devAuthEnabled);
-}
-
-function readStoredDashboardApiKeys() {
-  if (typeof window === "undefined") return {};
-  try {
-    const parsed = JSON.parse(
-      window.localStorage.getItem(dashboardApiKeyStorageKey) || "{}",
-    );
-    return parsed && typeof parsed === "object" ? parsed : {};
-  } catch {
-    return {};
-  }
-}
-
-function writeStoredDashboardApiKeys(keysById: Record<string, string>) {
-  if (typeof window === "undefined") return;
-  window.localStorage.setItem(
-    dashboardApiKeyStorageKey,
-    JSON.stringify(keysById),
-  );
 }
 
 function isActiveTopUp(topUp: any) {
@@ -188,18 +166,6 @@ function formatDate(value: string | null | undefined) {
   });
 }
 
-function formatTime(value: string | null | undefined) {
-  if (!value) return "-";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleTimeString(undefined, {
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: false,
-  });
-}
-
 function formatDateTime(value: string | null | undefined) {
   if (!value) return "-";
   const date = new Date(value);
@@ -212,25 +178,6 @@ function formatDateTime(value: string | null | undefined) {
     second: "2-digit",
     hour12: false,
   });
-}
-
-function formatActivityDay(value: string) {
-  const date = new Date(`${value}T00:00:00Z`);
-  if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat(undefined, {
-    month: "short",
-    day: "numeric",
-    timeZone: "UTC",
-  }).format(date);
-}
-
-function barHeight(value: number, max: number) {
-  if (!value || !max) return "0%";
-  return `${Math.max(3, Math.round((value / max) * 100))}%`;
-}
-
-function sumActivity(days: any[], read: (day: any) => number) {
-  return days.reduce((sum, day) => sum + read(day), 0);
 }
 
 function monthStartIso() {
@@ -493,9 +440,6 @@ export default function DashboardPage() {
   const [topUps, setTopUps] = useState<any[]>([]);
   const [callerId, setCallerId] = useState("default");
   const [revealedKey, setRevealedKey] = useState("");
-  const [storedApiKeys, setStoredApiKeys] = useState<Record<string, string>>(
-    {},
-  );
   const [copiedKey, setCopiedKey] = useState(false);
   const [copiedPrompt, setCopiedPrompt] = useState(false);
   const [topUpAmount, setTopUpAmount] = useState("5");
@@ -518,10 +462,6 @@ export default function DashboardPage() {
     syncPageFromHash();
     window.addEventListener("hashchange", syncPageFromHash);
     return () => window.removeEventListener("hashchange", syncPageFromHash);
-  }, []);
-
-  useEffect(() => {
-    setStoredApiKeys(readStoredDashboardApiKeys());
   }, []);
 
   useEffect(() => {
@@ -552,10 +492,8 @@ export default function DashboardPage() {
   const recentRequests = useMemo(() => compactRecentRequests(requests), [requests]);
   const ledgerRows = useMemo(() => compactLedgerEntries(ledger), [ledger]);
   const quickstartApiKey = useMemo(() => {
-    if (revealedKey) return revealedKey;
-    const activeKey = keys.find((key) => !key.disabled_at && storedApiKeys[key.id]);
-    return activeKey ? storedApiKeys[activeKey.id] : "";
-  }, [keys, revealedKey, storedApiKeys]);
+    return revealedKey;
+  }, [revealedKey]);
   const hasActiveApiKey = keys.some((key) => !key.disabled_at);
   const agentKitVerified = Boolean(balance?.agentkit_verification?.verified);
   const agentKitCheckMeta = [
@@ -661,10 +599,15 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (!supabase) {
-      setSessionToken("dev_supabase_session");
-      refresh("dev_supabase_session").catch((error) =>
-        setBanner(error.message),
-      );
+      if (allowLocalDevSession()) {
+        setSessionToken("dev_supabase_session");
+        refresh("dev_supabase_session").catch((error) =>
+          setBanner(error.message),
+        );
+      } else {
+        setSessionToken("");
+        setBanner("Supabase auth is not configured.");
+      }
       return;
     }
     sessionFromUrlHash()
@@ -711,8 +654,7 @@ export default function DashboardPage() {
       return;
     }
     if (!supabase) {
-      setSessionToken("dev_supabase_session");
-      await refresh("dev_supabase_session");
+      setBanner("Supabase auth is not configured.");
       return;
     }
     const origin =
@@ -734,14 +676,6 @@ export default function DashboardPage() {
       body: JSON.stringify({ caller_id: callerId }),
     });
     setRevealedKey(body.api_key);
-    const keyId = body.record?.id;
-    if (keyId && body.api_key) {
-      setStoredApiKeys((current) => {
-        const next = { ...current, [keyId]: body.api_key };
-        writeStoredDashboardApiKeys(next);
-        return next;
-      });
-    }
     setCopiedKey(false);
     await refresh();
   }
@@ -761,12 +695,7 @@ export default function DashboardPage() {
       token: sessionToken,
       method: "DELETE",
     });
-    setStoredApiKeys((current) => {
-      const next = { ...current };
-      delete next[id];
-      writeStoredDashboardApiKeys(next);
-      return next;
-    });
+    setRevealedKey("");
     await refresh();
   }
 
@@ -901,7 +830,6 @@ export default function DashboardPage() {
             {banner ? <div className="banner">{banner}</div> : null}
           </section>
         </main>
-        {process.env.NODE_ENV === "development" && <Agentation />}
       </>
     );
   }
@@ -954,7 +882,7 @@ export default function DashboardPage() {
               <span>Status</span>
               <strong>
                 <span className="dot good" />
-                All systems normal
+                Live status tracked
               </strong>
             </div>
           </aside>
@@ -1679,7 +1607,6 @@ export default function DashboardPage() {
           </main>
         </div>
       </div>
-      {process.env.NODE_ENV === "development" && <Agentation />}
     </>
   );
 }

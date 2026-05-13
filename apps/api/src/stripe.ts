@@ -110,7 +110,6 @@ export class StripeClient {
       throw Object.assign(new Error(data?.error?.message || `Stripe request failed: ${response.status}`), {
         statusCode: response.status >= 500 ? 502 : 400,
         code: "stripe_error",
-        details: data,
       });
     }
     return data;

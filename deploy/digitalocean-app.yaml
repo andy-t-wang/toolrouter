@@ -40,7 +40,7 @@ ingress:
 services:
   - name: api
     github:
-      repo: andy-t-wang/toolrouter
+      repo: your-org/toolrouter
       branch: main
       deploy_on_push: true
     source_dir: /
@@ -95,9 +95,6 @@ services:
       - key: VALKEY_URL
         value: SET_IN_APP_PLATFORM
         type: SECRET
-      - key: AGENT_WALLET_PRIVATE_KEY
-        value: SET_IN_APP_PLATFORM
-        type: SECRET
       - key: X402_DEFAULT_CHAIN_ID
         value: eip155:8453
       - key: X402_ALLOWED_CHAINS
@@ -120,7 +117,7 @@ services:
         value: SET_IN_APP_PLATFORM
         type: SECRET
       - key: TOOLROUTER_ALERT_EMAIL
-        value: andy.wang@toolsforhumanity.com
+        value: ops@toolrouter.world
       - key: TOOLROUTER_ALERT_FROM
         value: ToolRouter <alerts@toolrouter.world>
       - key: TOOLROUTER_CHECKOUT_SUCCESS_URL
@@ -159,7 +156,7 @@ services:
 
   - name: web
     github:
-      repo: andy-t-wang/toolrouter
+      repo: your-org/toolrouter
       branch: main
       deploy_on_push: true
     source_dir: /
@@ -203,7 +200,7 @@ services:
 workers:
   - name: health-worker
     github:
-      repo: andy-t-wang/toolrouter
+      repo: your-org/toolrouter
       branch: main
       deploy_on_push: true
     source_dir: /
@@ -227,9 +224,6 @@ workers:
       - key: SUPABASE_SERVICE_ROLE_KEY
         value: SET_IN_APP_PLATFORM
         type: SECRET
-      - key: AGENT_WALLET_PRIVATE_KEY
-        value: SET_IN_APP_PLATFORM
-        type: SECRET
       - key: X402_DEFAULT_CHAIN_ID
         value: eip155:8453
       - key: X402_ALLOWED_CHAINS
@@ -242,3 +236,19 @@ workers:
         value: "3600000"
       - key: TOOLROUTER_AGENTKIT_HEALTH_INTERVAL_MS
         value: "43200000"
+      - key: CROSSMINT_ENV
+        value: production
+      - key: CROSSMINT_SERVER_SIDE_API_KEY
+        value: SET_IN_APP_PLATFORM
+        type: SECRET
+      - key: CROSSMINT_CHAIN
+        value: base
+      - key: CROSSMINT_SIGNER_SECRET
+        value: SET_IN_APP_PLATFORM
+        type: SECRET
+      - key: CROSSMINT_HEALTH_WALLET_LOCATOR
+        value: SET_IN_APP_PLATFORM
+        type: SECRET
+      - key: CROSSMINT_HEALTH_WALLET_ADDRESS
+        value: SET_IN_APP_PLATFORM
+        type: SECRET

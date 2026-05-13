@@ -7,5 +7,5 @@ const app = createApiApp();
 await app.listen({ host, port });
 
 if (process.env.ROUTER_DEV_MODE === "true") {
-  app.log.info({ dev_api_key: process.env.AGENTKIT_ROUTER_DEV_API_KEY || "dev_agentkit_router_key" }, "dev mode enabled");
+  app.log.info({ dev_mode: true }, "dev mode enabled");
 }

@@ -186,6 +186,53 @@ describe("router API", () => {
     assert.equal(exa.agentkit_status, "healthy");
     assert.equal(exa.agentkit_operational, true);
     assert.equal(exa.agentkit_path, "agentkit");
+    assert.equal(exa.last_error, null);
+  });
+
+  it("redacts raw health errors from public status", async () => {
+    const isolatedStore = new LocalStore({
+      path: join(mkdtempSync(join(tmpdir(), "toolrouter-public-status-redaction-")), "store.json"),
+    });
+    const isolatedApp = createApiApp({
+      logger: false,
+      cache: new MemoryCache(),
+      store: isolatedStore,
+    });
+    await isolatedApp.listen({ port: 0, host: "127.0.0.1" });
+    const isolatedBaseUrl = `http://127.0.0.1:${isolatedApp.server.address().port}`;
+    try {
+      const checkedAt = new Date().toISOString();
+      await isolatedStore.insertHealthCheck({
+        id: "hc_raw_error",
+        endpoint_id: "exa.search",
+        checked_at: checkedAt,
+        status: "failing",
+        status_code: 504,
+        latency_ms: 8000,
+        path: "x402",
+        charged: false,
+        error: "provider timed out after 8000ms with payment header secret_value",
+      });
+      await isolatedStore.upsertEndpointStatus({
+        endpoint_id: "exa.search",
+        status: "failing",
+        last_checked_at: checkedAt,
+        status_code: 504,
+        latency_ms: 8000,
+        path: "x402",
+        charged: false,
+        last_error: "provider timed out after 8000ms with payment header secret_value",
+      });
+
+      const response = await fetch(`${isolatedBaseUrl}/v1/status`);
+      assert.equal(response.status, 200);
+      const body = await response.json();
+      const exa = body.endpoints.find((endpoint) => endpoint.id === "exa.search");
+      assert.equal(exa.last_error, "Provider timed out");
+      assert.doesNotMatch(JSON.stringify(body), /secret_value/);
+    } finally {
+      await isolatedApp.close();
+    }
   });
 
   it("creates dashboard-owned API keys without an admin token", async () => {
@@ -247,8 +294,13 @@ describe("router API", () => {
     const topUp = (await topUpResponse.json()).top_up;
     assert.equal(topUp.provider, "stripe");
     assert.match(topUp.id, /^cp_/);
-    assert.match(topUp.provider_reference, /^cs_dev_/);
+    assert.equal(topUp.provider_reference, undefined);
     assert.equal(topUp.wallet_address, undefined);
+    const createdPurchase = (await store.listCreditPurchases({
+      user_id: process.env.TOOLROUTER_DEV_USER_ID,
+      limit: 1,
+    }))[0];
+    assert.match(createdPurchase.provider_checkout_session_id, /^cs_dev_/);
 
     const topUpsResponse = await fetch(`${baseUrl}/v1/top-ups`, { headers: sessionHeaders() });
     assert.equal(topUpsResponse.status, 200);
@@ -267,7 +319,7 @@ describe("router API", () => {
       type: "checkout.session.completed",
       data: {
         object: {
-          id: topUp.provider_reference,
+          id: createdPurchase.provider_checkout_session_id,
           client_reference_id: topUp.id,
           payment_status: "paid",
         },
@@ -314,7 +366,7 @@ describe("router API", () => {
     });
     const activity = await activityResponse.json();
     assert.ok(activity.entries.some((entry) => entry.type === "top_up_settled"));
-    assert.ok(activity.entries.every((entry) => entry.source !== "request"));
+    assert.ok(activity.entries.every((entry) => !["reserve", "capture", "release"].includes(entry.type)));
 
     const settledTopUpsResponse = await fetch(`${baseUrl}/v1/top-ups`, { headers: sessionHeaders() });
     const settledTopUps = await settledTopUpsResponse.json();
@@ -373,12 +425,16 @@ describe("router API", () => {
     });
     assert.equal(topUpResponse.statusCode, 201);
     const topUp = topUpResponse.json().top_up;
+    const createdPurchase = (await retryStore.listCreditPurchases({
+      user_id: process.env.TOOLROUTER_DEV_USER_ID,
+      limit: 1,
+    }))[0];
     const webhookBody = {
       id: "evt_retry_completed_1",
       type: "checkout.session.completed",
       data: {
         object: {
-          id: topUp.provider_reference,
+          id: createdPurchase.provider_checkout_session_id,
           client_reference_id: topUp.id,
           payment_status: "paid",
         },
@@ -548,11 +604,61 @@ describe("router API", () => {
     assert.equal(listed.requests[0].payment_reference, null);
     assert.equal(listed.requests[0].credit_reservation_id.startsWith("crr_"), true);
     assert.equal(listed.requests[0].agentkit_value_label, null);
+    assert.equal(listed.requests[0].body, undefined);
 
     const getResponse = await fetch(`${baseUrl}/v1/requests/${created.id}`, { headers: authHeaders() });
     const detail = await getResponse.json();
     assert.equal(detail.request.id, created.id);
     assert.equal(detail.request.endpoint_id, "exa.search");
+    assert.equal(detail.request.body, undefined);
+    const stored = await store.getRequest(created.id);
+    assert.equal(stored.body, null);
+  });
+
+  it("ignores caller-supplied api_key_id when listing API-key request traces", async () => {
+    const isolatedStore = new LocalStore({
+      path: join(mkdtempSync(join(tmpdir(), "toolrouter-request-scope-")), "store.json"),
+    });
+    await isolatedStore.insertRequest({
+      id: "req_own",
+      trace_id: "trace_own",
+      user_id: process.env.TOOLROUTER_DEV_USER_ID,
+      api_key_id: "key_dev",
+      endpoint_id: "exa.search",
+      ts: "2026-05-09T10:00:00.000Z",
+      status_code: 200,
+      path: "agentkit",
+      charged: false,
+    });
+    await isolatedStore.insertRequest({
+      id: "req_other",
+      trace_id: "trace_other",
+      user_id: "00000000-0000-4000-8000-000000000002",
+      api_key_id: "key_other",
+      endpoint_id: "exa.search",
+      ts: "2026-05-09T10:00:01.000Z",
+      status_code: 200,
+      path: "agentkit",
+      charged: false,
+    });
+    const isolatedApp = createApiApp({
+      logger: false,
+      cache: new MemoryCache(),
+      store: isolatedStore,
+    });
+    await isolatedApp.listen({ port: 0, host: "127.0.0.1" });
+    const isolatedBaseUrl = `http://127.0.0.1:${isolatedApp.server.address().port}`;
+    try {
+      const response = await fetch(
+        `${isolatedBaseUrl}/v1/requests?api_key_id=key_other`,
+        { headers: authHeaders() },
+      );
+      assert.equal(response.status, 200);
+      const body = await response.json();
+      assert.deepEqual(body.requests.map((row) => row.id), ["req_own"]);
+    } finally {
+      await isolatedApp.close();
+    }
   });
 
   it("paginates dashboard request rows with a cursor", async () => {
