@@ -19,6 +19,13 @@ const allowedTypes = new Set([
   "email",
 ]);
 
+function allowLocalDevSession() {
+  return (
+    process.env.NEXT_PUBLIC_TOOLROUTER_DEV_AUTH === "true" ||
+    process.env.ROUTER_DEV_MODE === "true"
+  );
+}
+
 export async function GET(request: Request) {
   const requestUrl = new URL(request.url);
   const tokenHash = requestUrl.searchParams.get("token_hash") || "";
@@ -27,6 +34,18 @@ export async function GET(request: Request) {
     requestUrl.searchParams.get("redirect_to"),
     requestUrl,
   );
+
+  if (
+    allowLocalDevSession() &&
+    type === "magiclink" &&
+    tokenHash.startsWith("dev_")
+  ) {
+    return redirectWithSession(redirectTo, {
+      accessToken: "dev_supabase_session",
+      refreshToken: "dev_supabase_session",
+      type,
+    });
+  }
 
   if (!supabaseUrl || !supabaseAnonKey) {
     return redirectWithError(redirectTo, "auth_not_configured");
@@ -53,14 +72,43 @@ export async function GET(request: Request) {
   }
 
   const session = data.session;
-  const expiresAt =
-    session.expires_at || Math.floor(Date.now() / 1000) + session.expires_in;
+  return redirectWithSession(redirectTo, {
+    accessToken: session.access_token,
+    refreshToken: session.refresh_token,
+    expiresAt:
+      session.expires_at || Math.floor(Date.now() / 1000) + session.expires_in,
+    expiresIn: session.expires_in,
+    tokenType: session.token_type,
+    type,
+  });
+}
+
+function redirectWithSession(
+  redirectTo: string,
+  {
+    accessToken,
+    refreshToken,
+    expiresAt = Math.floor(Date.now() / 1000) + 3600,
+    expiresIn = 3600,
+    tokenType = "bearer",
+    type,
+  }: {
+    accessToken: string;
+    refreshToken: string;
+    expiresAt?: number;
+    expiresIn?: number;
+    tokenType?: string;
+    type: string;
+  },
+) {
+  const resolvedExpiresAt =
+    expiresAt || Math.floor(Date.now() / 1000) + expiresIn;
   const hash = new URLSearchParams({
-    access_token: session.access_token,
-    expires_at: String(expiresAt),
-    expires_in: String(session.expires_in),
-    refresh_token: session.refresh_token,
-    token_type: session.token_type,
+    access_token: accessToken,
+    expires_at: String(resolvedExpiresAt),
+    expires_in: String(expiresIn),
+    refresh_token: refreshToken,
+    token_type: tokenType,
     type,
   });
   const target = new URL(redirectTo);

@@ -44,5 +44,7 @@
     "check": "tsc -p ../../tsconfig.json --noEmit",
     "prepack": "npm run build"
   },
-  "dependencies": {}
+  "dependencies": {
+    "@worldcoin/idkit-core": "^2.1.0"
+  }
 }

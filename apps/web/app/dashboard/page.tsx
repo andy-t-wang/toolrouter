@@ -515,7 +515,7 @@ export default function DashboardPage() {
         ? "Waiting for World App"
         : registrationState === "submitting"
           ? "Finishing"
-          : "Verify with AgentKit";
+          : "Optional AgentKit verify";
   const activeTopUps = topUps.filter(isActiveTopUp);
 
   function dashboardRequestsPath(cursor = "") {
@@ -919,10 +919,10 @@ export default function DashboardPage() {
                         aria-hidden="true"
                       />
                       <div>
-                        <strong>Verify your agent for benefits</strong>
+                        <strong>Optional AgentKit benefits</strong>
                         <p>
-                          Unlock AgentKit free trials, discounts, and access paths
-                          for verified delegation.
+                          ToolRouter works without World verification. Verify only
+                          if you want AgentKit free trials, discounts, or access paths.
                         </p>
                       </div>
                     </div>
@@ -936,7 +936,7 @@ export default function DashboardPage() {
                         }
                       }}
                     >
-                      Verify agent
+                      View optional verify
                     </button>
                   </section>
                 ) : null}
@@ -1190,12 +1190,12 @@ export default function DashboardPage() {
                 {balance && !agentKitVerified ? (
                   <section className="card verification-card">
                     <div className="hd">
-                      <h2>Account Verification</h2>
+                      <h2>Optional AgentKit Verification</h2>
                     </div>
                     <div className="bd verification-body">
                       <div>
                         <p className="muted">
-                          Verify this account with AgentKit through World App.
+                          ToolRouter credits and non-AgentKit endpoints work without World verification. Use World App only to unlock AgentKit benefits.
                         </p>
                         {agentKitCheckMeta ? (
                           <span className="metric-hint">
@@ -1435,22 +1435,120 @@ export default function DashboardPage() {
                   <div>
                     <h1 className="display">Quickstart</h1>
                     <p className="sub">
-                      Verify World ID, generate an API key, set up MCP, then try it out.
+                      Generate an API key, set up MCP, try a tool, then optionally verify World ID for AgentKit benefits.
                     </p>
                   </div>
                 </div>
 
                 <section className="quickstart-steps">
-                  <section className={`card quickstart-step ${agentKitVerified ? "done" : ""}`}>
+                  <section className={`card quickstart-step ${quickstartApiKey ? "done" : ""}`}>
                     <div className="quickstart-step-index">
-                      {agentKitVerified ? <Icon name="check" /> : "1"}
+                      {quickstartApiKey ? <Icon name="check" /> : "1"}
                     </div>
                     <div className="quickstart-step-body">
                       <div className="hd inline">
                         <div>
-                          <h2>Verify World ID</h2>
+                          <h2>Generate an API key</h2>
                           <p className="muted">
-                            Unlock AgentKit benefits for delegated tool calls.
+                            The key is inserted into the setup snippets below.
+                          </p>
+                        </div>
+                      </div>
+                      {quickstartApiKey ? (
+                        <div className="key-token-row quickstart-key-row">
+                          <code className="key-token">{quickstartApiKey}</code>
+                          <button
+                            className={`button ghost compact copy-key-button${copiedKey ? " copied" : ""}`}
+                            type="button"
+                            onClick={() =>
+                              copyText(quickstartApiKey)
+                                .then(() => setCopiedKey(true))
+                                .catch((error) => setBanner(error.message))
+                            }
+                          >
+                            <Icon name={copiedKey ? "check" : "copy"} />
+                            {copiedKey ? "Copied" : "Copy"}
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="quickstart-actions">
+                          <button
+                            className="button primary compact"
+                            type="button"
+                            onClick={() =>
+                              createKey().catch((error) => setBanner(error.message))
+                            }
+                          >
+                            <Icon name="key" />
+                            {hasActiveApiKey ? "Create setup key" : "Generate API key"}
+                          </button>
+                          {hasActiveApiKey ? (
+                            <span className="metric-hint">
+                              Existing keys cannot be revealed again, so create a fresh setup key.
+                            </span>
+                          ) : null}
+                        </div>
+                      )}
+                    </div>
+                  </section>
+
+                  <section className={`card quickstart-step ${quickstartApiKey ? "" : "locked"}`}>
+                    <div className="quickstart-step-index">2</div>
+                    <div className="quickstart-step-body">
+                      <div className="hd inline">
+                        <div>
+                          <h2>Set up MCP</h2>
+                          <p className="muted">
+                            Add ToolRouter to your MCP client with the generated key.
+                          </p>
+                        </div>
+                      </div>
+                      <div className="quickstart-mcp-body inline">
+                        <McpClientTabs apiKey={quickstartApiKey} compact />
+                      </div>
+                    </div>
+                  </section>
+
+                  <section className={`card quickstart-step ${quickstartApiKey ? "" : "locked"}`}>
+                    <div className="quickstart-step-index">3</div>
+                    <div className="quickstart-step-body">
+                      <div className="hd inline">
+                        <div>
+                          <h2>Try it out</h2>
+                          <p className="muted">
+                            Paste this into your agent after MCP is loaded.
+                          </p>
+                        </div>
+                        <button
+                          className="button primary compact"
+                          type="button"
+                          disabled={!quickstartApiKey}
+                          onClick={() =>
+                            copyFirstQueryPrompt().catch((error) =>
+                              setBanner(error.message),
+                            )
+                          }
+                        >
+                          <Icon name={copiedPrompt ? "check" : "copy"} />
+                          {copiedPrompt ? "Copied" : "Copy prompt"}
+                        </button>
+                      </div>
+                      <pre className="code-block quickstart-copy-panel">
+                        <code>{firstQueryPrompt}</code>
+                      </pre>
+                    </div>
+                  </section>
+
+                  <section className={`card quickstart-step ${agentKitVerified ? "done" : ""}`}>
+                    <div className="quickstart-step-index">
+                      {agentKitVerified ? <Icon name="check" /> : "Opt"}
+                    </div>
+                    <div className="quickstart-step-body">
+                      <div className="hd inline">
+                        <div>
+                          <h2>Optional: Verify World ID</h2>
+                          <p className="muted">
+                            Unlock AgentKit benefits for delegated tool calls. You can skip this for non-AgentKit endpoints.
                           </p>
                         </div>
                         {agentKitVerified ? humanBadge() : null}
@@ -1501,104 +1599,6 @@ export default function DashboardPage() {
                       ) : (
                         <p className="metric-hint">AgentKit verification is complete.</p>
                       )}
-                    </div>
-                  </section>
-
-                  <section className={`card quickstart-step ${quickstartApiKey ? "done" : ""}`}>
-                    <div className="quickstart-step-index">
-                      {quickstartApiKey ? <Icon name="check" /> : "2"}
-                    </div>
-                    <div className="quickstart-step-body">
-                      <div className="hd inline">
-                        <div>
-                          <h2>Generate an API key</h2>
-                          <p className="muted">
-                            The key is inserted into the setup snippets below.
-                          </p>
-                        </div>
-                      </div>
-                      {quickstartApiKey ? (
-                        <div className="key-token-row quickstart-key-row">
-                          <code className="key-token">{quickstartApiKey}</code>
-                          <button
-                            className={`button ghost compact copy-key-button${copiedKey ? " copied" : ""}`}
-                            type="button"
-                            onClick={() =>
-                              copyText(quickstartApiKey)
-                                .then(() => setCopiedKey(true))
-                                .catch((error) => setBanner(error.message))
-                            }
-                          >
-                            <Icon name={copiedKey ? "check" : "copy"} />
-                            {copiedKey ? "Copied" : "Copy"}
-                          </button>
-                        </div>
-                      ) : (
-                        <div className="quickstart-actions">
-                          <button
-                            className="button primary compact"
-                            type="button"
-                            onClick={() =>
-                              createKey().catch((error) => setBanner(error.message))
-                            }
-                          >
-                            <Icon name="key" />
-                            {hasActiveApiKey ? "Create setup key" : "Generate API key"}
-                          </button>
-                          {hasActiveApiKey ? (
-                            <span className="metric-hint">
-                              Existing keys cannot be revealed again, so create a fresh setup key.
-                            </span>
-                          ) : null}
-                        </div>
-                      )}
-                    </div>
-                  </section>
-
-                  <section className={`card quickstart-step ${quickstartApiKey ? "" : "locked"}`}>
-                    <div className="quickstart-step-index">3</div>
-                    <div className="quickstart-step-body">
-                      <div className="hd inline">
-                        <div>
-                          <h2>Set up MCP</h2>
-                          <p className="muted">
-                            Add ToolRouter to your MCP client with the generated key.
-                          </p>
-                        </div>
-                      </div>
-                      <div className="quickstart-mcp-body inline">
-                        <McpClientTabs apiKey={quickstartApiKey} compact />
-                      </div>
-                    </div>
-                  </section>
-
-                  <section className={`card quickstart-step ${quickstartApiKey ? "" : "locked"}`}>
-                    <div className="quickstart-step-index">4</div>
-                    <div className="quickstart-step-body">
-                      <div className="hd inline">
-                        <div>
-                          <h2>Try it out</h2>
-                          <p className="muted">
-                            Paste this into your agent after MCP is loaded.
-                          </p>
-                        </div>
-                        <button
-                          className="button primary compact"
-                          type="button"
-                          disabled={!quickstartApiKey}
-                          onClick={() =>
-                            copyFirstQueryPrompt().catch((error) =>
-                              setBanner(error.message),
-                            )
-                          }
-                        >
-                          <Icon name={copiedPrompt ? "check" : "copy"} />
-                          {copiedPrompt ? "Copied" : "Copy prompt"}
-                        </button>
-                      </div>
-                      <pre className="code-block quickstart-copy-panel">
-                        <code>{firstQueryPrompt}</code>
-                      </pre>
                     </div>
                   </section>
                 </section>
