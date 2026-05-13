@@ -35,6 +35,7 @@ These are durable project decisions for future agents working in this repo.
   - API proxy integration tests for `POST /v1/requests` so the real ToolRouter product path is covered: AgentKit preflight when relevant, credit reservation, x402 paid fallback, request row creation, and ledger capture/release.
   - Web/static tests when adding logos, dashboard chips, status table rows, or new user-visible labels.
   - MCP tests when adding named endpoint tools or category wrappers.
+  - For long-running task endpoints, MCP descriptions and results must state that one call creates one task and agents should not retry the same user request by creating more tasks.
   - Live tests under `tests/live/**` gated by provider-specific env flags, with `RUN_LIVE_<PROVIDER>_TESTS=true` for default smoke and `RUN_LIVE_<PROVIDER>_PAID_SMOKE=true` for forced paid paths.
 - For first-party wrapped endpoints like `manus.research`, include an opt-in live API proxy smoke that starts the ToolRouter API and calls `POST /v1/requests` against the real wrapper/provider. Direct `/x402/...` wrapper tests are not enough because agents only depend on the ToolRouter proxy path.
 - Normal PR tests must stay deterministic and must not spend money. Live smoke tests should be opt-in, use fixture inputs, enforce `maxUsd`, avoid sensitive logs, and assert the expected path and `charged` state for the endpoint's value category.
