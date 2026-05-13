@@ -107,6 +107,14 @@ services:
         value: eip155:8453,eip155:480
       - key: X402_ALLOWED_HOSTS
         value: api.exa.ai,x402.browserbase.com,toolrouter.world
+      - key: X402_FACILITATOR_URL
+        value: https://api.cdp.coinbase.com/platform/v2/x402
+      - key: COINBASE_KEY_ID
+        value: SET_IN_APP_PLATFORM
+        type: SECRET
+      - key: COINBASE_KEY_SECRET
+        value: SET_IN_APP_PLATFORM
+        type: SECRET
       - key: X402_MANUS_PAY_TO_ADDRESS
         value: SET_IN_APP_PLATFORM
         type: SECRET
