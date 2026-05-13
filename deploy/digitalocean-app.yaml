@@ -1,6 +1,6 @@
 # DigitalOcean App Platform template for the public ToolRouter MVP.
 # Replace every SET_IN_APP_PLATFORM value before deployment.
-# Route /v1 and /health to the API; keep the dashboard on /.
+# Route API and provider wrapper paths to the API; keep the dashboard on /.
 # Attach both toolrouter.world and api.toolrouter.com to this app so misconfigured
 # MCP clients that use the API subdomain still reach the same /v1 routes.
 
@@ -22,6 +22,12 @@ ingress:
     - match:
         path:
           prefix: /health
+      component:
+        name: api
+        preserve_path_prefix: true
+    - match:
+        path:
+          prefix: /x402
       component:
         name: api
         preserve_path_prefix: true
