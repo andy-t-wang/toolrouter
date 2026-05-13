@@ -48,6 +48,8 @@ describe("ToolRouter MCP server", () => {
     assert.ok(listed.result.tools.some((tool) => tool.name === "toolrouter_search"));
     assert.ok(listed.result.tools.some((tool) => tool.name === "toolrouter_list_categories"));
     assert.ok(listed.result.tools.some((tool) => tool.name === "toolrouter_recommend_endpoint"));
+    assert.ok(listed.result.tools.some((tool) => tool.name === "toolrouter_research"));
+    assert.ok(listed.result.tools.some((tool) => tool.name === "manus_research"));
     assert.ok(tools().some((tool) => tool.name === "browserbase_session_create"));
     const sessionTool = tools().find((tool) => tool.name === "browserbase_session_create");
     assert.equal(sessionTool.inputSchema.properties.estimated_minutes.minimum, 5);
@@ -172,6 +174,70 @@ describe("ToolRouter MCP server", () => {
       },
       maxUsd: "0.01",
     });
+  });
+
+  it("calls Manus research through the wrapped x402 endpoint", async () => {
+    const calls = [];
+    const result = await callTool("manus_research", {
+      query: "Find tools for image lookup",
+      task_type: "tool_discovery",
+      depth: "quick",
+      urls: ["https://example.com"],
+      images: ["https://example.com/image.png"],
+    }, {
+      env: { TOOLROUTER_API_URL: "http://router.test", TOOLROUTER_API_KEY: "tr_test" },
+      fetchImpl: async (url, init) => {
+        calls.push({ url, init });
+        return response({ id: "req_research", endpoint_id: "manus.research", path: "agentkit", charged: false });
+      },
+    });
+
+    assert.equal(result.isError, false);
+    assert.deepEqual(JSON.parse(calls[0].init.body), {
+      endpoint_id: "manus.research",
+      input: {
+        query: "Find tools for image lookup",
+        task_type: "tool_discovery",
+        depth: "quick",
+        urls: ["https://example.com"],
+        images: ["https://example.com/image.png"],
+      },
+      maxUsd: "0.03",
+    });
+  });
+
+  it("uses configured Manus prices as default MCP spend caps", async () => {
+    const calls = [];
+    const result = await callTool("manus_research", {
+      query: "Find tools for image lookup",
+      depth: "quick",
+    }, {
+      env: {
+        TOOLROUTER_API_URL: "http://router.test",
+        TOOLROUTER_API_KEY: "tr_test",
+        TOOLROUTER_MANUS_RESEARCH_PRICE_QUICK_USD: "0.04",
+      },
+      fetchImpl: async (url, init) => {
+        calls.push({ url, init });
+        return response({ id: "req_research_price", endpoint_id: "manus.research", path: "agentkit", charged: false });
+      },
+    });
+
+    assert.equal(result.isError, false);
+    assert.equal(JSON.parse(calls[0].init.body).maxUsd, "0.04");
+  });
+
+  it("allows x402 payment headers in browser preflight", async () => {
+    const { createApiApp } = await import("../../../apps/api/src/app.ts");
+    const app = createApiApp({ logger: false });
+    const response = await app.inject({
+      method: "OPTIONS",
+      url: "/x402/manus/research",
+    });
+    await app.close();
+    assert.equal(response.statusCode, 204);
+    assert.match(response.headers["access-control-allow-headers"], /payment-signature/u);
+    assert.match(response.headers["access-control-expose-headers"], /payment-required/u);
   });
 
   it("passes explicit payment mode overrides for smoke tests", async () => {

@@ -39,11 +39,13 @@ describe("router API", () => {
   let agentBookLookups;
   let agentBookNonces;
   let agentBookRegistrations;
+  let manusWrapperCalls;
 
   before(async () => {
     agentBookLookups = [];
     agentBookNonces = [];
     agentBookRegistrations = [];
+    manusWrapperCalls = [];
     store = createStore();
     app = createApiApp({
       logger: false,
@@ -65,6 +67,16 @@ describe("router API", () => {
           return { txHash: "0xagentkittx" };
         },
       },
+      manusWrapper: {
+        handle: async (request) => {
+          manusWrapperCalls.push(request.body);
+          return {
+            ok: true,
+            provider: "manus",
+            task: { id: "task_test" },
+          };
+        },
+      },
     });
     await app.listen({ port: 0, host: "127.0.0.1" });
     baseUrl = `http://127.0.0.1:${app.server.address().port}`;
@@ -81,6 +93,29 @@ describe("router API", () => {
       ok: true,
       service: "toolrouter-api",
       version: "0.1.0",
+    });
+  });
+
+  it("exposes the ToolRouter x402 Manus wrapper route", async () => {
+    const response = await fetch(`${baseUrl}/x402/manus/research`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        query: "Find tools for visual lookup",
+        task_type: "tool_discovery",
+        depth: "quick",
+      }),
+    });
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), {
+      ok: true,
+      provider: "manus",
+      task: { id: "task_test" },
+    });
+    assert.deepEqual(manusWrapperCalls.at(-1), {
+      query: "Find tools for visual lookup",
+      task_type: "tool_discovery",
+      depth: "quick",
     });
   });
 
@@ -106,7 +141,7 @@ describe("router API", () => {
     assert.equal(dashboardResponse.status, 200);
     assert.deepEqual(
       (await dashboardResponse.json()).endpoints.map((endpoint) => endpoint.id),
-      ["browserbase.session", "exa.search"],
+      ["browserbase.session", "exa.search", "manus.research"],
     );
   });
 
@@ -114,10 +149,13 @@ describe("router API", () => {
     const response = await fetch(`${baseUrl}/v1/categories`, { headers: authHeaders() });
     assert.equal(response.status, 200);
     const body = await response.json();
-    assert.deepEqual(body.categories.map((category) => category.id), ["search", "browser_usage"]);
+    assert.deepEqual(body.categories.map((category) => category.id), ["search", "research", "browser_usage"]);
     const search = body.categories.find((category) => category.id === "search");
     assert.equal(search.recommended_endpoint_id, "exa.search");
     assert.equal(search.recommended_endpoint.id, "exa.search");
+    const research = body.categories.find((category) => category.id === "research");
+    assert.equal(research.recommended_endpoint_id, "manus.research");
+    assert.equal(research.recommended_endpoint.id, "manus.research");
     assert.ok(search.endpoints.every((endpoint) => endpoint.status));
 
     const dashboardResponse = await fetch(`${baseUrl}/v1/dashboard/categories?include_empty=true`, { headers: sessionHeaders() });
@@ -170,11 +208,11 @@ describe("router API", () => {
     assert.equal(response.status, 200);
     const body = await response.json();
     assert.equal(body.status, "unverified");
-    assert.equal(body.summary.endpoint_count, 2);
+    assert.equal(body.summary.endpoint_count, 3);
     assert.equal(body.summary.operational_count, 1);
     assert.deepEqual(
       body.endpoints.map((endpoint) => endpoint.id).sort(),
-      ["browserbase.session", "exa.search"].sort(),
+      ["browserbase.session", "exa.search", "manus.research"].sort(),
     );
     const exa = body.endpoints.find((endpoint) => endpoint.id === "exa.search");
     assert.equal(exa.status, "healthy");
@@ -1171,8 +1209,8 @@ describe("router API", () => {
     const body = await response.json();
     assert.ok(body.monitoring.requests_24h.total >= 1);
     assert.equal(body.monitoring.requests_24h.errors, 0);
-    assert.equal(body.monitoring.endpoint_health.total, 2);
-    assert.equal(body.monitoring.endpoint_health.unverified, 1);
+    assert.equal(body.monitoring.endpoint_health.total, 3);
+    assert.equal(body.monitoring.endpoint_health.unverified, 2);
     assert.ok("error_rate" in body.monitoring.requests_24h);
   });
 

@@ -1,10 +1,12 @@
 import { ENDPOINT_CATEGORY_DEFINITIONS, isEndpointCategory } from "./categories.ts";
 import { browserbaseSessionEndpointDefinition } from "./browser_usage/browserbase/session.ts";
+import { manusResearchEndpointDefinition } from "./research/manus/research.ts";
 import { exaSearchEndpointDefinition } from "./search/exa/search.ts";
 
 const ENDPOINT_DEFINITIONS = Object.freeze([
   browserbaseSessionEndpointDefinition,
   exaSearchEndpointDefinition,
+  manusResearchEndpointDefinition,
 ]);
 
 function assertHttpUrl(value, fieldName) {

@@ -54,6 +54,19 @@ function jsonSchema(properties: Record<string, any>, required: string[] = []) {
   };
 }
 
+const MANUS_DEFAULT_MAX_USD: Record<string, string> = Object.freeze({
+  quick: "0.03",
+  standard: "0.05",
+  deep: "0.10",
+});
+
+function defaultManusMaxUsd(depth: any, env: any) {
+  const normalized = ["quick", "standard", "deep"].includes(depth) ? depth : "standard";
+  const envKey = `TOOLROUTER_MANUS_RESEARCH_PRICE_${normalized.toUpperCase()}_USD`;
+  const raw = String(env[envKey] || MANUS_DEFAULT_MAX_USD[normalized]).trim();
+  return /^\d+(\.\d+)?$/u.test(raw) ? raw : MANUS_DEFAULT_MAX_USD[normalized];
+}
+
 export function tools(): McpTool[] {
   return [
     {
@@ -115,6 +128,20 @@ export function tools(): McpTool[] {
       }),
     },
     {
+      name: "toolrouter_research",
+      title: "Research",
+      description: "Start an agentic research task through ToolRouter's recommended research endpoint.",
+      inputSchema: jsonSchema({
+        query: { type: "string" },
+        task_type: { type: "string", description: "Optional category such as visual_lookup, tool_discovery, vendor_research, or docs_investigation." },
+        depth: { type: "string", enum: ["quick", "standard", "deep"] },
+        urls: { type: "array", items: { type: "string" }, maxItems: 10 },
+        images: { type: "array", items: { type: "string" }, maxItems: 5 },
+        maxUsd: { type: "string" },
+        payment_mode: { type: "string", enum: ["agentkit_first", "x402_only"] },
+      }, ["query"]),
+    },
+    {
       name: "toolrouter_get_request",
       title: "Get ToolRouter request",
       description: "Fetch one request trace created by this API key.",
@@ -145,6 +172,20 @@ export function tools(): McpTool[] {
         payment_mode: { type: "string", enum: ["agentkit_first", "x402_only"] },
       }),
     },
+    {
+      name: "manus_research",
+      title: "Manus research",
+      description: "Create a Manus research task through ToolRouter's x402 wrapper.",
+      inputSchema: jsonSchema({
+        query: { type: "string" },
+        task_type: { type: "string" },
+        depth: { type: "string", enum: ["quick", "standard", "deep"] },
+        urls: { type: "array", items: { type: "string" }, maxItems: 10 },
+        images: { type: "array", items: { type: "string" }, maxItems: 5 },
+        maxUsd: { type: "string" },
+        payment_mode: { type: "string", enum: ["agentkit_first", "x402_only"] },
+      }, ["query"]),
+    },
   ];
 }
 
@@ -156,7 +197,7 @@ function textResult(text: string, structuredContent?: any, isError = false) {
   };
 }
 
-function endpointPayload(name: string, args: any) {
+function endpointPayload(name: string, args: any, env: any) {
   const paymentMode = args.payment_mode || args.paymentMode;
   if (name === "toolrouter_search" || name === "exa_search") {
     return {
@@ -177,6 +218,20 @@ function endpointPayload(name: string, args: any) {
       endpoint_id: "browserbase.session",
       input: { estimated_minutes: minutes },
       maxUsd: args.maxUsd || "0.02",
+      ...(paymentMode ? { payment_mode: paymentMode } : {}),
+    };
+  }
+  if (name === "toolrouter_research" || name === "manus_research") {
+    return {
+      endpoint_id: "manus.research",
+      input: {
+        query: args.query,
+        task_type: args.task_type || args.taskType || "general_research",
+        depth: args.depth || "standard",
+        urls: args.urls || [],
+        images: args.images || args.image_urls || [],
+      },
+      maxUsd: args.maxUsd || defaultManusMaxUsd(args.depth || "standard", env),
       ...(paymentMode ? { payment_mode: paymentMode } : {}),
     };
   }
@@ -237,7 +292,7 @@ export async function callTool(name: string, args: any = {}, options: any = {}) 
       const data = await routerFetch(`/v1/requests/${encodeURIComponent(args.id)}`, { env, fetchImpl });
       return textResult(JSON.stringify(data, null, 2), data);
     }
-    const payload = name === "toolrouter_call_endpoint" ? args : endpointPayload(name, args);
+    const payload = name === "toolrouter_call_endpoint" ? args : endpointPayload(name, args, env);
     if (!payload) throw new Error(`unknown tool: ${name}`);
     const data = await routerFetch("/v1/requests", { env, fetchImpl, method: "POST", body: payload });
     return textResult(JSON.stringify(data, null, 2), data);

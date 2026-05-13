@@ -10,6 +10,7 @@ import {
   recommendEndpoint,
   validateRegistry,
 } from "../../../packages/router-core/src/endpoints/index.ts";
+import { manusResearchPriceForDepth } from "../../../packages/router-core/src/endpoints/builders.ts";
 import {
   assertEndpointFixtureBuilds,
   assertEndpointHealthProbeBuilds,
@@ -21,7 +22,7 @@ describe("endpoint registry", () => {
     assert.equal(validateRegistry(), true);
     assert.deepEqual(
       listEndpoints().map((endpoint) => endpoint.id),
-      ["browserbase.session", "exa.search"],
+      ["browserbase.session", "exa.search", "manus.research"],
     );
     assertValidEndpointRegistry(endpointRegistry);
     for (const endpoint of endpointRegistry) {
@@ -34,7 +35,7 @@ describe("endpoint registry", () => {
     const categories = listCategories();
     assert.deepEqual(
       categories.map((category) => category.id),
-      ["search", "browser_usage"],
+      ["search", "research", "browser_usage"],
     );
 
     const search = categories.find((category) => category.id === "search");
@@ -44,6 +45,9 @@ describe("endpoint registry", () => {
 
     const browserUse = recommendEndpoint("browser_usage");
     assert.equal(browserUse.id, "browserbase.session");
+
+    const research = recommendEndpoint("research");
+    assert.equal(research.id, "manus.research");
   });
 
   it("builds Exa search requests from typed input", () => {
@@ -95,5 +99,52 @@ describe("endpoint registry", () => {
     assert.equal(probe.paymentMode, "x402_only");
     assert.equal(probe.timeoutMs, 15_000);
     assert.equal(probe.latencyBudgetMs, 10_000);
+  });
+
+  it("builds Manus research requests for the ToolRouter x402 wrapper", () => {
+    const request = buildEndpointRequest("manus.research", {
+      query: "Find a tool for visual product lookup",
+      task_type: "tool_discovery",
+      depth: "quick",
+      urls: ["https://example.com/docs"],
+      images: ["https://example.com/image.png"],
+    });
+    assert.equal(request.method, "POST");
+    assert.equal(request.url, "https://toolrouter.world/x402/manus/research");
+    assert.deepEqual(request.json, {
+      query: "Find a tool for visual product lookup",
+      depth: "quick",
+      task_type: "tool_discovery",
+      urls: ["https://example.com/docs"],
+      images: ["https://example.com/image.png"],
+    });
+    assert.equal(request.estimatedUsd, "0.03");
+
+    const deepRequest = buildEndpointRequest("manus.research", {
+      query: "Build a detailed research brief",
+      depth: "deep",
+    });
+    assert.equal(deepRequest.estimatedUsd, "0.1");
+
+    const probe = buildEndpointHealthProbeRequest("manus.research");
+    assert.equal(probe.paymentMode, "x402_only");
+    assert.equal(probe.maxUsd, "0.03");
+    assert.equal(probe.timeoutMs, 30_000);
+  });
+
+  it("uses configured Manus prices for dynamic request estimates", () => {
+    const previous = process.env.TOOLROUTER_MANUS_RESEARCH_PRICE_QUICK_USD;
+    process.env.TOOLROUTER_MANUS_RESEARCH_PRICE_QUICK_USD = "0.04";
+    try {
+      assert.equal(manusResearchPriceForDepth("quick"), "0.04");
+      const request = buildEndpointRequest("manus.research", {
+        query: "Quick configured price check",
+        depth: "quick",
+      });
+      assert.equal(request.estimatedUsd, "0.04");
+    } finally {
+      if (previous === undefined) delete process.env.TOOLROUTER_MANUS_RESEARCH_PRICE_QUICK_USD;
+      else process.env.TOOLROUTER_MANUS_RESEARCH_PRICE_QUICK_USD = previous;
+    }
   });
 });

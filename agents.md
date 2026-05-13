@@ -9,7 +9,7 @@ These are durable project decisions for future agents working in this repo.
 - Agents call named endpoints explicitly through `POST /v1/requests`; do not add intent routing until the product has enough real endpoint volume to justify it.
 - Categories are the agent-facing discovery layer, not hidden intent routing. Agents can ask for generic categories like `search`, `browser_usage`, or `data`, inspect the recommended endpoint, then call the selected endpoint explicitly so traces and billing stay concrete.
 - Category discovery is exposed through `GET /v1/categories` and MCP tools like `toolrouter_list_categories` and `toolrouter_recommend_endpoint`.
-- The launch registry should stay small and reliable. As of this note, active public endpoints are `exa.search` and `browserbase.session`.
+- The launch registry should stay small and reliable. As of this note, active public endpoints are `exa.search`, `browserbase.session`, and `manus.research`.
 
 ## Endpoint Template
 
@@ -51,6 +51,14 @@ These are durable project decisions for future agents working in this repo.
 - Active Browserbase endpoint is `browserbase.session` (`POST /browser/session/create`, about `$0.12/hour`).
 - Browserbase is an AgentKit-verified access path, not a free-trial path. Its endpoint metadata should use `agentkit_value_type: "access"` and label `AgentKit-Access`.
 - Dashboard tables should distinguish AgentKit value labels: `AgentKit-Free Trial`, `AgentKit-Discount`, and `AgentKit-Access`.
+
+## Manus Research Decision
+
+- `manus.research` lives under `packages/router-core/src/endpoints/research/manus/research.ts`.
+- ToolRouter wraps Manus behind its own x402 endpoint at `/x402/manus/research`; the endpoint registry should point at `TOOLROUTER_X402_PROVIDER_URL || "https://toolrouter.world"` rather than calling Manus directly.
+- The wrapper is the only server code that reads `MANUS_API_KEY`. Do not send Manus API keys, `Authorization`, or `x-manus-api-key` from the router-core endpoint builder or MCP package.
+- Manus research uses x402 V2 dynamic pricing on the wrapper route. Default prices are configurable by depth: quick `$0.03`, standard `$0.05`, and deep `$0.10`. Live smoke tests should use the endpoint fixture's exact `maxUsd` cap.
+- AgentKit-verified agents get two free Manus research requests per month. Endpoint metadata should use `agentkit_value_type: "free_trial"` and label `AgentKit-Free Trial`.
 
 ## AgentKit And x402 Execution
 

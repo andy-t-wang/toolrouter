@@ -7,8 +7,10 @@ export {
 } from "./categories.ts";
 export {
   EXA_SEARCH_PRICES,
+  MANUS_RESEARCH_DEPTHS,
   buildBrowserbaseSessionRequest,
   buildExaSearchRequest,
+  buildManusResearchRequest,
 } from "./builders.ts";
 export {
   buildEndpointFixtureRequest,
