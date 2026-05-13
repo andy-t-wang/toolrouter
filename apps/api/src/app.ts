@@ -1,5 +1,5 @@
 import Fastify from "fastify";
-import { createHash, randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 
 import { authenticateApiKey, authenticateSupabaseUser } from "@toolrouter/auth";
 import { createCache, enforceRequestPolicy } from "@toolrouter/cache";
@@ -26,6 +26,7 @@ import {
 } from "./billing.ts";
 import { createCrossmintClient } from "./crossmint.ts";
 import { createStripeClient } from "./stripe.ts";
+import { createOnboardingAuthClient } from "./onboardingAuth.ts";
 import { createAlertClient } from "./alerts.ts";
 import { createDatadogClient } from "./datadog.ts";
 import {
@@ -136,6 +137,108 @@ function publicLedgerEntry(entry: any) {
     type: entry.type,
     amount_usd: entry.amount_usd ?? null,
   };
+}
+
+function hashOnboardingToken(token: string) {
+  return createHash("sha256").update(String(token)).digest("hex");
+}
+
+function createOnboardingClaimToken() {
+  return `otr_${randomBytes(24).toString("base64url")}`;
+}
+
+function bearerValue(headers: any) {
+  const raw = headers?.authorization;
+  const value = Array.isArray(raw) ? raw[0] : raw || "";
+  const match = /^Bearer\s+(.+)$/iu.exec(value);
+  return match?.[1]?.trim() || "";
+}
+
+function requireOnboardingStore(store: any) {
+  const missing = ["insertOnboardingSession", "getOnboardingSession", "updateOnboardingSession"].filter(
+    (method) => typeof store?.[method] !== "function",
+  );
+  if (missing.length) {
+    throw Object.assign(new Error("onboarding sessions are not configured for this store"), {
+      statusCode: 501,
+      code: "onboarding_not_configured",
+      details: { missing },
+    });
+  }
+  return store;
+}
+
+async function authorizedOnboardingSession(store: any, id: string, token: string) {
+  const onboardingStore = requireOnboardingStore(store);
+  const session = await onboardingStore.getOnboardingSession(id);
+  if (!session || !token || session.claim_token_hash !== hashOnboardingToken(token)) {
+    throw Object.assign(new Error("onboarding session not found"), {
+      statusCode: 404,
+      code: "not_found",
+    });
+  }
+  if (session.expires_at && Date.parse(session.expires_at) < Date.now()) {
+    throw Object.assign(new Error("onboarding session expired"), {
+      statusCode: 410,
+      code: "onboarding_expired",
+    });
+  }
+  return session;
+}
+
+function publicOnboardingSession(session: any, extra: any = {}) {
+  return {
+    id: session.id,
+    email: session.email,
+    client: session.client || null,
+    status: session.status,
+    user_id: session.user_id || null,
+    api_key_id: session.api_key_id || null,
+    credit_purchase_id: session.credit_purchase_id || null,
+    provider_checkout_session_id: session.provider_checkout_session_id || null,
+    auth_url: extra.auth_url,
+    checkout_url: extra.checkout_url,
+    created_at: session.created_at || null,
+    updated_at: session.updated_at || null,
+    expires_at: session.expires_at || null,
+  };
+}
+
+async function hydrateOnboardingCheckoutStatus(store: any, session: any) {
+  if (!session?.credit_purchase_id || typeof store?.getCreditPurchase !== "function") return session;
+  const purchase = await store.getCreditPurchase(session.credit_purchase_id);
+  if (!purchase) return session;
+  if (!["funded", "checkout_failed", "funding_failed"].includes(purchase.status)) return session;
+  return {
+    ...session,
+    status: purchase.status,
+    provider_checkout_session_id: purchase.provider_checkout_session_id || session.provider_checkout_session_id || null,
+    metadata: {
+      ...(session.metadata || {}),
+      checkout_purchase_status: purchase.status,
+    },
+  };
+}
+
+function normalizeEmail(value: unknown) {
+  const email = String(value || "").trim().toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/u.test(email)) {
+    throw Object.assign(new Error("email is required"), {
+      statusCode: 400,
+      code: "invalid_request",
+    });
+  }
+  return email;
+}
+
+function defaultOnboardingCallerId(client: unknown) {
+  const normalized = String(client || "agent")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/gu, "-")
+    .replace(/^-+|-+$/gu, "")
+    .slice(0, 32);
+  return `${normalized || "agent"}-bootstrap`;
 }
 
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
@@ -1014,6 +1117,36 @@ function purchaseIdFromCheckoutSession(session: any) {
   );
 }
 
+async function syncOnboardingCheckoutStatus(store: any, purchase: any) {
+  const onboardingSessionId = purchase?.metadata?.onboarding_session_id;
+  if (
+    !onboardingSessionId ||
+    typeof store?.getOnboardingSession !== "function" ||
+    typeof store?.updateOnboardingSession !== "function"
+  ) {
+    return null;
+  }
+  const session = await store.getOnboardingSession(onboardingSessionId);
+  if (!session) return null;
+  if (session.credit_purchase_id && session.credit_purchase_id !== purchase.id) return null;
+  const nextStatus = purchase.status === "funded"
+    ? "funded"
+    : purchase.status === "checkout_failed" || purchase.status === "funding_failed"
+      ? purchase.status
+      : session.status;
+  return store.updateOnboardingSession({
+    ...session,
+    status: nextStatus,
+    credit_purchase_id: purchase.id || session.credit_purchase_id || null,
+    provider_checkout_session_id: purchase.provider_checkout_session_id || session.provider_checkout_session_id || null,
+    metadata: {
+      ...(session.metadata || {}),
+      checkout_purchase_status: purchase.status,
+      checkout_synced_at: new Date().toISOString(),
+    },
+  });
+}
+
 async function processStripeCheckoutCompleted({
   store,
   crossmint,
@@ -1029,6 +1162,7 @@ async function processStripeCheckoutCompleted({
     providerSessionId,
   });
   if (!claimed) {
+    await syncOnboardingCheckoutStatus(store, purchase);
     return {
       ok: true,
       duplicate,
@@ -1082,6 +1216,7 @@ async function processStripeCheckoutCompleted({
         stripe_checkout_session_id: providerSessionId,
       },
     });
+    await syncOnboardingCheckoutStatus(store, settled.purchase);
     return {
       ok: true,
       duplicate: settled.duplicate,
@@ -1140,6 +1275,7 @@ async function processStripeCheckoutCompleted({
         },
       });
     }
+    await syncOnboardingCheckoutStatus(store, failed.purchase);
     return {
       ok: false,
       duplicate: failed.duplicate,
@@ -1167,6 +1303,7 @@ async function processStripeCheckoutFailed({ store, session, event }: any) {
       stripe_checkout_session_id: providerSessionId,
     },
   });
+  await syncOnboardingCheckoutStatus(store, failed.purchase);
   return {
     ok: true,
     duplicate: failed.duplicate,
@@ -1181,6 +1318,7 @@ export function createApiApp({
   cache = createCache(),
   crossmint = createCrossmintClient(),
   stripe = createStripeClient(),
+  onboardingAuth = createOnboardingAuthClient(),
   alerts = createAlertClient(),
   datadog = createDatadogClient(),
   agentBookVerifier = null,
@@ -1246,6 +1384,156 @@ export function createApiApp({
   app.get("/v1/status", async (request: any) => {
     const endpoints = await publicStatusRows(store, request.query?.category);
     return publicStatusPayload(endpoints);
+  });
+
+  app.post("/v1/onboarding/sessions", async (request: any, reply: any) => {
+    const onboardingStore = requireOnboardingStore(store);
+    const body = requireObject(request.body || {}, "request body");
+    const email = normalizeEmail(body.email);
+    const id = `obs_${randomUUID()}`;
+    const claimToken = createOnboardingClaimToken();
+    const expiresAt = new Date(Date.now() + 30 * 60 * 1000).toISOString();
+    const auth = await onboardingAuth.createMagicLink({
+      email,
+      onboardingSessionId: id,
+      redirectTo: body.redirect_to || body.redirectTo || null,
+    });
+    const session = await onboardingStore.insertOnboardingSession({
+      id,
+      email,
+      client: String(body.client || "agent").trim().slice(0, 64) || "agent",
+      status: "auth_link_sent",
+      claim_token_hash: hashOnboardingToken(claimToken),
+      auth_provider: auth.provider || "supabase",
+      user_id: null,
+      api_key_id: null,
+      credit_purchase_id: null,
+      provider_checkout_session_id: null,
+      expires_at: expiresAt,
+      metadata: {
+        source: body.source || "agent",
+        auth_url_returned: Boolean(auth.auth_url),
+      },
+    });
+    reply.status(201);
+    return {
+      onboarding_session: publicOnboardingSession(session, { auth_url: auth.auth_url }),
+      claim_token: claimToken,
+    };
+  });
+
+  app.get("/v1/onboarding/sessions/:id", async (request: any) => {
+    const session = await authorizedOnboardingSession(
+      store,
+      decodeURIComponent(request.params.id),
+      bearerValue(request.headers),
+    );
+    return {
+      onboarding_session: publicOnboardingSession(await hydrateOnboardingCheckoutStatus(store, session)),
+    };
+  });
+
+  app.post("/v1/onboarding/sessions/:id/attach-user", async (request: any, reply: any) => {
+    const user = await authenticateSupabaseUser(request.headers);
+    const body = requireObject(request.body || {}, "request body");
+    const session = await authorizedOnboardingSession(
+      store,
+      decodeURIComponent(request.params.id),
+      body.claim_token || body.claimToken,
+    );
+    if (session.user_id && session.user_id !== user.user_id) {
+      throw Object.assign(new Error("onboarding session is already attached to another account"), {
+        statusCode: 409,
+        code: "onboarding_already_attached",
+      });
+    }
+    await ensureCreditAccount(store, user.user_id);
+    let apiKey = "";
+    let apiKeyRecord = null;
+    if (!session.api_key_id) {
+      const created = await store.createApiKey({
+        user_id: user.user_id,
+        caller_id: String(body.caller_id || body.callerId || defaultOnboardingCallerId(session.client)),
+      });
+      apiKey = created.api_key;
+      apiKeyRecord = created.record;
+    }
+    const updated = await store.updateOnboardingSession({
+      ...session,
+      status: "api_key_created",
+      user_id: user.user_id,
+      api_key_id: session.api_key_id || apiKeyRecord?.id || null,
+      attached_at: session.attached_at || new Date().toISOString(),
+      metadata: {
+        ...(session.metadata || {}),
+        user_email: user.email || session.email,
+      },
+    });
+    reply.status(session.api_key_id ? 200 : 201);
+    return {
+      onboarding_session: publicOnboardingSession(updated),
+      api_key: apiKey || undefined,
+      api_key_record: apiKeyRecord || undefined,
+    };
+  });
+
+  app.post("/v1/onboarding/sessions/:id/checkout", async (request: any, reply: any) => {
+    const session = await authorizedOnboardingSession(
+      store,
+      decodeURIComponent(request.params.id),
+      bearerValue(request.headers),
+    );
+    if (!session.user_id) {
+      throw Object.assign(new Error("Authenticate before creating checkout"), {
+        statusCode: 409,
+        code: "onboarding_auth_required",
+      });
+    }
+    const body = requireObject(request.body || {}, "request body");
+    const amountUsd = assertTopUpAmount(body.amountUsd || body.amount_usd);
+    stripe.assertCheckoutAllowed?.();
+    await ensureCreditAccount(store, session.user_id);
+    const purchase = await createCreditPurchase({
+      store,
+      user_id: session.user_id,
+      amountUsd,
+      metadata: {
+        source: "onboarding",
+        onboarding_session_id: session.id,
+      },
+    });
+    const checkout = await stripe.createCheckoutSession({
+      user: { user_id: session.user_id, email: session.email },
+      amountUsd,
+      purchaseId: purchase.id,
+    });
+    const topUp = await attachCheckoutToCreditPurchase({
+      store,
+      purchase,
+      checkout,
+    });
+    const updated = await store.updateOnboardingSession({
+      ...session,
+      status: "checkout_pending",
+      credit_purchase_id: topUp.id,
+      provider_checkout_session_id: topUp.provider_checkout_session_id || null,
+      metadata: {
+        ...(session.metadata || {}),
+        checkout_created: true,
+      },
+    });
+    reply.status(201);
+    return {
+      onboarding_session: publicOnboardingSession(updated, { checkout_url: topUp.checkout_url }),
+      top_up: {
+        id: topUp.id,
+        provider: topUp.provider || "stripe",
+        provider_reference: topUp.provider_checkout_session_id,
+        amount_usd: amountUsd,
+        checkout_url: topUp.checkout_url,
+        status: topUp.status,
+      },
+    };
   });
 
   app.get("/v1/endpoints", async (request: any) => {

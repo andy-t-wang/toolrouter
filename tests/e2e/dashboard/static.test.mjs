@@ -112,9 +112,9 @@ describe("web dashboard static wiring", () => {
     assert.match(dashboardPage, /dashboardNavIcon\(item\)/);
     assert.match(dashboardPage, /className="topnav-tabs"/);
     assert.match(dashboardPage, /aria-label="Dashboard sections"/);
-    assert.match(dashboardPage, /Verify your agent for benefits/);
-    assert.match(dashboardPage, /Unlock AgentKit free trials,\s+discounts,\s+and access paths/);
-    assert.match(dashboardPage, /Verify agent/);
+    assert.match(dashboardPage, /Optional AgentKit benefits/);
+    assert.match(dashboardPage, /ToolRouter works without World verification/);
+    assert.match(dashboardPage, /View optional verify/);
     assert.match(dashboardPage, /AgentKit vs x402/);
     assert.match(dashboardPage, /successful\s+requests/);
     assert.doesNotMatch(dashboardPage, /on free\s+path/);
@@ -125,9 +125,9 @@ describe("web dashboard static wiring", () => {
     assert.doesNotMatch(dashboardPage, /Filters/);
     assert.doesNotMatch(dashboardPage, /Endpoint registry/);
     assert.doesNotMatch(dashboardPage, /Supabase monitoring/);
-    assert.match(dashboardPage, /Account Verification/);
-    assert.match(dashboardPage, /Verify this account with AgentKit through World App/);
-    assert.match(dashboardPage, /Verify with AgentKit/);
+    assert.match(dashboardPage, /Optional AgentKit Verification/);
+    assert.match(dashboardPage, /ToolRouter credits and non-AgentKit endpoints work without World verification/);
+    assert.match(dashboardPage, /Optional AgentKit verify/);
     assert.match(dashboardPage, /QRCodeSVG/);
     assert.match(dashboardPage, /Scan with World App/);
     assert.match(dashboardPage, /Open verification link/);
@@ -209,7 +209,8 @@ describe("web dashboard static wiring", () => {
     assert.match(mcpClientTabs, /API key needed/);
     assert.match(mcpClientTabs, /mcp-key-state/);
     assert.match(dashboardPage, /Set up MCP/);
-    assert.match(dashboardPage, /Verify World ID/);
+    assert.match(dashboardPage, /Optional: Verify World ID/);
+    assert.match(dashboardPage, /You can skip this for non-AgentKit endpoints/);
     assert.match(dashboardPage, /Generate an API key/);
     assert.match(dashboardPage, /Try it out/);
     assert.match(dashboardPage, /Copy prompt/);

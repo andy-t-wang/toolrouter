@@ -2,7 +2,7 @@
 
 MCP adapter for ToolRouter. It exposes ToolRouter endpoints to MCP-capable agents and calls the ToolRouter API with your API key. Agents run this package with `npx`; they do not need a local ToolRouter repo checkout.
 
-Create an account, verify World ID, and generate an API key at [toolrouter.world](https://toolrouter.world/).
+Create an account and generate an API key at [toolrouter.world](https://toolrouter.world/). World verification is optional; use it only when you want AgentKit benefits such as free trials, discounts, or access unlocks.
 
 ## Usage
 
@@ -55,6 +55,7 @@ codex mcp add \
 
 The adapter does not load wallet secrets or provider API keys. It only calls ToolRouter's API:
 
+- Bootstrap onboarding and optional World verification routes
 - `GET /v1/endpoints`
 - `GET /v1/categories`
 - `POST /v1/requests`

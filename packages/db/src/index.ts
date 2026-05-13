@@ -36,6 +36,7 @@ function initialData() {
     credit_accounts: [],
     credit_ledger_entries: [],
     credit_purchases: [],
+    onboarding_sessions: [],
     wallet_transactions: [],
   };
 }
@@ -103,6 +104,7 @@ export class LocalStore {
     data.credit_accounts ||= [];
     data.credit_ledger_entries ||= [];
     data.credit_purchases ||= [];
+    data.onboarding_sessions ||= [];
     data.wallet_transactions ||= [];
     ensureDevKey(data);
     writeJson(this.path, data);
@@ -323,6 +325,31 @@ export class LocalStore {
     purchase.updated_at = new Date().toISOString();
     this.write(data);
     return purchase;
+  }
+
+  async insertOnboardingSession(row: any) {
+    const data = this.read();
+    data.onboarding_sessions.unshift({
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      ...row,
+    });
+    this.write(data);
+    return data.onboarding_sessions.find((item: any) => item.id === row.id) || row;
+  }
+
+  async getOnboardingSession(id: string) {
+    return this.read().onboarding_sessions.find((row: any) => row.id === id) || null;
+  }
+
+  async updateOnboardingSession(row: any) {
+    const data = this.read();
+    const index = data.onboarding_sessions.findIndex((item: any) => item.id === row.id);
+    const next = { ...row, updated_at: new Date().toISOString() };
+    if (index >= 0) data.onboarding_sessions[index] = { ...data.onboarding_sessions[index], ...next };
+    else data.onboarding_sessions.unshift(next);
+    this.write(data);
+    return data.onboarding_sessions.find((item: any) => item.id === row.id) || next;
   }
 
   async insertWalletTransaction(row: any) {
