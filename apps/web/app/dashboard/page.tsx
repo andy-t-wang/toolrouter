@@ -194,6 +194,7 @@ function endpointMeta(endpointId: unknown) {
   const logos: Record<string, string> = {
     browserbase: "/browserbase-logomark.svg",
     exa: "/exa-logomark.svg",
+    manus: "/manus-logomark.svg",
   };
   return {
     logo: logos[provider] || "",

@@ -50,6 +50,14 @@ function paidArgsFor(endpointId) {
   if (endpointId === "browserbase.session") {
     return { ...base, estimated_minutes: smoke.input.estimated_minutes };
   }
+  if (endpointId === "manus.research") {
+    return {
+      ...base,
+      query: smoke.input.query,
+      task_type: smoke.input.task_type,
+      depth: smoke.input.depth,
+    };
+  }
   throw new Error(`unsupported endpoint for MCP paid args: ${endpointId}`);
 }
 
@@ -75,7 +83,7 @@ describe("ToolRouter MCP live e2e", () => {
     );
     assert.deepEqual(
       endpointList.endpoints.map((endpoint) => endpoint.id).sort(),
-      ["browserbase.session", "exa.search"].sort(),
+      ["browserbase.session", "exa.search", "manus.research"].sort(),
     );
 
     const categories = assertToolOk(
@@ -83,18 +91,26 @@ describe("ToolRouter MCP live e2e", () => {
       "toolrouter_list_categories",
     );
     assert.ok(categories.categories.some((category) => category.id === "search"));
+    assert.ok(categories.categories.some((category) => category.id === "research"));
 
     const recommendation = assertToolOk(
       await callTool("toolrouter_recommend_endpoint", { category: "search" }, liveOptions()),
       "toolrouter_recommend_endpoint",
     );
     assert.equal(recommendation.recommended_endpoint.id, "exa.search");
+
+    const researchRecommendation = assertToolOk(
+      await callTool("toolrouter_recommend_endpoint", { category: "research" }, liveOptions()),
+      "toolrouter_recommend_endpoint research",
+    );
+    assert.equal(researchRecommendation.recommended_endpoint.id, "manus.research");
   });
 
   it("executes paid endpoint tools through MCP and can read the resulting trace", { skip: runPaid ? false : "live paid MCP smoke disabled" }, async () => {
     const calls = [
       ["exa_search", paidArgsFor("exa.search")],
       ["browserbase_session_create", paidArgsFor("browserbase.session")],
+      ["manus_research", paidArgsFor("manus.research")],
     ];
     let lastRequestId = null;
 

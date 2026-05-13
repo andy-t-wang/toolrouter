@@ -27,6 +27,18 @@
  * @property {number} [estimated_minutes]
  */
 
+/**
+ * @typedef {object} ManusResearchInput
+ * @property {string} [query]
+ * @property {string} [prompt]
+ * @property {"quick" | "standard" | "deep"} [depth]
+ * @property {string} [taskType]
+ * @property {string} [task_type]
+ * @property {string[]} [urls]
+ * @property {string[]} [images]
+ * @property {string} [title]
+ */
+
 export const EXA_SEARCH_PRICES = Object.freeze({
   instant: 0.007,
   auto: 0.007,
@@ -35,6 +47,12 @@ export const EXA_SEARCH_PRICES = Object.freeze({
   deep: 0.012,
   "deep-reasoning": 0.015,
   "deep-max": 0.03,
+});
+
+export const MANUS_RESEARCH_DEPTHS = Object.freeze({
+  quick: 0.03,
+  standard: 0.05,
+  deep: 0.1,
 });
 
 const DEFAULT_HEADERS = Object.freeze({
@@ -84,6 +102,19 @@ function readInteger(input, names, label, { defaultValue, min, max }) {
     throw new RangeError(`${label} must be between ${min} and ${max}`);
   }
   return resolved;
+}
+
+function readStringArray(input, names, label, { defaultValue = [], max = 10 } = {}) {
+  const value = firstDefined(input, names);
+  if (value === undefined) return defaultValue;
+  if (!Array.isArray(value)) throw new TypeError(`${label} must be an array`);
+  if (value.length > max) throw new RangeError(`${label} must include at most ${max} items`);
+  return value.map((item, index) => {
+    if (typeof item !== "string") throw new TypeError(`${label}[${index}] must be a string`);
+    const trimmed = item.trim();
+    if (!trimmed) throw new TypeError(`${label}[${index}] must be non-empty`);
+    return trimmed;
+  });
 }
 
 function toUsdString(value) {
@@ -156,4 +187,36 @@ export function buildBrowserbaseSessionRequest(input, endpoint) {
     max: 120,
   });
   return providerRequest(endpoint, { estimatedMinutes }, (0.12 * estimatedMinutes) / 60);
+}
+
+/**
+ * @param {ManusResearchInput} input
+ * @param {{ method: "POST", url: string }} endpoint
+ * @returns {ProviderRequest}
+ */
+export function buildManusResearchRequest(input, endpoint) {
+  const data = assertInputRecord(input);
+  const query = readString(data, ["query", "prompt"], "query", { required: true });
+  const depth = readString(data, ["depth"], "depth", { defaultValue: "standard" });
+  if (!Object.hasOwn(MANUS_RESEARCH_DEPTHS, depth)) {
+    throw new RangeError(`unsupported Manus research depth: ${depth}`);
+  }
+  const taskType = readString(data, ["taskType", "task_type"], "taskType", {
+    defaultValue: "general_research",
+  });
+  const title = readString(data, ["title"], "title", { defaultValue: undefined });
+  const urls = readStringArray(data, ["urls"], "urls", { max: 10 });
+  const images = readStringArray(data, ["images", "image_urls"], "images", { max: 5 });
+  return providerRequest(
+    endpoint,
+    {
+      query,
+      depth,
+      task_type: taskType,
+      urls,
+      images,
+      ...(title ? { title } : {}),
+    },
+    MANUS_RESEARCH_DEPTHS[depth],
+  );
 }

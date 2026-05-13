@@ -54,6 +54,12 @@ function jsonSchema(properties: Record<string, any>, required: string[] = []) {
   };
 }
 
+function defaultManusMaxUsd(depth: any) {
+  if (depth === "deep") return "0.10";
+  if (depth === "quick") return "0.03";
+  return "0.05";
+}
+
 export function tools(): McpTool[] {
   return [
     {
@@ -115,6 +121,20 @@ export function tools(): McpTool[] {
       }),
     },
     {
+      name: "toolrouter_research",
+      title: "Research",
+      description: "Start an agentic research task through ToolRouter's recommended research endpoint.",
+      inputSchema: jsonSchema({
+        query: { type: "string" },
+        task_type: { type: "string", description: "Optional category such as visual_lookup, tool_discovery, vendor_research, or docs_investigation." },
+        depth: { type: "string", enum: ["quick", "standard", "deep"] },
+        urls: { type: "array", items: { type: "string" }, maxItems: 10 },
+        images: { type: "array", items: { type: "string" }, maxItems: 5 },
+        maxUsd: { type: "string" },
+        payment_mode: { type: "string", enum: ["agentkit_first", "x402_only"] },
+      }, ["query"]),
+    },
+    {
       name: "toolrouter_get_request",
       title: "Get ToolRouter request",
       description: "Fetch one request trace created by this API key.",
@@ -144,6 +164,20 @@ export function tools(): McpTool[] {
         maxUsd: { type: "string" },
         payment_mode: { type: "string", enum: ["agentkit_first", "x402_only"] },
       }),
+    },
+    {
+      name: "manus_research",
+      title: "Manus research",
+      description: "Create a Manus research task through ToolRouter's x402 wrapper.",
+      inputSchema: jsonSchema({
+        query: { type: "string" },
+        task_type: { type: "string" },
+        depth: { type: "string", enum: ["quick", "standard", "deep"] },
+        urls: { type: "array", items: { type: "string" }, maxItems: 10 },
+        images: { type: "array", items: { type: "string" }, maxItems: 5 },
+        maxUsd: { type: "string" },
+        payment_mode: { type: "string", enum: ["agentkit_first", "x402_only"] },
+      }, ["query"]),
     },
   ];
 }
@@ -177,6 +211,20 @@ function endpointPayload(name: string, args: any) {
       endpoint_id: "browserbase.session",
       input: { estimated_minutes: minutes },
       maxUsd: args.maxUsd || "0.02",
+      ...(paymentMode ? { payment_mode: paymentMode } : {}),
+    };
+  }
+  if (name === "toolrouter_research" || name === "manus_research") {
+    return {
+      endpoint_id: "manus.research",
+      input: {
+        query: args.query,
+        task_type: args.task_type || args.taskType || "general_research",
+        depth: args.depth || "standard",
+        urls: args.urls || [],
+        images: args.images || args.image_urls || [],
+      },
+      maxUsd: args.maxUsd || defaultManusMaxUsd(args.depth || "standard"),
       ...(paymentMode ? { payment_mode: paymentMode } : {}),
     };
   }

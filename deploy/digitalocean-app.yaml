@@ -100,9 +100,25 @@ services:
       - key: X402_ALLOWED_CHAINS
         value: eip155:8453,eip155:480
       - key: X402_ALLOWED_HOSTS
-        value: api.exa.ai,x402.browserbase.com
+        value: api.exa.ai,x402.browserbase.com,toolrouter.world
+      - key: X402_MANUS_PAY_TO_ADDRESS
+        value: SET_IN_APP_PLATFORM
+        type: SECRET
       - key: X402_MAX_USD_PER_REQUEST
         value: "0.05"
+      - key: TOOLROUTER_X402_PROVIDER_URL
+        value: https://toolrouter.world
+      - key: TOOLROUTER_MANUS_RESEARCH_PRICE_USD
+        value: "0.05"
+      - key: TOOLROUTER_MANUS_RESEARCH_PRICE_QUICK_USD
+        value: "0.03"
+      - key: TOOLROUTER_MANUS_RESEARCH_PRICE_STANDARD_USD
+        value: "0.05"
+      - key: TOOLROUTER_MANUS_RESEARCH_PRICE_DEEP_USD
+        value: "0.10"
+      - key: MANUS_API_KEY
+        value: SET_IN_APP_PLATFORM
+        type: SECRET
       - key: TOOLROUTER_AGENTKIT_PREFLIGHT_TIMEOUT_MS
         value: "10000"
       - key: TOOLROUTER_MAX_TOP_UP_USD
@@ -229,9 +245,11 @@ workers:
       - key: X402_ALLOWED_CHAINS
         value: eip155:8453,eip155:480
       - key: X402_ALLOWED_HOSTS
-        value: api.exa.ai,x402.browserbase.com
+        value: api.exa.ai,x402.browserbase.com,toolrouter.world
       - key: X402_MAX_USD_PER_REQUEST
         value: "0.05"
+      - key: TOOLROUTER_X402_PROVIDER_URL
+        value: https://toolrouter.world
       - key: TOOLROUTER_PAID_HEALTH_INTERVAL_MS
         value: "3600000"
       - key: TOOLROUTER_AGENTKIT_HEALTH_INTERVAL_MS

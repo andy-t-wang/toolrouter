@@ -194,7 +194,7 @@ try {
   const dashboardEndpoints = await api("/v1/dashboard/endpoints", { token: sessionToken });
   assert.deepEqual(
     dashboardEndpoints.endpoints.map((endpoint) => endpoint.id),
-    ["browserbase.session", "exa.search"],
+    ["browserbase.session", "exa.search", "manus.research"],
   );
   assert.ok(dashboardEndpoints.endpoints[0].status, "endpoint status should be present");
 

@@ -29,6 +29,7 @@ Current launch endpoints:
 
 - `exa.search`
 - `browserbase.session`
+- `manus.research`
 
 Endpoint discovery is available through `GET /v1/endpoints`, `GET /v1/categories`, and MCP category tools.
 

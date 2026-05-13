@@ -133,7 +133,7 @@ export default function DocsPage() {
               </p>
             </div>
             <div className="doc-table">
-              <div><span>Public launch</span><strong>Exa Search and Browserbase verified endpoints</strong></div>
+              <div><span>Public launch</span><strong>Exa, Browserbase, and Manus endpoints</strong></div>
               <div><span>Normal traffic</span><strong>agentkit_first</strong></div>
               <div><span>Paid smoke</span><strong>x402_only with explicit opt-in</strong></div>
             </div>

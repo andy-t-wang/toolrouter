@@ -39,7 +39,7 @@ type LandingStatus = {
 const fallbackStatus: LandingStatus = {
   status: "unverified",
   summary: {
-    endpoint_count: 2,
+    endpoint_count: 3,
     operational_count: 0,
     uptime_30d: null,
     last_checked_at: null,
@@ -65,6 +65,21 @@ const fallbackStatus: LandingStatus = {
       provider: "exa",
       category: "search",
       name: "Exa Search",
+      agentkit_value_type: "free_trial",
+      agentkit_value_label: "AgentKit-Free Trial",
+      status: "unverified",
+      last_checked_at: null,
+      latency_ms: null,
+      p50_latency_ms: null,
+      uptime_30d: null,
+      sparkline_30d: [],
+      health_check_count_30d: 0,
+    },
+    {
+      id: "manus.research",
+      provider: "manus",
+      category: "research",
+      name: "Manus Research",
       agentkit_value_type: "free_trial",
       agentkit_value_label: "AgentKit-Free Trial",
       status: "unverified",
@@ -216,6 +231,7 @@ function StatusDot({ status }: { status: string }) {
 function providerLogoSrc(provider: string) {
   if (provider === "exa") return "/exa-logomark.svg";
   if (provider === "browserbase") return "/browserbase-logomark.svg";
+  if (provider === "manus") return "/manus-logomark.svg";
   return null;
 }
 

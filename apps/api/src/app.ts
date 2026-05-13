@@ -33,6 +33,7 @@ import {
   buildAgentKitVerificationRequest,
   registrationPayloadFromBody,
 } from "./agentkitRegistration.ts";
+import { createManusX402Wrapper } from "./manus.ts";
 
 function requestFilters(query: any) {
   const cursor = decodeRequestCursor(query.cursor);
@@ -1185,6 +1186,7 @@ export function createApiApp({
   datadog = createDatadogClient(),
   agentBookVerifier = null,
   agentBookRegistration = null,
+  manusWrapper = null,
   logger = true,
 }: any = {}) {
   validateRegistry();
@@ -1242,6 +1244,22 @@ export function createApiApp({
     service: "toolrouter-api",
     version: "0.1.0",
   }));
+
+  let defaultManusWrapperPromise: Promise<any> | null = null;
+  async function getManusWrapper() {
+    if (manusWrapper) return manusWrapper;
+    defaultManusWrapperPromise ||= (async () =>
+      createManusX402Wrapper({
+        cache,
+        agentBook: agentBookVerifier || (await loadAgentBookVerifier()),
+      }))();
+    return defaultManusWrapperPromise;
+  }
+
+  app.post("/x402/manus/research", async (request: any, reply: any) => {
+    const wrapper = await getManusWrapper();
+    return wrapper.handle(request, reply);
+  });
 
   app.get("/v1/status", async (request: any) => {
     const endpoints = await publicStatusRows(store, request.query?.category);

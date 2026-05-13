@@ -77,7 +77,7 @@ function timeoutResult({ endpoint, request, traceId, started, timeoutMs, path })
 
 function allowedHosts() {
   return new Set(
-    (process.env.X402_ALLOWED_HOSTS || "api.exa.ai,x402.browserbase.com")
+    (process.env.X402_ALLOWED_HOSTS || "api.exa.ai,x402.browserbase.com,toolrouter.world")
       .split(",")
       .map((host) => host.trim())
       .filter(Boolean),

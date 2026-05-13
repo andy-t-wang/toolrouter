@@ -21,9 +21,9 @@ jobs:
       CROSSMINT_LIVE_WALLET_LOCATOR: ${{ secrets.CROSSMINT_LIVE_WALLET_LOCATOR }}
       CROSSMINT_LIVE_WALLET_ADDRESS: ${{ secrets.CROSSMINT_LIVE_WALLET_ADDRESS }}
       AGENTKIT_CHAIN_ID: "eip155:480"
-      X402_ALLOWED_HOSTS: "api.exa.ai,x402.browserbase.com"
+      X402_ALLOWED_HOSTS: "api.exa.ai,x402.browserbase.com,toolrouter.world"
       X402_ALLOWED_CHAINS: "eip155:8453,eip155:480"
-      X402_MAX_USD_PER_REQUEST: "0.01"
+      X402_MAX_USD_PER_REQUEST: "0.05"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

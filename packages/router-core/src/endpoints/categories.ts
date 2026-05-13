@@ -14,6 +14,13 @@ export const ENDPOINT_CATEGORY_DEFINITIONS = Object.freeze([
     use_cases: ["web research", "source discovery", "competitive research"],
   },
   {
+    id: "research",
+    name: "Research",
+    description: "Run agentic investigations that need synthesis, visual lookup, or messy source work.",
+    recommended_endpoint_id: "manus.research",
+    use_cases: ["visual lookup", "tool discovery", "esoteric research", "vendor investigation"],
+  },
+  {
     id: "maps",
     name: "Maps",
     description: "Place search, routing, geocoding, and saved-location workflows.",
