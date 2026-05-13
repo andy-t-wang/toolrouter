@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 
 import {
   MonthlyAgentKitStorage,
+  buildManusTaskBody,
   createManusFacilitatorConfig,
   manusResearchPriceUsd,
 } from "../../../apps/api/src/manus.ts";
@@ -73,6 +74,37 @@ describe("Manus x402 wrapper pricing", () => {
         "0.11",
       );
     });
+  });
+});
+
+describe("Manus task payloads", () => {
+  it("builds the current Manus task.create body from a query", () => {
+    const body = buildManusTaskBody({
+      query: "Find tools for image lookup",
+      task_type: "tool_discovery",
+      depth: "quick",
+      images: ["https://example.com/image.png"],
+    });
+
+    assert.equal(body.title, "ToolRouter research: Find tools for image lookup");
+    assert.equal(body.message.content[0].type, "text");
+    assert.match(body.message.content[0].text, /Find tools for image lookup/u);
+    assert.match(body.message.content[0].text, /Task type: tool_discovery/u);
+    assert.deepEqual(body.message.content[1], {
+      type: "file",
+      file_url: "https://example.com/image.png",
+    });
+    assert.equal("query" in body, false);
+  });
+
+  it("accepts prompt as a query alias and rejects empty research tasks", () => {
+    const body = buildManusTaskBody({ prompt: "Summarize MCP browser automation tools" });
+    assert.match(body.message.content[0].text, /Summarize MCP browser automation tools/u);
+
+    assert.throws(
+      () => buildManusTaskBody({ prompt: " " }),
+      /query is required/u,
+    );
   });
 });
 

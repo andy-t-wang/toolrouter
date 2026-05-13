@@ -218,6 +218,39 @@ describe("ToolRouter MCP server", () => {
     });
   });
 
+  it("accepts prompt as a Manus research query alias", async () => {
+    const calls = [];
+    const result = await callTool("manus_research", {
+      prompt: "Find tools for image lookup",
+      depth: "quick",
+    }, {
+      env: { TOOLROUTER_API_URL: "http://router.test", TOOLROUTER_API_KEY: "tr_test" },
+      fetchImpl: async (url, init) => {
+        calls.push({ url, init });
+        return response({
+          id: "req_research_prompt",
+          endpoint_id: "manus.research",
+          path: "agentkit",
+          charged: false,
+          body: { ok: true, status_code: 200, provider: "manus", task: { id: "task_prompt" } },
+        });
+      },
+    });
+
+    assert.equal(result.isError, false);
+    assert.deepEqual(JSON.parse(calls[0].init.body), {
+      endpoint_id: "manus.research",
+      input: {
+        query: "Find tools for image lookup",
+        task_type: "general_research",
+        depth: "quick",
+        urls: [],
+        images: [],
+      },
+      maxUsd: "0.03",
+    });
+  });
+
   it("adds the async Manus hint when called through the generic endpoint tool", async () => {
     const calls = [];
     const result = await callTool("toolrouter_call_endpoint", {
@@ -251,6 +284,40 @@ describe("ToolRouter MCP server", () => {
       endpoint_id: "manus.research",
       input: {
         query: "Find tools for image lookup",
+        task_type: "tool_discovery",
+        depth: "quick",
+      },
+      maxUsd: "0.03",
+    });
+  });
+
+  it("canonicalizes generic top-level endpoint fields into input", async () => {
+    const calls = [];
+    const result = await callTool("toolrouter_call_endpoint", {
+      endpoint_id: "manus.research",
+      prompt: "Find tools for image lookup",
+      task_type: "tool_discovery",
+      depth: "quick",
+      maxUsd: "0.03",
+    }, {
+      env: { TOOLROUTER_API_URL: "http://router.test", TOOLROUTER_API_KEY: "tr_test" },
+      fetchImpl: async (url, init) => {
+        calls.push({ url, init });
+        return response({
+          id: "req_generic_top_level",
+          endpoint_id: "manus.research",
+          path: "agentkit",
+          charged: false,
+          body: { ok: true, status_code: 200, provider: "manus", task: { id: "task_top_level" } },
+        });
+      },
+    });
+
+    assert.equal(result.isError, false);
+    assert.deepEqual(JSON.parse(calls[0].init.body), {
+      endpoint_id: "manus.research",
+      input: {
+        prompt: "Find tools for image lookup",
         task_type: "tool_discovery",
         depth: "quick",
       },

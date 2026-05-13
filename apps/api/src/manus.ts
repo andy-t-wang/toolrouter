@@ -126,6 +126,24 @@ function readStringArray(value: any, max: number) {
     .map((item) => item.trim());
 }
 
+function readRequiredResearchQuery(input: any) {
+  const value = input?.query ?? input?.prompt;
+  if (typeof value !== "string" || !value.trim()) {
+    throw Object.assign(new Error("query is required"), {
+      statusCode: 400,
+      code: "invalid_request",
+    });
+  }
+  return value.trim();
+}
+
+function normalizeResearchInput(input: any = {}) {
+  return {
+    ...input,
+    query: readRequiredResearchQuery(input),
+  };
+}
+
 export function manusResearchPriceUsd(input: any = {}) {
   const depth = String(input.depth || "standard");
   const urls = readStringArray(input.urls, 10);
@@ -155,11 +173,12 @@ function buildResearchPrompt(input: any) {
   return lines.filter((line, index) => index === 0 || line !== undefined).join("\n");
 }
 
-function buildManusTaskBody(input: any) {
-  const prompt = buildResearchPrompt(input);
-  const images = readStringArray(input.images || input.image_urls, 5);
+export function buildManusTaskBody(input: any) {
+  const normalizedInput = normalizeResearchInput(input);
+  const prompt = buildResearchPrompt(normalizedInput);
+  const images = readStringArray(normalizedInput.images || normalizedInput.image_urls, 5);
   return {
-    title: input.title || `ToolRouter research: ${String(input.query || input.prompt || "Research").slice(0, 80)}`,
+    title: normalizedInput.title || `ToolRouter research: ${String(normalizedInput.query).slice(0, 80)}`,
     message: {
       content: [
         { type: "text", text: prompt },
@@ -319,6 +338,7 @@ export async function createManusX402Wrapper({
 
   return {
     async handle(request: any, reply: any) {
+      const taskBody = buildManusTaskBody(request.body || {});
       const adapter = new FastifyX402Adapter(request);
       const processResult = await server.processHTTPRequest({
         adapter,
@@ -335,7 +355,7 @@ export async function createManusX402Wrapper({
           "content-type": "application/json",
           "x-manus-api-key": manusApiKey(),
         },
-        body: JSON.stringify(buildManusTaskBody(request.body || {})),
+        body: JSON.stringify(taskBody),
       });
       const upstreamBody = await readJsonResponse(upstream);
       if (!upstream.ok) {

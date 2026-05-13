@@ -775,6 +775,23 @@ function requireObject(value: any, label: string) {
   return value;
 }
 
+const REQUEST_CONTROL_FIELDS = new Set([
+  "endpoint_id",
+  "endpointId",
+  "input",
+  "maxUsd",
+  "max_usd",
+  "paymentMode",
+  "payment_mode",
+]);
+
+function endpointInputFromRequestBody(body: any) {
+  if (body.input !== undefined) return requireObject(body.input, "input");
+  return Object.fromEntries(
+    Object.entries(body).filter(([key]) => !REQUEST_CONTROL_FIELDS.has(key)),
+  );
+}
+
 function rawBodyFrom(request: any) {
   if (typeof request.rawBody === "string") return request.rawBody;
   if (request.body === undefined) return "";
@@ -1474,7 +1491,7 @@ export function createApiApp({
         });
       }
       const endpoint = getEndpoint(endpointId);
-      const providerRequest = endpoint.buildRequest(body.input || {});
+      const providerRequest = endpoint.buildRequest(endpointInputFromRequestBody(body));
       const maxUsd = body.maxUsd || body.max_usd;
       const paymentMode = body.paymentMode || body.payment_mode;
       await enforceRequestPolicy({

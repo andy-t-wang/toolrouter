@@ -1108,6 +1108,76 @@ describe("router API", () => {
     }
   });
 
+  it("accepts top-level endpoint input fields for agent-authored Manus requests", async () => {
+    const executorCalls = [];
+    const isolatedStore = new LocalStore({
+      path: join(mkdtempSync(join(tmpdir(), "toolrouter-manus-top-level-")), "store.json"),
+    });
+    await isolatedStore.upsertCreditAccount({
+      user_id: process.env.TOOLROUTER_DEV_USER_ID,
+      available_usd: "1",
+      pending_usd: "0",
+      reserved_usd: "0",
+      currency: "USD",
+    });
+    const isolatedApp = createApiApp({
+      logger: false,
+      cache: new MemoryCache(),
+      store: isolatedStore,
+      executor: async (payload) => {
+        executorCalls.push(payload);
+        return {
+          trace_id: payload.traceId,
+          endpoint_id: payload.endpoint.id,
+          status_code: 200,
+          ok: true,
+          path: "x402",
+          charged: true,
+          estimated_usd: payload.request.estimatedUsd,
+          amount_usd: "0.03",
+          currency: "USD",
+          payment_reference: "pay_manus_top_level",
+          payment_network: "eip155:8453",
+          payment_error: null,
+          latency_ms: 20,
+          body: { ok: true, provider: "manus", task: { id: "task_top_level" } },
+        };
+      },
+    });
+    await isolatedApp.listen({ port: 0, host: "127.0.0.1" });
+    const isolatedBaseUrl = `http://127.0.0.1:${isolatedApp.server.address().port}`;
+    try {
+      const response = await fetch(`${isolatedBaseUrl}/v1/requests`, {
+        method: "POST",
+        headers: authHeaders(),
+        body: JSON.stringify({
+          endpoint_id: "manus.research",
+          prompt: "best pastries to eat in Korea",
+          task_type: "food_research",
+          depth: "quick",
+          maxUsd: "0.03",
+          payment_mode: "x402_only",
+        }),
+      });
+
+      assert.equal(response.status, 200);
+      const created = await response.json();
+      assert.equal(created.endpoint_id, "manus.research");
+      assert.equal(created.status_code, 200);
+      assert.equal(executorCalls.length, 1);
+      assert.deepEqual(executorCalls[0].request.json, {
+        query: "best pastries to eat in Korea",
+        depth: "quick",
+        task_type: "food_research",
+        urls: [],
+        images: [],
+      });
+      assert.equal(executorCalls[0].paymentMode, "x402_only");
+    } finally {
+      await isolatedApp.close();
+    }
+  });
+
   it("keeps realized AgentKit value categories on request rows", async () => {
     const isolatedStore = new LocalStore({
       path: join(mkdtempSync(join(tmpdir(), "toolrouter-agentkit-realized-")), "store.json"),
