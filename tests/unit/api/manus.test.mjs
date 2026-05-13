@@ -1,7 +1,11 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
-import { MonthlyAgentKitStorage, manusResearchPriceUsd } from "../../../apps/api/src/manus.ts";
+import {
+  MonthlyAgentKitStorage,
+  createManusFacilitatorConfig,
+  manusResearchPriceUsd,
+} from "../../../apps/api/src/manus.ts";
 import { MemoryCache } from "../../../packages/cache/src/index.ts";
 
 const PRICE_ENV = [
@@ -12,6 +16,13 @@ const PRICE_ENV = [
   "TOOLROUTER_MANUS_RESEARCH_URL_PRICE_USD",
   "TOOLROUTER_MANUS_RESEARCH_IMAGE_PRICE_USD",
 ];
+const FACILITATOR_ENV = [
+  "COINBASE_KEY_ID",
+  "COINBASE_KEY_SECRET",
+  "CDP_API_KEY_ID",
+  "CDP_API_KEY_SECRET",
+  "X402_FACILITATOR_URL",
+];
 
 function withCleanPriceEnv(fn) {
   const previous = Object.fromEntries(PRICE_ENV.map((key) => [key, process.env[key]]));
@@ -20,6 +31,19 @@ function withCleanPriceEnv(fn) {
     fn();
   } finally {
     for (const key of PRICE_ENV) {
+      if (previous[key] === undefined) delete process.env[key];
+      else process.env[key] = previous[key];
+    }
+  }
+}
+
+function withCleanFacilitatorEnv(fn) {
+  const previous = Object.fromEntries(FACILITATOR_ENV.map((key) => [key, process.env[key]]));
+  for (const key of FACILITATOR_ENV) delete process.env[key];
+  try {
+    fn();
+  } finally {
+    for (const key of FACILITATOR_ENV) {
       if (previous[key] === undefined) delete process.env[key];
       else process.env[key] = previous[key];
     }
@@ -48,6 +72,38 @@ describe("Manus x402 wrapper pricing", () => {
         }),
         "0.11",
       );
+    });
+  });
+});
+
+describe("Manus x402 facilitator config", () => {
+  it("uses Coinbase facilitator when Coinbase credentials are configured", () => {
+    withCleanFacilitatorEnv(() => {
+      process.env.COINBASE_KEY_ID = "test-key-id";
+      process.env.COINBASE_KEY_SECRET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqr";
+      const config = createManusFacilitatorConfig();
+      assert.equal(config.url, "https://api.cdp.coinbase.com/platform/v2/x402");
+      assert.equal(typeof config.createAuthHeaders, "function");
+    });
+  });
+
+  it("rejects Coinbase credentials that are not CDP signing keys", () => {
+    withCleanFacilitatorEnv(() => {
+      process.env.COINBASE_KEY_ID = "test-key-id";
+      process.env.COINBASE_KEY_SECRET = "00000000-0000-0000-0000-000000000000";
+      assert.throws(
+        () => createManusFacilitatorConfig(),
+        /COINBASE_KEY_SECRET must be a CDP API key secret/u,
+      );
+    });
+  });
+
+  it("falls back to an explicit facilitator URL without Coinbase credentials", () => {
+    withCleanFacilitatorEnv(() => {
+      process.env.X402_FACILITATOR_URL = "https://facilitator.example.test";
+      const config = createManusFacilitatorConfig();
+      assert.equal(config.url, "https://facilitator.example.test");
+      assert.equal(config.createAuthHeaders, undefined);
     });
   });
 });

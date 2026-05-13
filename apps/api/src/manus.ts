@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { createFacilitatorConfig } from "@coinbase/x402";
 import {
   HTTPFacilitatorClient,
   x402HTTPResourceServer,
@@ -68,6 +69,33 @@ function payToAddress() {
 
 function x402Network(): NetworkId {
   return (process.env.X402_DEFAULT_CHAIN_ID || DEFAULT_NETWORK) as NetworkId;
+}
+
+function normalizeCoinbaseKeySecret(value: string) {
+  return value.trim().replace(/\\n/gu, "\n");
+}
+
+function isPlausibleCoinbaseKeySecret(value: string) {
+  const secret = normalizeCoinbaseKeySecret(value);
+  return secret.includes("BEGIN") || /^[A-Za-z0-9+/=]{40,}$/u.test(secret);
+}
+
+export function createManusFacilitatorConfig() {
+  const keyId = process.env.COINBASE_KEY_ID || process.env.CDP_API_KEY_ID;
+  const rawKeySecret = process.env.COINBASE_KEY_SECRET || process.env.CDP_API_KEY_SECRET;
+  const keySecret = rawKeySecret ? normalizeCoinbaseKeySecret(rawKeySecret) : undefined;
+  if (keyId && keySecret) {
+    if (!isPlausibleCoinbaseKeySecret(keySecret)) {
+      throw Object.assign(new Error("COINBASE_KEY_SECRET must be a CDP API key secret PEM or base64 Ed25519 key"), {
+        statusCode: 503,
+        code: "coinbase_facilitator_credentials_invalid",
+      });
+    }
+    return createFacilitatorConfig(keyId, keySecret);
+  }
+  return {
+    url: process.env.X402_FACILITATOR_URL || "https://x402.org/facilitator",
+  };
 }
 
 function optionalUsd(value: string | undefined, fallback: string) {
@@ -245,9 +273,7 @@ export async function createManusX402Wrapper({
   fetchImpl?: typeof fetch;
 }) {
   const resourceServer = new x402ResourceServer(
-    new HTTPFacilitatorClient({
-      url: process.env.X402_FACILITATOR_URL || "https://x402.org/facilitator",
-    }),
+    new HTTPFacilitatorClient(createManusFacilitatorConfig()),
   );
   registerExactEvmScheme(resourceServer, {
     networks: [x402Network()],

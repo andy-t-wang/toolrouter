@@ -12,6 +12,7 @@
     "check": "tsc -p ../../tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@coinbase/x402": "^2.1.0",
     "@crossmint/wallets-sdk": "^1.1.0",
     "@toolrouter/auth": "file:../../packages/auth",
     "@toolrouter/cache": "file:../../packages/cache",
