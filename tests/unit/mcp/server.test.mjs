@@ -193,7 +193,7 @@ describe("ToolRouter MCP server", () => {
           endpoint_id: "manus.research",
           path: "agentkit",
           charged: false,
-          body: { ok: true, provider: "manus", task: { id: "task_123" } },
+          body: { ok: true, status_code: 201, provider: "manus", task: { id: "task_123" } },
         });
       },
     });
@@ -237,7 +237,7 @@ describe("ToolRouter MCP server", () => {
           endpoint_id: "manus.research",
           path: "x402",
           charged: true,
-          body: { ok: true, provider: "manus", task: { task_id: "task_generic" } },
+          body: { ok: true, status_code: 200, provider: "manus", task: { task_id: "task_generic" } },
         });
       },
     });
@@ -258,6 +258,53 @@ describe("ToolRouter MCP server", () => {
     });
   });
 
+  it("reports failed Manus research calls without task-created guidance", async () => {
+    const result = await callTool("manus_research", {
+      query: "Find tools for image lookup",
+      depth: "quick",
+    }, {
+      env: { TOOLROUTER_API_URL: "http://router.test", TOOLROUTER_API_KEY: "tr_test" },
+      fetchImpl: async () => response({
+        id: "req_research_failed",
+        endpoint_id: "manus.research",
+        path: "agentkit_to_x402",
+        charged: true,
+        body: { ok: false, status_code: 504, provider: "manus", error: "upstream timeout" },
+      }),
+    });
+
+    assert.equal(result.isError, true);
+    assert.match(result.content[0].text, /No Manus task was created/u);
+    assert.doesNotMatch(result.content[0].text, /Manus research task created/u);
+    assert.doesNotMatch(result.content[0].text, /Return the task status\/handle/u);
+    assert.equal(result.structuredContent.toolrouter_hint.async_task, false);
+    assert.equal(result.structuredContent.toolrouter_hint.task_created, false);
+    assert.equal(result.structuredContent.toolrouter_hint.task_id, undefined);
+  });
+
+  it("reports failed generic Manus endpoint calls without task-created guidance", async () => {
+    const result = await callTool("toolrouter_call_endpoint", {
+      endpoint_id: "manus.research",
+      input: { query: "Find tools for image lookup", depth: "quick" },
+      maxUsd: "0.03",
+    }, {
+      env: { TOOLROUTER_API_URL: "http://router.test", TOOLROUTER_API_KEY: "tr_test" },
+      fetchImpl: async () => response({
+        id: "req_generic_research_failed",
+        endpoint_id: "manus.research",
+        path: "x402",
+        charged: true,
+        body: { ok: false, status_code: 504, provider: "manus" },
+      }),
+    });
+
+    assert.equal(result.isError, true);
+    assert.match(result.content[0].text, /No Manus task was created/u);
+    assert.doesNotMatch(result.content[0].text, /Manus research task created/u);
+    assert.equal(result.structuredContent.toolrouter_hint.async_task, false);
+    assert.equal(result.structuredContent.toolrouter_hint.task_created, false);
+  });
+
   it("uses configured Manus prices as default MCP spend caps", async () => {
     const calls = [];
     const result = await callTool("manus_research", {
@@ -271,7 +318,13 @@ describe("ToolRouter MCP server", () => {
       },
       fetchImpl: async (url, init) => {
         calls.push({ url, init });
-        return response({ id: "req_research_price", endpoint_id: "manus.research", path: "agentkit", charged: false });
+        return response({
+          id: "req_research_price",
+          endpoint_id: "manus.research",
+          path: "agentkit",
+          charged: false,
+          body: { ok: true, status_code: 200, provider: "manus", task: { id: "task_price" } },
+        });
       },
     });
 

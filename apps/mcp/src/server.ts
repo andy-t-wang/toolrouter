@@ -214,7 +214,32 @@ function extractManusTaskId(data: any) {
   return candidates.find((candidate) => typeof candidate === "string" && candidate.length > 0) || null;
 }
 
+function isSuccessfulManusResult(data: any) {
+  const body = data?.body && typeof data.body === "object" ? data.body : data;
+  const statusCode = Number(data?.status_code ?? data?.statusCode ?? body?.status_code ?? body?.statusCode);
+  return body?.ok === true && Number.isFinite(statusCode) && statusCode >= 200 && statusCode < 300;
+}
+
 function manusResearchResult(data: any) {
+  if (!isSuccessfulManusResult(data)) {
+    const hint = {
+      async_task: false,
+      task_created: false,
+      final_answer: false,
+      message: "Manus research request failed. No Manus task was created; do not treat this response as a task handle.",
+    };
+    const structuredContent = data && typeof data === "object"
+      ? { ...data, toolrouter_hint: hint }
+      : { response: data, toolrouter_hint: hint };
+    const text = [
+      hint.message,
+      "",
+      "ToolRouter response:",
+      JSON.stringify(data, null, 2),
+    ].filter(Boolean).join("\n");
+    return textResult(text, structuredContent, true);
+  }
+
   const taskId = extractManusTaskId(data);
   const hint = {
     async_task: true,
