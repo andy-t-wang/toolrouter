@@ -417,7 +417,7 @@ export default async function LandingPage() {
                 Docs
               </a>
               <a className="mkt-btn sm" href="/dashboard">
-                Get an API key
+                Get started
               </a>
             </div>
           </div>
@@ -447,7 +447,7 @@ export default async function LandingPage() {
             </p>
             <div className="mkt-actions">
               <a className="mkt-btn" href="/dashboard">
-                Get an API key
+                Get started
               </a>
             </div>
           </div>
@@ -694,7 +694,7 @@ export default async function LandingPage() {
             <h2 className="mkt-display cta-h">OpenRouter for tool calling.</h2>
             <div className="mkt-actions centered">
               <a className="mkt-btn" href="/dashboard">
-                Get an API key
+                Get started
               </a>
               <a className="mkt-btn ghost" href="/setup">
                 Setup MCP

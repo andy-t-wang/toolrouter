@@ -96,9 +96,9 @@ export function tools(): McpTool[] {
     {
       name: "toolrouter_call_endpoint",
       title: "Call ToolRouter endpoint",
-      description: "Call any named ToolRouter endpoint through POST /v1/requests.",
+      description: "Call any named ToolRouter endpoint through POST /v1/requests. For async task endpoints such as manus.research, one call creates one task; do not call again for the same user request unless the user explicitly asks to start another task.",
       inputSchema: jsonSchema({
-        endpoint_id: { type: "string", description: "Endpoint id, such as exa.search or browserbase.session." },
+        endpoint_id: { type: "string", description: "Endpoint id, such as exa.search, browserbase.session, or manus.research." },
         input: { type: "object", description: "Endpoint-specific input object." },
         maxUsd: { type: "string", description: "Optional caller spend cap in USD decimal form." },
         payment_mode: { type: "string", enum: ["agentkit_first", "x402_only"], description: "Optional execution path override for explicit smoke tests." },
@@ -130,7 +130,7 @@ export function tools(): McpTool[] {
     {
       name: "toolrouter_research",
       title: "Research",
-      description: "Start an agentic research task through ToolRouter's recommended research endpoint.",
+      description: "Create one long-running Manus research task through ToolRouter's recommended research endpoint. This returns a task handle/status, not the final research result; do not retry the same query unless the user asks to start another task.",
       inputSchema: jsonSchema({
         query: { type: "string" },
         task_type: { type: "string", description: "Optional category such as visual_lookup, tool_discovery, vendor_research, or docs_investigation." },
@@ -175,7 +175,7 @@ export function tools(): McpTool[] {
     {
       name: "manus_research",
       title: "Manus research",
-      description: "Create a Manus research task through ToolRouter's x402 wrapper.",
+      description: "Create one long-running Manus research task through ToolRouter's x402 wrapper. This returns a task handle/status, not the final research result; do not retry the same query unless the user asks to start another task.",
       inputSchema: jsonSchema({
         query: { type: "string" },
         task_type: { type: "string" },
@@ -195,6 +195,71 @@ function textResult(text: string, structuredContent?: any, isError = false) {
     structuredContent,
     isError,
   };
+}
+
+function isManusResearchPayload(payload: any) {
+  return payload?.endpoint_id === "manus.research";
+}
+
+function extractManusTaskId(data: any) {
+  const candidates = [
+    data?.body?.task?.id,
+    data?.body?.task?.task_id,
+    data?.body?.task?.taskId,
+    data?.body?.id,
+    data?.task?.id,
+    data?.task?.task_id,
+    data?.task?.taskId,
+  ];
+  return candidates.find((candidate) => typeof candidate === "string" && candidate.length > 0) || null;
+}
+
+function isSuccessfulManusResult(data: any) {
+  const body = data?.body && typeof data.body === "object" ? data.body : data;
+  const statusCode = Number(data?.status_code ?? data?.statusCode ?? body?.status_code ?? body?.statusCode);
+  return body?.ok === true && Number.isFinite(statusCode) && statusCode >= 200 && statusCode < 300;
+}
+
+function manusResearchResult(data: any) {
+  if (!isSuccessfulManusResult(data)) {
+    const hint = {
+      async_task: false,
+      task_created: false,
+      final_answer: false,
+      message: "Manus research request failed. No Manus task was created; do not treat this response as a task handle.",
+    };
+    const structuredContent = data && typeof data === "object"
+      ? { ...data, toolrouter_hint: hint }
+      : { response: data, toolrouter_hint: hint };
+    const text = [
+      hint.message,
+      "",
+      "ToolRouter response:",
+      JSON.stringify(data, null, 2),
+    ].filter(Boolean).join("\n");
+    return textResult(text, structuredContent, true);
+  }
+
+  const taskId = extractManusTaskId(data);
+  const hint = {
+    async_task: true,
+    final_answer: false,
+    repeat_for_same_query: false,
+    message: "Manus research task created. Do not call this ToolRouter endpoint again for the same research request unless the user explicitly asks to start another Manus task.",
+    ...(taskId ? { task_id: taskId } : {}),
+  };
+  const structuredContent = data && typeof data === "object"
+    ? { ...data, toolrouter_hint: hint }
+    : { response: data, toolrouter_hint: hint };
+  const text = [
+    hint.message,
+    taskId ? `Task id: ${taskId}` : null,
+    "Return the task status/handle to the user instead of polling by creating more tasks.",
+    "",
+    "ToolRouter response:",
+    JSON.stringify(data, null, 2),
+  ].filter(Boolean).join("\n");
+  return textResult(text, structuredContent);
 }
 
 function endpointPayload(name: string, args: any, env: any) {
@@ -295,6 +360,9 @@ export async function callTool(name: string, args: any = {}, options: any = {}) 
     const payload = name === "toolrouter_call_endpoint" ? args : endpointPayload(name, args, env);
     if (!payload) throw new Error(`unknown tool: ${name}`);
     const data = await routerFetch("/v1/requests", { env, fetchImpl, method: "POST", body: payload });
+    if (isManusResearchPayload(payload)) {
+      return manusResearchResult(data);
+    }
     return textResult(JSON.stringify(data, null, 2), data);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);

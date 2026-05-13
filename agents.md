@@ -32,9 +32,12 @@ These are durable project decisions for future agents working in this repo.
   - Builder validation tests for required input, aliases, safe defaults, estimated USD, and strict spend caps.
   - Executor tests when the endpoint uses provider-specific x402 behavior, AgentKit proof headers, protocol-version quirks, chain aliases, or custom payment modes.
   - API integration tests for `GET /v1/status` and dashboard request rows so public status and AgentKit value metadata remain badge-safe.
+  - API proxy integration tests for `POST /v1/requests` so the real ToolRouter product path is covered: AgentKit preflight when relevant, credit reservation, x402 paid fallback, request row creation, and ledger capture/release.
   - Web/static tests when adding logos, dashboard chips, status table rows, or new user-visible labels.
   - MCP tests when adding named endpoint tools or category wrappers.
+  - For long-running task endpoints, MCP descriptions and results must state that one call creates one task and agents should not retry the same user request by creating more tasks.
   - Live tests under `tests/live/**` gated by provider-specific env flags, with `RUN_LIVE_<PROVIDER>_TESTS=true` for default smoke and `RUN_LIVE_<PROVIDER>_PAID_SMOKE=true` for forced paid paths.
+- For first-party wrapped endpoints like `manus.research`, include an opt-in live API proxy smoke that starts the ToolRouter API and calls `POST /v1/requests` against the real wrapper/provider. Direct `/x402/...` wrapper tests are not enough because agents only depend on the ToolRouter proxy path.
 - Normal PR tests must stay deterministic and must not spend money. Live smoke tests should be opt-in, use fixture inputs, enforce `maxUsd`, avoid sensitive logs, and assert the expected path and `charged` state for the endpoint's value category.
 
 ## Exa Search Decision
@@ -70,6 +73,9 @@ These are durable project decisions for future agents working in this repo.
 - For `free_trial` endpoints, AgentKit value is realized only when the final request path is `agentkit` and `charged` is false. A paid `agentkit_to_x402` fallback is useful trace detail, but it must not be displayed or stored as `AgentKit-Free Trial` and must not count as healthy free-trial AgentKit evidence.
 - Use `x402_only` only for explicit wallet/payment smoke tests, not normal user traffic.
 - Live Exa AgentKit smoke should prove the free-trial path by requiring `path === "agentkit"` and `charged === false`.
+- First-party ToolRouter x402 seller routes that wrap providers, such as `/x402/manus/research`, should use the Coinbase x402 facilitator through `@coinbase/x402` when settling Base mainnet payments. Configure it with `COINBASE_KEY_ID` and `COINBASE_KEY_SECRET` or the upstream `CDP_API_KEY_ID` and `CDP_API_KEY_SECRET` names. Do not rely on the default `https://x402.org/facilitator` for Base mainnet seller settlement.
+- Provider-owned x402 endpoints such as Exa and Browserbase should not use ToolRouter's facilitator. ToolRouter is the buyer/client for those calls and should pay the provider's challenge through the executor.
+- AgentKit verification and x402 settlement are separate layers. AgentKit verifies delegated-human benefits; the facilitator is only for x402 verify/settle on ToolRouter-owned paid routes.
 - Product-level spend caps are intentionally not active yet. `maxUsd` is optional caller protection, and `X402_MAX_USD_PER_REQUEST` remains only as an emergency wallet ceiling in the x402 signer path.
 - Keep wallet/private key material inside the server process. Never expose wallet secrets, Supabase service role keys, API key hashes, or payment signatures to the browser.
 - AgentKit account verification belongs behind authenticated server routes. Store only badge-safe status in browser responses; raw AgentBook human IDs must never be exposed, and any stored human identifier must be hashed.

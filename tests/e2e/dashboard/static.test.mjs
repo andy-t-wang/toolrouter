@@ -25,7 +25,7 @@ describe("web dashboard static wiring", () => {
     assert.match(landingPage, /no\s+stablecoin\s+top-ups/);
     assert.match(landingPage, /Human boosts/);
     assert.match(landingPage, /free trials,\s+discounts,\s+or access paths/);
-    assert.match(landingPage, /Get an API key/);
+    assert.match(landingPage, /Get started/);
     assert.doesNotMatch(landingPage, /View console/);
     assert.doesNotMatch(landingPage, /Sign in/);
     assert.match(landingPage, /\/setup/);

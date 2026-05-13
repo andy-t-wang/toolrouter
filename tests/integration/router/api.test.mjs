@@ -1012,6 +1012,102 @@ describe("router API", () => {
     }
   });
 
+  it("proxies Manus through /v1/requests with AgentKit preflight and paid x402 fallback", async () => {
+    const executorCalls = [];
+    const isolatedStore = new LocalStore({
+      path: join(mkdtempSync(join(tmpdir(), "toolrouter-manus-proxy-fallback-")), "store.json"),
+    });
+    await isolatedStore.upsertCreditAccount({
+      user_id: process.env.TOOLROUTER_DEV_USER_ID,
+      available_usd: "1",
+      pending_usd: "0",
+      reserved_usd: "0",
+      currency: "USD",
+    });
+    const isolatedApp = createApiApp({
+      logger: false,
+      cache: new MemoryCache(),
+      store: isolatedStore,
+      executor: async (payload) => {
+        executorCalls.push(payload);
+        assert.equal(payload.endpoint.id, "manus.research");
+        assert.match(payload.request.url, /\/x402\/manus\/research$/u);
+        if (executorCalls.length === 1) {
+          return {
+            trace_id: payload.traceId,
+            endpoint_id: payload.endpoint.id,
+            status_code: 402,
+            ok: false,
+            path: "agentkit",
+            charged: false,
+            estimated_usd: payload.request.estimatedUsd,
+            amount_usd: null,
+            currency: null,
+            payment_reference: null,
+            payment_network: null,
+            payment_error: null,
+            latency_ms: payload.timeoutMs,
+            body: { error: "Payment required" },
+          };
+        }
+        return {
+          trace_id: payload.traceId,
+          endpoint_id: payload.endpoint.id,
+          status_code: 200,
+          ok: true,
+          path: "x402",
+          charged: true,
+          estimated_usd: payload.request.estimatedUsd,
+          amount_usd: "0.03",
+          currency: "USD",
+          payment_reference: "pay_manus_x402",
+          payment_network: "eip155:8453",
+          payment_error: null,
+          latency_ms: 20,
+          body: { ok: true, provider: "manus", task: { id: "task_proxy" } },
+        };
+      },
+    });
+    await isolatedApp.listen({ port: 0, host: "127.0.0.1" });
+    const isolatedBaseUrl = `http://127.0.0.1:${isolatedApp.server.address().port}`;
+    try {
+      const response = await fetch(`${isolatedBaseUrl}/v1/requests`, {
+        method: "POST",
+        headers: authHeaders(),
+        body: JSON.stringify({
+          endpoint_id: "manus.research",
+          input: {
+            query: "best pastries to eat in Korea",
+            task_type: "food_research",
+            depth: "quick",
+          },
+          maxUsd: "0.03",
+        }),
+      });
+      assert.equal(response.status, 200);
+      const created = await response.json();
+      assert.equal(created.endpoint_id, "manus.research");
+      assert.equal(created.path, "x402");
+      assert.equal(created.charged, true);
+      assert.equal(created.status_code, 200);
+      assert.equal(created.credit_reserved_usd, "0.03");
+      assert.equal(created.credit_captured_usd, "0.03");
+      assert.equal(created.credit_released_usd, "0");
+      assert.equal(created.body.provider, "manus");
+      assert.equal(executorCalls.length, 2);
+      assert.equal(executorCalls[0].paymentMode, "agentkit_only");
+      assert.equal(executorCalls[1].paymentMode, "x402_only");
+
+      const listResponse = await fetch(`${isolatedBaseUrl}/v1/requests`, { headers: authHeaders() });
+      const listed = await listResponse.json();
+      assert.equal(listed.requests[0].endpoint_id, "manus.research");
+      assert.equal(listed.requests[0].agentkit_value_type, null);
+      assert.equal(listed.requests[0].agentkit_value_label, null);
+    } finally {
+      await isolatedApp.close();
+    }
+  });
+
   it("keeps realized AgentKit value categories on request rows", async () => {
     const isolatedStore = new LocalStore({
       path: join(mkdtempSync(join(tmpdir(), "toolrouter-agentkit-realized-")), "store.json"),
