@@ -1211,7 +1211,11 @@ export function createApiApp({
     reply.header("access-control-allow-origin", origin);
     reply.header(
       "access-control-allow-headers",
-      "authorization,content-type,x-requested-with",
+      "authorization,content-type,x-requested-with,payment-signature,agentkit,settlement-overrides",
+    );
+    reply.header(
+      "access-control-expose-headers",
+      "payment-required,payment-response,x-payment-response",
     );
     reply.header("access-control-allow-methods", "GET,POST,DELETE,OPTIONS");
     if (request.method === "OPTIONS") {
@@ -1248,11 +1252,15 @@ export function createApiApp({
   let defaultManusWrapperPromise: Promise<any> | null = null;
   async function getManusWrapper() {
     if (manusWrapper) return manusWrapper;
-    defaultManusWrapperPromise ||= (async () =>
-      createManusX402Wrapper({
+    if (!defaultManusWrapperPromise) {
+      defaultManusWrapperPromise = createManusX402Wrapper({
         cache,
         agentBook: agentBookVerifier || (await loadAgentBookVerifier()),
-      }))();
+      }).catch((error: unknown) => {
+        defaultManusWrapperPromise = null;
+        throw error;
+      });
+    }
     return defaultManusWrapperPromise;
   }
 

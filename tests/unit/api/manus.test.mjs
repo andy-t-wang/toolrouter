@@ -1,7 +1,8 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
-import { manusResearchPriceUsd } from "../../../apps/api/src/manus.ts";
+import { MonthlyAgentKitStorage, manusResearchPriceUsd } from "../../../apps/api/src/manus.ts";
+import { MemoryCache } from "../../../packages/cache/src/index.ts";
 
 const PRICE_ENV = [
   "TOOLROUTER_MANUS_RESEARCH_PRICE_USD",
@@ -48,5 +49,18 @@ describe("Manus x402 wrapper pricing", () => {
         "0.11",
       );
     });
+  });
+});
+
+describe("Manus AgentKit storage", () => {
+  it("stores replay nonces in shared cache with expiry", async () => {
+    const cache = new MemoryCache();
+    const storage = new MonthlyAgentKitStorage(cache);
+    assert.equal(await storage.hasUsedNonce("nonce_1"), false);
+    await storage.recordNonce("nonce_1");
+    assert.equal(await storage.hasUsedNonce("nonce_1"), true);
+
+    const secondStorage = new MonthlyAgentKitStorage(cache);
+    assert.equal(await secondStorage.hasUsedNonce("nonce_1"), true);
   });
 });

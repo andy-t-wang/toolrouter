@@ -55,6 +55,12 @@ export const MANUS_RESEARCH_DEPTHS = Object.freeze({
   deep: 0.1,
 });
 
+const MANUS_RESEARCH_DEPTH_ENV = Object.freeze({
+  quick: "TOOLROUTER_MANUS_RESEARCH_PRICE_QUICK_USD",
+  standard: "TOOLROUTER_MANUS_RESEARCH_PRICE_STANDARD_USD",
+  deep: "TOOLROUTER_MANUS_RESEARCH_PRICE_DEEP_USD",
+});
+
 const DEFAULT_HEADERS = Object.freeze({
   "content-type": "application/json",
 });
@@ -120,6 +126,21 @@ function readStringArray(input, names, label, { defaultValue = [], max = 10 } = 
 function toUsdString(value) {
   const rounded = Math.round((Number(value) + Number.EPSILON) * 1_000_000) / 1_000_000;
   return String(rounded).replace(/(\.\d*?)0+$/u, "$1").replace(/\.$/u, "");
+}
+
+function configuredUsd(envValue, fallback) {
+  const raw = String(envValue || fallback).trim();
+  return /^\d+(\.\d+)?$/u.test(raw) ? raw : toUsdString(fallback);
+}
+
+export function manusResearchPriceForDepth(depth) {
+  if (!Object.hasOwn(MANUS_RESEARCH_DEPTHS, depth)) {
+    throw new RangeError(`unsupported Manus research depth: ${depth}`);
+  }
+  return configuredUsd(
+    process.env[MANUS_RESEARCH_DEPTH_ENV[depth]],
+    MANUS_RESEARCH_DEPTHS[depth],
+  );
 }
 
 function providerRequest(endpoint, json, estimatedUsd) {
@@ -217,6 +238,6 @@ export function buildManusResearchRequest(input, endpoint) {
       images,
       ...(title ? { title } : {}),
     },
-    MANUS_RESEARCH_DEPTHS[depth],
+    Number(manusResearchPriceForDepth(depth)),
   );
 }

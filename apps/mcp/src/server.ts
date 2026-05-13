@@ -54,10 +54,17 @@ function jsonSchema(properties: Record<string, any>, required: string[] = []) {
   };
 }
 
-function defaultManusMaxUsd(depth: any) {
-  if (depth === "deep") return "0.10";
-  if (depth === "quick") return "0.03";
-  return "0.05";
+const MANUS_DEFAULT_MAX_USD: Record<string, string> = Object.freeze({
+  quick: "0.03",
+  standard: "0.05",
+  deep: "0.10",
+});
+
+function defaultManusMaxUsd(depth: any, env: any) {
+  const normalized = ["quick", "standard", "deep"].includes(depth) ? depth : "standard";
+  const envKey = `TOOLROUTER_MANUS_RESEARCH_PRICE_${normalized.toUpperCase()}_USD`;
+  const raw = String(env[envKey] || MANUS_DEFAULT_MAX_USD[normalized]).trim();
+  return /^\d+(\.\d+)?$/u.test(raw) ? raw : MANUS_DEFAULT_MAX_USD[normalized];
 }
 
 export function tools(): McpTool[] {
@@ -190,7 +197,7 @@ function textResult(text: string, structuredContent?: any, isError = false) {
   };
 }
 
-function endpointPayload(name: string, args: any) {
+function endpointPayload(name: string, args: any, env: any) {
   const paymentMode = args.payment_mode || args.paymentMode;
   if (name === "toolrouter_search" || name === "exa_search") {
     return {
@@ -224,7 +231,7 @@ function endpointPayload(name: string, args: any) {
         urls: args.urls || [],
         images: args.images || args.image_urls || [],
       },
-      maxUsd: args.maxUsd || defaultManusMaxUsd(args.depth || "standard"),
+      maxUsd: args.maxUsd || defaultManusMaxUsd(args.depth || "standard", env),
       ...(paymentMode ? { payment_mode: paymentMode } : {}),
     };
   }
@@ -285,7 +292,7 @@ export async function callTool(name: string, args: any = {}, options: any = {}) 
       const data = await routerFetch(`/v1/requests/${encodeURIComponent(args.id)}`, { env, fetchImpl });
       return textResult(JSON.stringify(data, null, 2), data);
     }
-    const payload = name === "toolrouter_call_endpoint" ? args : endpointPayload(name, args);
+    const payload = name === "toolrouter_call_endpoint" ? args : endpointPayload(name, args, env);
     if (!payload) throw new Error(`unknown tool: ${name}`);
     const data = await routerFetch("/v1/requests", { env, fetchImpl, method: "POST", body: payload });
     return textResult(JSON.stringify(data, null, 2), data);

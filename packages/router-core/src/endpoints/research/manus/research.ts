@@ -1,4 +1,4 @@
-import { buildManusResearchRequest } from "../../builders.ts";
+import { buildManusResearchRequest, manusResearchPriceForDepth } from "../../builders.ts";
 
 function wrapperBaseUrl() {
   return (process.env.TOOLROUTER_X402_PROVIDER_URL || "https://toolrouter.world").replace(/\/$/u, "");
@@ -30,7 +30,7 @@ export const manusResearchEndpointDefinition = Object.freeze({
   health_probe: {
     mode: "paid_availability",
     payment_mode: "x402_only",
-    max_usd: "0.03",
+    max_usd: manusResearchPriceForDepth("quick"),
     timeout_ms: 30_000,
     latency_budget_ms: 30_000,
     input: {
@@ -42,7 +42,7 @@ export const manusResearchEndpointDefinition = Object.freeze({
   agentkit_health_probe: {
     mode: "agentkit_benefit",
     payment_mode: "agentkit_first",
-    max_usd: "0.03",
+    max_usd: manusResearchPriceForDepth("quick"),
     timeout_ms: 30_000,
     latency_budget_ms: 30_000,
     input: {
@@ -54,7 +54,7 @@ export const manusResearchEndpointDefinition = Object.freeze({
   live_smoke: {
     default_path: {
       payment_mode: "agentkit_first",
-      max_usd: "0.03",
+      max_usd: manusResearchPriceForDepth("quick"),
       input: {
         query: "ToolRouter AgentKit smoke test for Manus research",
         task_type: "health_check",
@@ -63,7 +63,7 @@ export const manusResearchEndpointDefinition = Object.freeze({
     },
     paid_path: {
       payment_mode: "x402_only",
-      max_usd: "0.03",
+      max_usd: manusResearchPriceForDepth("quick"),
       input: {
         query: "ToolRouter x402 smoke test for Manus research",
         task_type: "health_check",

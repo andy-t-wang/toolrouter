@@ -10,6 +10,7 @@ import {
   recommendEndpoint,
   validateRegistry,
 } from "../../../packages/router-core/src/endpoints/index.ts";
+import { manusResearchPriceForDepth } from "../../../packages/router-core/src/endpoints/builders.ts";
 import {
   assertEndpointFixtureBuilds,
   assertEndpointHealthProbeBuilds,
@@ -129,5 +130,21 @@ describe("endpoint registry", () => {
     assert.equal(probe.paymentMode, "x402_only");
     assert.equal(probe.maxUsd, "0.03");
     assert.equal(probe.timeoutMs, 30_000);
+  });
+
+  it("uses configured Manus prices for dynamic request estimates", () => {
+    const previous = process.env.TOOLROUTER_MANUS_RESEARCH_PRICE_QUICK_USD;
+    process.env.TOOLROUTER_MANUS_RESEARCH_PRICE_QUICK_USD = "0.04";
+    try {
+      assert.equal(manusResearchPriceForDepth("quick"), "0.04");
+      const request = buildEndpointRequest("manus.research", {
+        query: "Quick configured price check",
+        depth: "quick",
+      });
+      assert.equal(request.estimatedUsd, "0.04");
+    } finally {
+      if (previous === undefined) delete process.env.TOOLROUTER_MANUS_RESEARCH_PRICE_QUICK_USD;
+      else process.env.TOOLROUTER_MANUS_RESEARCH_PRICE_QUICK_USD = previous;
+    }
   });
 });

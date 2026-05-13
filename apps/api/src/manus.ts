@@ -158,9 +158,8 @@ async function readJsonResponse(response: Response) {
   }
 }
 
-class MonthlyAgentKitStorage {
+export class MonthlyAgentKitStorage {
   cache: any;
-  nonces = new Set<string>();
 
   constructor(cache: any) {
     this.cache = cache;
@@ -177,11 +176,16 @@ class MonthlyAgentKitStorage {
   }
 
   async hasUsedNonce(nonce: string) {
-    return this.nonces.has(nonce);
+    if (typeof this.cache.has !== "function") return false;
+    return this.cache.has({ key: `agentkit:manus:nonce:${hashHumanId(nonce)}` });
   }
 
   async recordNonce(nonce: string) {
-    this.nonces.add(nonce);
+    if (typeof this.cache.set !== "function") return;
+    await this.cache.set({
+      key: `agentkit:manus:nonce:${hashHumanId(nonce)}`,
+      windowSeconds: Number(process.env.AGENTKIT_NONCE_TTL_SECONDS || 10 * 60),
+    });
   }
 }
 

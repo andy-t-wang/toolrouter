@@ -12,6 +12,11 @@ type LimitOptions = {
   amount?: number;
 };
 
+type KeyTtlOptions = {
+  key: string;
+  windowSeconds: number;
+};
+
 export class MemoryCache {
   counters = new Map<string, { value: number; expiresAt: number }>();
 
@@ -27,6 +32,15 @@ export class MemoryCache {
       remaining: Math.max(0, limit - record.value),
       resetAt: new Date(record.expiresAt),
     };
+  }
+
+  async has({ key }: Pick<KeyTtlOptions, "key">) {
+    const current = this.counters.get(key);
+    return Boolean(current && current.expiresAt > Date.now());
+  }
+
+  async set({ key, windowSeconds }: KeyTtlOptions) {
+    this.counters.set(key, { value: 1, expiresAt: Date.now() + windowSeconds * 1000 });
   }
 }
 
@@ -56,6 +70,16 @@ export class RedisCache {
       remaining: Math.max(0, limit - value),
       resetAt: new Date(Date.now() + resetSeconds * 1000),
     };
+  }
+
+  async has({ key }: Pick<KeyTtlOptions, "key">) {
+    const client = await this.client();
+    return Boolean(await client.exists(key));
+  }
+
+  async set({ key, windowSeconds }: KeyTtlOptions) {
+    const client = await this.client();
+    await client.set(key, "1", "EX", windowSeconds);
   }
 }
 
