@@ -119,6 +119,58 @@ describe("router API", () => {
     });
   });
 
+  it("retries Manus wrapper initialization after a transient failure", async () => {
+    let attempts = 0;
+    const retryApp = createApiApp({
+      logger: false,
+      cache: new MemoryCache(),
+      store: new LocalStore(join(mkdtempSync(join(tmpdir(), "toolrouter-manus-retry-")), "store.json")),
+      agentBookVerifier: {
+        lookupHuman: async () => "human_retry",
+      },
+      createManusWrapper: async () => {
+        attempts += 1;
+        if (attempts === 1) {
+          throw Object.assign(new Error("temporary Manus wrapper init failure"), {
+            statusCode: 503,
+            code: "manus_wrapper_init_failed",
+          });
+        }
+        return {
+          handle: async () => ({
+            ok: true,
+            provider: "manus",
+            task: { id: "task_retry" },
+          }),
+        };
+      },
+    });
+
+    try {
+      const first = await retryApp.inject({
+        method: "POST",
+        url: "/x402/manus/research",
+        payload: { query: "first attempt" },
+      });
+      assert.equal(first.statusCode, 503);
+
+      const second = await retryApp.inject({
+        method: "POST",
+        url: "/x402/manus/research",
+        payload: { query: "second attempt" },
+      });
+      assert.equal(second.statusCode, 200);
+      assert.deepEqual(second.json(), {
+        ok: true,
+        provider: "manus",
+        task: { id: "task_retry" },
+      });
+      assert.equal(attempts, 2);
+    } finally {
+      await retryApp.close();
+    }
+  });
+
   it("requires auth for endpoint listing", async () => {
     const response = await fetch(`${baseUrl}/v1/endpoints`);
     assert.equal(response.status, 401);

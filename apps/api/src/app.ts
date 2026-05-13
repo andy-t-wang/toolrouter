@@ -1187,6 +1187,7 @@ export function createApiApp({
   agentBookVerifier = null,
   agentBookRegistration = null,
   manusWrapper = null,
+  createManusWrapper = createManusX402Wrapper,
   logger = true,
 }: any = {}) {
   validateRegistry();
@@ -1253,7 +1254,7 @@ export function createApiApp({
   async function getManusWrapper() {
     if (manusWrapper) return manusWrapper;
     if (!defaultManusWrapperPromise) {
-      defaultManusWrapperPromise = createManusX402Wrapper({
+      defaultManusWrapperPromise = createManusWrapper({
         cache,
         agentBook: agentBookVerifier || (await loadAgentBookVerifier()),
       }).catch((error: unknown) => {
