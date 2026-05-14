@@ -77,6 +77,40 @@ describe("credit ledger", () => {
     );
   });
 
+  it("bootstraps dev credit accounts before Supabase RPC reservations", async () => {
+    const previousDevMode = process.env.ROUTER_DEV_MODE;
+    const previousDevBalance = process.env.TOOLROUTER_DEV_CREDIT_BALANCE_USD;
+    process.env.ROUTER_DEV_MODE = "true";
+    process.env.TOOLROUTER_DEV_CREDIT_BALANCE_USD = "42";
+    try {
+      const db = store();
+      let accountBeforeRpc = null;
+      db.reserveCredits = async (input) => {
+        accountBeforeRpc = await db.getCreditAccount({ user_id: input.user_id });
+        return {
+          credit_reservation_id: input.reservation_id,
+          credit_reserved_usd: input.amount_usd,
+          credit_captured_usd: "0",
+          credit_released_usd: "0",
+        };
+      };
+
+      const reservation = await reserveCredits({
+        store: db,
+        user_id: "dev_rpc_user",
+        amountUsd: "0.02",
+      });
+
+      assert.equal(reservation.amount_usd, "0.02");
+      assert.equal(accountBeforeRpc.available_usd, "42");
+    } finally {
+      if (previousDevMode === undefined) delete process.env.ROUTER_DEV_MODE;
+      else process.env.ROUTER_DEV_MODE = previousDevMode;
+      if (previousDevBalance === undefined) delete process.env.TOOLROUTER_DEV_CREDIT_BALANCE_USD;
+      else process.env.TOOLROUTER_DEV_CREDIT_BALANCE_USD = previousDevBalance;
+    }
+  });
+
   it("caps Stripe top-ups at 5 USD by default", () => {
     const previous = process.env.TOOLROUTER_MAX_TOP_UP_USD;
     delete process.env.TOOLROUTER_MAX_TOP_UP_USD;

@@ -19,7 +19,7 @@ const endpointTasksNullableMigration = readFileSync(
   "utf8",
 );
 const atomicCreditMigration = readFileSync(
-  new URL("../../../supabase/migrations/0010_atomic_credit_accounting.sql", import.meta.url),
+  new URL("../../../supabase/migrations/0012_atomic_credit_accounting.sql", import.meta.url),
   "utf8",
 );
 
@@ -145,6 +145,8 @@ describe("Supabase RLS migration", () => {
     assert.match(atomicCreditMigration, /security definer/g);
     assert.match(atomicCreditMigration, /for update/g);
     assert.match(atomicCreditMigration, /on conflict \(id\) do nothing/g);
+    assert.match(atomicCreditMigration, /insert into credit_accounts\(user_id, available_usd, pending_usd, reserved_usd, currency\)/);
+    assert.match(atomicCreditMigration, /on conflict \(user_id\) do nothing;/);
     assert.match(atomicCreditMigration, /grant execute on function toolrouter_reserve_credits[\s\S]*to service_role;/);
     assert.match(atomicCreditMigration, /grant execute on function toolrouter_finalize_credit_reservation[\s\S]*to service_role;/);
     assert.match(atomicCreditMigration, /grant execute on function toolrouter_settle_credit_purchase[\s\S]*to service_role;/);

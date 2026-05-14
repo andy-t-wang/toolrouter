@@ -168,6 +168,7 @@ export async function reserveCredits({
     endpoint_id: endpoint_id || null,
     amount_usd: formatUsd(amount),
   };
+  const account = await ensureCreditAccount(store, user_id);
 
   if (typeof store.reserveCredits === "function") {
     try {
@@ -192,7 +193,6 @@ export async function reserveCredits({
     }
   }
 
-  const account = await ensureCreditAccount(store, user_id);
   const balances = accountBigints(account);
   if (balances.available < amount) {
     throw Object.assign(new Error("insufficient ToolRouter credits"), {
@@ -434,6 +434,7 @@ export async function settleFundedCreditPurchase({
   metadata?: Record<string, unknown>;
 }) {
   if (purchase.status === "funded") return { purchase, duplicate: true };
+  await ensureCreditAccount(store, purchase.user_id);
 
   if (typeof store.settleCreditPurchase === "function") {
     const updated = await store.settleCreditPurchase({

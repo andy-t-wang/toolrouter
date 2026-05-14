@@ -164,6 +164,10 @@ begin
     return purchase_row;
   end if;
 
+  insert into credit_accounts(user_id, available_usd, pending_usd, reserved_usd, currency)
+  values (purchase_row.user_id, 0, 0, 0, 'USD')
+  on conflict (user_id) do nothing;
+
   perform 1 from credit_accounts where user_id = purchase_row.user_id for update;
 
   update credit_accounts
