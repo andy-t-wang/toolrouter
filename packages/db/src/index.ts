@@ -93,8 +93,6 @@ export type ToolRouterStore = {
   claimCreditPurchaseForFunding(input: { id?: string; provider_checkout_session_id?: string }): Promise<any>;
   listCreditPurchases(input?: { user_id?: string; status?: string; since?: string; limit?: number }): Promise<any[]>;
   insertWalletTransaction(row: any): Promise<any>;
-  updateWalletTransaction(row: any): Promise<any>;
-  findWalletTransactionByProviderReference(provider_reference: string): Promise<any>;
 };
 
 function qs(params: Record<string, any>) {
@@ -518,20 +516,6 @@ export class LocalStore implements ToolRouterStore {
     data.wallet_transactions = data.wallet_transactions.slice(0, 10000);
     this.write(data);
     return row;
-  }
-
-  async updateWalletTransaction(row: any) {
-    const data = this.read();
-    const index = data.wallet_transactions.findIndex((item: any) => item.id === row.id);
-    const next = { ...row, updated_at: new Date().toISOString() };
-    if (index >= 0) data.wallet_transactions[index] = { ...data.wallet_transactions[index], ...next };
-    else data.wallet_transactions.unshift(next);
-    this.write(data);
-    return data.wallet_transactions.find((item: any) => item.id === row.id) || next;
-  }
-
-  async findWalletTransactionByProviderReference(provider_reference: string) {
-    return this.read().wallet_transactions.find((row: any) => row.provider_reference === provider_reference) || null;
   }
 }
 
@@ -980,26 +964,6 @@ export class SupabaseStore implements ToolRouterStore {
       body: row,
       prefer: "return=representation",
     }))?.[0] || row;
-  }
-
-  async updateWalletTransaction(row: any) {
-    return (await this.request(`/wallet_transactions?${qs({ id: `eq.${row.id}`, select: "*" })}`, {
-      method: "PATCH",
-      body: row,
-      prefer: "return=representation",
-    }))?.[0] || row;
-  }
-
-  async findWalletTransactionByProviderReference(provider_reference: string) {
-    return (
-      (await this.request(
-        `/wallet_transactions?${qs({
-          provider_reference: `eq.${provider_reference}`,
-          select: "*",
-          limit: 1,
-        })}`,
-      ))?.[0] || null
-    );
   }
 }
 

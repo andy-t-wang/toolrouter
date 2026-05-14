@@ -20,7 +20,6 @@ import {
   createCreditPurchase,
   ensureCreditAccount,
   finalizeCreditReservation,
-  getCreditBalance,
   markCreditPurchaseFailed,
   parseUsd,
   releaseCreditReservation,
@@ -122,9 +121,6 @@ function dashboardRequestDto(row: any) {
   const {
     user_id: _user_id,
     error: _error,
-    payment_reference: _payment_reference,
-    payment_network: _payment_network,
-    payment_error: _payment_error,
     ...dashboard
   } = safe as any;
   return dashboard;
@@ -384,11 +380,6 @@ const CONSTRAINT_ERROR_MESSAGES: Record<
   string,
   { code: string; message: string; statusCode?: number }
 > = {
-  api_keys_caller_id_key: {
-    code: "api_key_name_conflict",
-    message: "An API key with that name already exists. Choose a different name.",
-    statusCode: 409,
-  },
   api_keys_user_caller_active_key: {
     code: "api_key_name_conflict",
     message: "An API key with that name already exists. Choose a different name.",
@@ -550,15 +541,9 @@ async function monitoringPayload(store: any, user_id: string) {
       store.listRequests({ user_id, since: since24h, limit: 500 }),
       store.listRequests({ user_id, since: since30d, limit: 500 }),
       store.listEndpointStatus(),
-      typeof store.listHealthChecks === "function"
-        ? store.listHealthChecks({ since: since24h, limit: 5000 })
-        : [],
-      typeof store.listCreditPurchases === "function"
-        ? store.listCreditPurchases({ user_id, since: since30d, limit: 500 })
-        : [],
-      typeof store.getWalletAccount === "function"
-        ? store.getWalletAccount({ user_id })
-        : null,
+      store.listHealthChecks({ since: since24h, limit: 5000 }),
+      store.listCreditPurchases({ user_id, since: since30d, limit: 500 }),
+      store.getWalletAccount({ user_id }),
     ]);
   const errorRows = requests24h.filter(isErrorRequest);
   const statusByEndpoint = new Map<string, any>(
@@ -697,9 +682,7 @@ async function publicStatusRows(store: any, category?: string) {
   const since = new Date(Date.now() - THIRTY_DAYS_MS).toISOString();
   const [statuses, checks] = await Promise.all([
     store.listEndpointStatus(),
-    typeof store.listHealthChecks === "function"
-      ? store.listHealthChecks({ since, limit: 5000 })
-      : [],
+    store.listHealthChecks({ since, limit: 5000 }),
   ]);
   const statusByEndpoint = new Map<string, any>(
     statuses.map((status: any) => [status.endpoint_id, status]),
@@ -1360,26 +1343,12 @@ async function ensureAgentWalletAccount(
   });
 }
 
-async function ensureAgentKitAccount(
-  store: any,
-  crossmint: any,
-  user: { user_id: string; email?: string | null },
-) {
-  const existing = await store.getWalletAccount({ user_id: user.user_id });
-  if (existing?.address && existing?.wallet_locator) return existing;
-  return ensureAgentWalletAccount(store, crossmint, user);
-}
-
-async function getVisibleAccount(store: any, user: { user_id: string; email?: string | null }) {
-  return store.getWalletAccount({ user_id: user.user_id });
-}
-
 async function getOrBootstrapVisibleAccount(
   store: any,
   crossmint: any,
   user: { user_id: string; email?: string | null },
 ) {
-  const existing = await getVisibleAccount(store, user);
+  const existing = await store.getWalletAccount({ user_id: user.user_id });
   if (existing?.address && existing?.wallet_locator) return existing;
   if (!shouldUseCrossmintSigner()) return existing;
   try {
@@ -1414,7 +1383,7 @@ async function prepareAgentKitRegistration({
   user,
   agentBookRegistration,
 }: any) {
-  const wallet = await ensureAgentKitAccount(store, crossmint, user);
+  const wallet = await ensureAgentWalletAccount(store, crossmint, user);
   if (!wallet.address) {
     throw Object.assign(new Error("AgentKit account address is missing"), {
       statusCode: 500,
@@ -1440,7 +1409,7 @@ async function completeAgentKitRegistration({
   agentBookVerifier,
   agentBookRegistration,
 }: any) {
-  const wallet = await ensureAgentKitAccount(store, crossmint, user);
+  const wallet = await ensureAgentWalletAccount(store, crossmint, user);
   if (!wallet.address) {
     throw Object.assign(new Error("AgentKit account address is missing"), {
       statusCode: 500,
@@ -1478,7 +1447,7 @@ async function verifyAgentKitAccount({
   user,
   agentBookVerifier,
 }: any) {
-  const wallet = await ensureAgentKitAccount(store, crossmint, user);
+  const wallet = await ensureAgentWalletAccount(store, crossmint, user);
   const checkedAt = new Date().toISOString();
   let verified = false;
   let humanIdHash = null;
@@ -1953,7 +1922,7 @@ export function createApiApp({
   app.get("/v1/balance", async (request: any) => {
     const user = await authenticateSupabaseUser(request.headers);
     const [account, wallet] = await Promise.all([
-      getCreditBalance(store, user.user_id),
+      ensureCreditAccount(store, user.user_id),
       getOrBootstrapVisibleAccount(store, crossmint, user),
     ]);
     return {

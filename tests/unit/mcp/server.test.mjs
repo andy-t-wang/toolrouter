@@ -108,9 +108,6 @@ describe("ToolRouter MCP server", () => {
       endpoint_id: "exa.search",
       input: {
         query: "top sushi places in San Francisco",
-        search_type: "fast",
-        num_results: 5,
-        include_summary: false,
       },
       maxUsd: "0.01",
     });
@@ -169,22 +166,31 @@ describe("ToolRouter MCP server", () => {
 
   it("calls category-level convenience tools through recommended endpoint payloads", async () => {
     const calls = [];
+    const categories = {
+      categories: [
+        {
+          id: "search",
+          name: "Search",
+          recommended_endpoint: { id: "exa.search", name: "Exa Search" },
+        },
+      ],
+    };
     const result = await callTool("toolrouter_search", { query: "agent payment routers" }, {
       env: { TOOLROUTER_API_URL: "http://router.test", TOOLROUTER_API_KEY: "tr_test" },
       fetchImpl: async (url, init) => {
         calls.push({ url, init });
+        if (url === "http://router.test/v1/categories?include_empty=true") return response(categories);
         return response({ id: "req_2", endpoint_id: "exa.search", path: "agentkit", charged: false });
       },
     });
 
     assert.equal(result.isError, false);
-    assert.deepEqual(JSON.parse(calls[0].init.body), {
+    assert.equal(calls[0].url, "http://router.test/v1/categories?include_empty=true");
+    assert.equal(calls[1].url, "http://router.test/v1/requests");
+    assert.deepEqual(JSON.parse(calls[1].init.body), {
       endpoint_id: "exa.search",
       input: {
         query: "agent payment routers",
-        search_type: "fast",
-        num_results: 5,
-        include_summary: false,
       },
       maxUsd: "0.01",
     });
@@ -271,11 +277,8 @@ describe("ToolRouter MCP server", () => {
     assert.deepEqual(JSON.parse(calls[0].init.body), {
       endpoint_id: "manus.research",
       input: {
-        query: "Find tools for image lookup",
-        task_type: "general_research",
+        prompt: "Find tools for image lookup",
         depth: "quick",
-        urls: [],
-        images: [],
       },
       maxUsd: "0.03",
     });
@@ -510,7 +513,7 @@ describe("ToolRouter MCP server", () => {
     });
   });
 
-  it("defaults Browserbase session calls to the provider minimum", async () => {
+  it("delegates Browserbase session input defaults to the API", async () => {
     const calls = [];
     const result = await callTool("browserbase_session_create", {}, {
       env: { TOOLROUTER_API_URL: "http://router.test", TOOLROUTER_API_KEY: "tr_test" },
@@ -523,7 +526,7 @@ describe("ToolRouter MCP server", () => {
     assert.equal(result.isError, false);
     assert.deepEqual(JSON.parse(calls[0].init.body), {
       endpoint_id: "browserbase.session",
-      input: { estimated_minutes: 5 },
+      input: {},
       maxUsd: "0.02",
     });
   });

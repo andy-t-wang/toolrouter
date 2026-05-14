@@ -113,10 +113,6 @@ export async function ensureCreditAccount(store: any, user_id: string) {
   });
 }
 
-export async function getCreditBalance(store: any, user_id: string) {
-  return ensureCreditAccount(store, user_id);
-}
-
 export function assertTopUpAmount(amountUsd: unknown) {
   const amount = parseUsd(amountUsd, "Top-up amount");
   if (amount <= 0n) {

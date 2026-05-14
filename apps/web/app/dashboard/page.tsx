@@ -39,14 +39,6 @@ const dashboardNavMeta: Record<DashboardNavItem, { icon: IconName; label: string
   quickstart: { icon: "onboard", label: "Quickstart" },
 };
 
-function dashboardNavIcon(item: DashboardNavItem) {
-  return dashboardNavMeta[item].icon;
-}
-
-function dashboardNavLabel(item: DashboardNavItem) {
-  return dashboardNavMeta[item].label;
-}
-
 function allowLocalDevSession() {
   if (typeof window === "undefined") return false;
   const localHost =
@@ -199,7 +191,6 @@ function endpointMeta(endpointId: unknown) {
   return {
     logo: logos[provider] || "",
     name: titleCase(rawName || provider || "Endpoint"),
-    provider,
   };
 }
 
@@ -504,9 +495,7 @@ export default function DashboardPage() {
   }, [monthRequests, requests]);
   const recentRequests = useMemo(() => compactRecentRequests(requests), [requests]);
   const ledgerRows = useMemo(() => compactLedgerEntries(ledger), [ledger]);
-  const quickstartApiKey = useMemo(() => {
-    return revealedKey;
-  }, [revealedKey]);
+  const quickstartApiKey = revealedKey;
   const hasActiveApiKey = keys.some((key) => !key.disabled_at);
   const agentKitVerified = Boolean(balance?.agentkit_verification?.verified);
   const agentKitCheckMeta = [
@@ -869,8 +858,8 @@ export default function DashboardPage() {
                   href={`#${item}`}
                   onClick={() => setPage(item)}
                 >
-                  <Icon name={dashboardNavIcon(item)} />
-                  <span>{dashboardNavLabel(item)}</span>
+                  <Icon name={dashboardNavMeta[item].icon} />
+                  <span>{dashboardNavMeta[item].label}</span>
                 </a>
               ))}
             </nav>
@@ -887,8 +876,8 @@ export default function DashboardPage() {
                   href={`#${item}`}
                   onClick={() => setPage(item)}
                 >
-                  <Icon name={dashboardNavIcon(item)} />
-                  <span>{dashboardNavLabel(item)}</span>
+                  <Icon name={dashboardNavMeta[item].icon} />
+                  <span>{dashboardNavMeta[item].label}</span>
                 </a>
               ))}
             </nav>
