@@ -56,6 +56,7 @@ function paidArgsFor(endpointId) {
       query: smoke.input.query,
       task_type: smoke.input.task_type,
       depth: smoke.input.depth,
+      force_new: true,
     };
   }
   throw new Error(`unsupported endpoint for MCP paid args: ${endpointId}`);
@@ -104,13 +105,14 @@ describe("ToolRouter MCP live e2e", () => {
       "toolrouter_recommend_endpoint research",
     );
     assert.equal(researchRecommendation.recommended_endpoint.id, "manus.research");
+    assert.equal(researchRecommendation.recommended_mcp_tool, "manus_research_start");
   });
 
   it("executes paid endpoint tools through MCP and can read the resulting trace", { skip: runPaid ? false : "live paid MCP smoke disabled" }, async () => {
     const calls = [
       ["exa_search", paidArgsFor("exa.search")],
       ["browserbase_session_create", paidArgsFor("browserbase.session")],
-      ["manus_research", paidArgsFor("manus.research")],
+      ["manus_research_start", paidArgsFor("manus.research")],
     ];
     let lastRequestId = null;
 

@@ -59,6 +59,8 @@ The adapter does not load wallet secrets or provider API keys. It only calls Too
 - `GET /v1/categories`
 - `POST /v1/requests`
 - `GET /v1/requests/:id`
+- `GET /v1/manus/tasks/:task_id/status`
+- `GET /v1/manus/tasks/:task_id/result`
 
 Exposed tools include:
 
@@ -68,4 +70,11 @@ Exposed tools include:
 - `toolrouter_call_endpoint`
 - `toolrouter_search`
 - `toolrouter_browser_use`
+- `manus_research_start`
+- `manus_research_status`
+- `manus_research_result`
 - `toolrouter_get_request`
+- `exa_search`
+- `browserbase_session_create`
+
+Use `toolrouter_search` or `exa_search` for quick synchronous lookup. Use `manus_research_start` for deep research, then poll `manus_research_status` or `manus_research_result` with the returned `task_id`; do not start another task for the same query unless the user explicitly asks for a fresh run.

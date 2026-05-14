@@ -95,6 +95,13 @@ export default function SetupPage() {
                 <span>Recommended: Exa Search for fresh web results.</span>
               </div>
               <div>
+                <strong>research</strong>
+                <span>
+                  Recommended: Manus Research for async deep research through
+                  manus_research_start.
+                </span>
+              </div>
+              <div>
                 <strong>browser use</strong>
                 <span>
                   Recommended: Browserbase Session for interactive browser

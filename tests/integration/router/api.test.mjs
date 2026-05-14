@@ -32,6 +32,13 @@ function sessionHeaders() {
   };
 }
 
+function jsonResponse(body, init = {}) {
+  return new Response(JSON.stringify(body), {
+    status: init.status || 200,
+    headers: { "content-type": "application/json" },
+  });
+}
+
 describe("router API", () => {
   let app;
   let baseUrl;
@@ -205,9 +212,11 @@ describe("router API", () => {
     const search = body.categories.find((category) => category.id === "search");
     assert.equal(search.recommended_endpoint_id, "exa.search");
     assert.equal(search.recommended_endpoint.id, "exa.search");
+    assert.equal(search.recommended_mcp_tool, "toolrouter_search");
     const research = body.categories.find((category) => category.id === "research");
     assert.equal(research.recommended_endpoint_id, "manus.research");
     assert.equal(research.recommended_endpoint.id, "manus.research");
+    assert.equal(research.recommended_mcp_tool, "manus_research_start");
     assert.ok(search.endpoints.every((endpoint) => endpoint.status));
 
     const dashboardResponse = await fetch(`${baseUrl}/v1/dashboard/categories?include_empty=true`, { headers: sessionHeaders() });
@@ -1050,6 +1059,7 @@ describe("router API", () => {
             body: { error: "Payment required" },
           };
         }
+        const taskId = `task_proxy_${executorCalls.length}`;
         return {
           trace_id: payload.traceId,
           endpoint_id: payload.endpoint.id,
@@ -1064,7 +1074,7 @@ describe("router API", () => {
           payment_network: "eip155:8453",
           payment_error: null,
           latency_ms: 20,
-          body: { ok: true, provider: "manus", task: { id: "task_proxy" } },
+          body: { ok: true, provider: "manus", task: { id: taskId, task_url: `https://manus.im/app/${taskId}` } },
         };
       },
     });
@@ -1084,8 +1094,9 @@ describe("router API", () => {
           maxUsd: "0.03",
         }),
       });
-      assert.equal(response.status, 200);
-      const created = await response.json();
+      const responseText = await response.text();
+      assert.equal(response.status, 200, responseText);
+      const created = JSON.parse(responseText);
       assert.equal(created.endpoint_id, "manus.research");
       assert.equal(created.path, "x402");
       assert.equal(created.charged, true);
@@ -1094,9 +1105,57 @@ describe("router API", () => {
       assert.equal(created.credit_captured_usd, "0.03");
       assert.equal(created.credit_released_usd, "0");
       assert.equal(created.body.provider, "manus");
+      assert.equal(created.task_created, true);
+      assert.equal(created.deduped, false);
+      assert.equal(created.task_id, "task_proxy_2");
+      assert.equal(created.body.task_id, "task_proxy_2");
+      assert.equal(created.next_tools.status, "manus_research_status");
+      assert.equal(created.repeat_for_same_query, false);
       assert.equal(executorCalls.length, 2);
       assert.equal(executorCalls[0].paymentMode, "agentkit_only");
       assert.equal(executorCalls[1].paymentMode, "x402_only");
+
+      const duplicateResponse = await fetch(`${isolatedBaseUrl}/v1/requests`, {
+        method: "POST",
+        headers: authHeaders(),
+        body: JSON.stringify({
+          endpoint_id: "manus.research",
+          input: {
+            query: "best pastries to eat in Korea",
+            task_type: "food_research",
+            depth: "quick",
+          },
+          maxUsd: "0.03",
+        }),
+      });
+      assert.equal(duplicateResponse.status, 200);
+      const duplicate = await duplicateResponse.json();
+      assert.equal(duplicate.deduped, true);
+      assert.equal(duplicate.task_created, false);
+      assert.equal(duplicate.task_id, "task_proxy_2");
+      assert.equal(executorCalls.length, 2);
+
+      const freshResponse = await fetch(`${isolatedBaseUrl}/v1/requests`, {
+        method: "POST",
+        headers: authHeaders(),
+        body: JSON.stringify({
+          endpoint_id: "manus.research",
+          input: {
+            query: "best pastries to eat in Korea",
+            task_type: "food_research",
+            depth: "quick",
+          },
+          maxUsd: "0.03",
+          payment_mode: "x402_only",
+          force_new: true,
+        }),
+      });
+      assert.equal(freshResponse.status, 200);
+      const fresh = await freshResponse.json();
+      assert.equal(fresh.deduped, false);
+      assert.equal(fresh.task_created, true);
+      assert.equal(fresh.task_id, "task_proxy_3");
+      assert.equal(executorCalls.length, 3);
 
       const listResponse = await fetch(`${isolatedBaseUrl}/v1/requests`, { headers: authHeaders() });
       const listed = await listResponse.json();
@@ -1105,6 +1164,231 @@ describe("router API", () => {
       assert.equal(listed.requests[0].agentkit_value_label, null);
     } finally {
       await isolatedApp.close();
+    }
+  });
+
+  it("dedupes concurrent Manus starts before a second upstream task is created", async () => {
+    const executorCalls = [];
+    let releaseExecutor;
+    let enteredExecutor;
+    const executorEntered = new Promise((resolve) => {
+      enteredExecutor = resolve;
+    });
+    const executorHold = new Promise((resolve) => {
+      releaseExecutor = resolve;
+    });
+    const isolatedStore = new LocalStore({
+      path: join(mkdtempSync(join(tmpdir(), "toolrouter-manus-concurrent-dedupe-")), "store.json"),
+    });
+    await isolatedStore.upsertCreditAccount({
+      user_id: process.env.TOOLROUTER_DEV_USER_ID,
+      available_usd: "1",
+      pending_usd: "0",
+      reserved_usd: "0",
+      currency: "USD",
+    });
+    const isolatedApp = createApiApp({
+      logger: false,
+      cache: new MemoryCache(),
+      store: isolatedStore,
+      executor: async (payload) => {
+        executorCalls.push(payload);
+        enteredExecutor();
+        await executorHold;
+        return {
+          trace_id: payload.traceId,
+          endpoint_id: payload.endpoint.id,
+          status_code: 200,
+          ok: true,
+          path: "x402",
+          charged: true,
+          estimated_usd: payload.request.estimatedUsd,
+          amount_usd: "0.03",
+          currency: "USD",
+          payment_reference: "pay_manus_concurrent",
+          payment_network: "eip155:8453",
+          payment_error: null,
+          latency_ms: 20,
+          body: { ok: true, provider: "manus", task: { id: "task_concurrent" } },
+        };
+      },
+    });
+    await isolatedApp.listen({ port: 0, host: "127.0.0.1" });
+    const isolatedBaseUrl = `http://127.0.0.1:${isolatedApp.server.address().port}`;
+    const requestBody = {
+      endpoint_id: "manus.research",
+      input: {
+        query: "best pastries to eat in Korea",
+        task_type: "food_research",
+        depth: "quick",
+      },
+      maxUsd: "0.03",
+      payment_mode: "x402_only",
+    };
+    try {
+      const firstPromise = fetch(`${isolatedBaseUrl}/v1/requests`, {
+        method: "POST",
+        headers: authHeaders(),
+        body: JSON.stringify(requestBody),
+      });
+      await executorEntered;
+
+      const duplicateResponse = await fetch(`${isolatedBaseUrl}/v1/requests`, {
+        method: "POST",
+        headers: authHeaders(),
+        body: JSON.stringify(requestBody),
+      });
+      assert.equal(duplicateResponse.status, 200);
+      const duplicate = await duplicateResponse.json();
+      assert.equal(duplicate.deduped, true);
+      assert.equal(duplicate.task_created, false);
+      assert.match(duplicate.task_id, /^task_/u);
+      assert.equal(executorCalls.length, 1);
+
+      releaseExecutor();
+      const firstResponse = await firstPromise;
+      assert.equal(firstResponse.status, 200);
+      const created = await firstResponse.json();
+      assert.equal(created.deduped, false);
+      assert.equal(created.task_created, true);
+      assert.equal(created.task_id, "task_concurrent");
+      assert.equal(executorCalls.length, 1);
+    } finally {
+      releaseExecutor?.();
+      await isolatedApp.close();
+    }
+  });
+
+  it("serves Manus task status and result only to the owning API key", async () => {
+    const previousManusApiKey = process.env.MANUS_API_KEY;
+    process.env.MANUS_API_KEY = "test_manus_key";
+    const isolatedStore = new LocalStore({
+      path: join(mkdtempSync(join(tmpdir(), "toolrouter-manus-task-routes-")), "store.json"),
+    });
+    const otherKey = await isolatedStore.createApiKey({
+      user_id: process.env.TOOLROUTER_DEV_USER_ID,
+      caller_id: "other-agent",
+    });
+    const now = new Date().toISOString();
+    const baseTask = {
+      endpoint_id: "manus.research",
+      provider: "manus",
+      request_id: "req_seed",
+      trace_id: "trace_seed",
+      user_id: process.env.TOOLROUTER_DEV_USER_ID,
+      api_key_id: "key_dev",
+      caller_id: "hermes-dev",
+      dedupe_key: "dedupe_seed",
+      status: "running",
+      task_url: "https://manus.im/app/task_owned",
+      title: "Seed task",
+      created_at: now,
+      updated_at: now,
+      last_checked_at: null,
+      expires_at: new Date(Date.now() + 60_000).toISOString(),
+    };
+    await isolatedStore.insertEndpointTask({ ...baseTask, id: "task_owned_row", provider_task_id: "task_owned" });
+    await isolatedStore.insertEndpointTask({ ...baseTask, id: "task_done_row", provider_task_id: "task_done" });
+    await isolatedStore.insertEndpointTask({ ...baseTask, id: "task_waiting_row", provider_task_id: "task_waiting" });
+    await isolatedStore.insertEndpointTask({ ...baseTask, id: "task_error_row", provider_task_id: "task_error" });
+    await isolatedStore.insertEndpointTask({
+      ...baseTask,
+      id: "task_other_row",
+      provider_task_id: "task_other",
+      api_key_id: otherKey.record.id,
+    });
+    const manusFetchCalls = [];
+    const isolatedApp = createApiApp({
+      logger: false,
+      cache: new MemoryCache(),
+      store: isolatedStore,
+      manusFetch: async (url) => {
+        manusFetchCalls.push(String(url));
+        const parsed = new URL(String(url));
+        const taskId = parsed.searchParams.get("task_id");
+        if (parsed.pathname.endsWith("/task.detail")) {
+          if (taskId === "task_done") return jsonResponse({ data: { status: "stopped", title: "Done task" } });
+          if (taskId === "task_waiting") return jsonResponse({ data: { status: "waiting", waiting_details: "Need account name" } });
+          if (taskId === "task_error") return jsonResponse({ data: { status: "error", error: "Manus task failed" } });
+          return jsonResponse({ data: { status: "running", title: "Running task", task_url: "https://manus.im/app/task_owned" } });
+        }
+        if (parsed.pathname.endsWith("/task.listMessages")) {
+          if (taskId === "task_done") {
+            return jsonResponse({
+              messages: [
+                {
+                  id: "msg_1",
+                  type: "assistant_message",
+                  assistant_message: {
+                    content: "Final answer with sources.",
+                    attachments: [
+                      {
+                        type: "file",
+                        filename: "report.pdf",
+                        url: "https://example.com/report.pdf",
+                        content_type: "application/pdf",
+                      },
+                    ],
+                  },
+                },
+              ],
+            });
+          }
+          return jsonResponse({ messages: [] });
+        }
+        return jsonResponse({ ok: false }, { status: 404 });
+      },
+    });
+    await isolatedApp.listen({ port: 0, host: "127.0.0.1" });
+    const isolatedBaseUrl = `http://127.0.0.1:${isolatedApp.server.address().port}`;
+    try {
+      const statusResponse = await fetch(`${isolatedBaseUrl}/v1/manus/tasks/task_owned/status`, {
+        headers: authHeaders(),
+      });
+      const statusText = await statusResponse.text();
+      assert.equal(statusResponse.status, 200, statusText);
+      const status = JSON.parse(statusText);
+      assert.equal(status.task_id, "task_owned");
+      assert.equal(status.status, "running");
+      assert.equal(status.poll_after_seconds, 30);
+
+      const doneResponse = await fetch(`${isolatedBaseUrl}/v1/manus/tasks/task_done/result`, {
+        headers: authHeaders(),
+      });
+      assert.equal(doneResponse.status, 200);
+      const done = await doneResponse.json();
+      assert.equal(done.status, "stopped");
+      assert.equal(done.final_answer_available, true);
+      assert.equal(done.answer, "Final answer with sources.");
+      assert.equal(done.attachments[0].url, "https://example.com/report.pdf");
+
+      const waitingResponse = await fetch(`${isolatedBaseUrl}/v1/manus/tasks/task_waiting/result`, {
+        headers: authHeaders(),
+      });
+      assert.equal(waitingResponse.status, 200);
+      const waiting = await waitingResponse.json();
+      assert.equal(waiting.status, "waiting");
+      assert.equal(waiting.final_answer_available, false);
+      assert.equal(waiting.waiting_details, "Need account name");
+
+      const errorResponse = await fetch(`${isolatedBaseUrl}/v1/manus/tasks/task_error/result`, {
+        headers: authHeaders(),
+      });
+      assert.equal(errorResponse.status, 200);
+      const error = await errorResponse.json();
+      assert.equal(error.status, "error");
+      assert.equal(error.isError, true);
+      assert.equal(error.error, "Manus task failed");
+
+      const rejected = await fetch(`${isolatedBaseUrl}/v1/manus/tasks/task_other/status`, {
+        headers: authHeaders(),
+      });
+      assert.equal(rejected.status, 404);
+      assert.equal(manusFetchCalls.some((url) => url.includes("task_other")), false);
+    } finally {
+      await isolatedApp.close();
+      if (previousManusApiKey === undefined) delete process.env.MANUS_API_KEY;
+      else process.env.MANUS_API_KEY = previousManusApiKey;
     }
   });
 

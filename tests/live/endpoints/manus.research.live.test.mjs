@@ -6,6 +6,7 @@ import { join } from "node:path";
 
 import { createCrossmintClient } from "../../../apps/api/src/crossmint.ts";
 import { createApiApp } from "../../../apps/api/src/app.ts";
+import { getManusTaskDetail, listManusTaskMessages } from "../../../apps/api/src/manus.ts";
 import { MemoryCache } from "../../../packages/cache/src/index.ts";
 import { LocalStore } from "../../../packages/db/src/index.ts";
 import { executeEndpoint, getEndpoint } from "../../../packages/router-core/src/index.ts";
@@ -16,10 +17,15 @@ const hasCrossmintSigner = Boolean(
     process.env.CROSSMINT_LIVE_WALLET_LOCATOR &&
     process.env.CROSSMINT_LIVE_WALLET_ADDRESS,
 );
-const runLive = process.env.RUN_LIVE_MANUS_TESTS === "true" && (Boolean(process.env.AGENT_WALLET_PRIVATE_KEY) || hasCrossmintSigner);
+const hasManusApiKey = Boolean(process.env.MANUS_API_KEY);
+const runLive =
+  process.env.RUN_LIVE_MANUS_TESTS === "true" &&
+  hasManusApiKey &&
+  (Boolean(process.env.AGENT_WALLET_PRIVATE_KEY) || hasCrossmintSigner);
 const runPaid = runLive && process.env.RUN_LIVE_MANUS_PAID_SMOKE === "true";
 const runApiProxy =
   process.env.RUN_LIVE_MANUS_API_PROXY_TESTS === "true" &&
+  hasManusApiKey &&
   Boolean(process.env.AGENT_WALLET_PRIVATE_KEY);
 
 function configureLiveDefaults() {
@@ -77,6 +83,19 @@ async function runSmoke({ endpoint, smoke, traceId }) {
   });
 }
 
+function taskIdFromBody(body) {
+  return body?.task?.task_id || body?.task?.id || body?.task_id || body?.id || null;
+}
+
+async function assertManusTaskReadable(result) {
+  const taskId = taskIdFromBody(result.body);
+  assert.ok(taskId, "Manus task id should be present");
+  const detail = await getManusTaskDetail(taskId);
+  assert.ok(detail);
+  const messages = await listManusTaskMessages(taskId);
+  assert.ok(messages);
+}
+
 describe("manus.research live AgentKit/x402 smoke", () => {
   it("uses the two-per-month AgentKit free-trial path when available", { skip: runLive ? false : "live Manus smoke disabled" }, async () => {
     const endpoint = getEndpoint("manus.research");
@@ -91,6 +110,7 @@ describe("manus.research live AgentKit/x402 smoke", () => {
     assert.equal(result.charged, false);
     assert.equal(result.status_code, 200);
     assert.ok(result.body);
+    await assertManusTaskReadable(result);
   });
 
   it("can force a capped x402 payment for the wrapper", { skip: runPaid ? false : "paid Manus smoke disabled" }, async () => {
@@ -106,6 +126,7 @@ describe("manus.research live AgentKit/x402 smoke", () => {
     assert.equal(result.charged, true);
     assert.equal(result.status_code, 200);
     assert.ok(result.body);
+    await assertManusTaskReadable(result);
   });
 
   it("can proxy a paid Manus request through /v1/requests", { skip: runApiProxy ? false : "live Manus API proxy smoke disabled" }, async () => {
@@ -178,7 +199,22 @@ describe("manus.research live AgentKit/x402 smoke", () => {
       assert.equal(body.charged, true);
       assert.equal(body.status_code, 200);
       assert.equal(body.credit_captured_usd, smoke.max_usd);
+      assert.ok(body.task_id);
       assert.ok(body.body);
+      const statusResponse = await fetch(`${baseUrl}/v1/manus/tasks/${encodeURIComponent(body.task_id)}/status`, {
+        headers: { authorization: `Bearer ${key.api_key}` },
+      });
+      assert.equal(statusResponse.status, 200);
+      const status = await statusResponse.json();
+      assert.equal(status.task_id, body.task_id);
+
+      const resultResponse = await fetch(`${baseUrl}/v1/manus/tasks/${encodeURIComponent(body.task_id)}/result`, {
+        headers: { authorization: `Bearer ${key.api_key}` },
+      });
+      assert.equal(resultResponse.status, 200);
+      const result = await resultResponse.json();
+      assert.equal(result.task_id, body.task_id);
+      assert.equal(Array.isArray(result.messages), true);
     } finally {
       await app.close();
       for (const [key, value] of Object.entries(previous)) {

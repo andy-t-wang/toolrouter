@@ -30,6 +30,7 @@ function initialData() {
   return {
     api_keys: [],
     requests: [],
+    endpoint_tasks: [],
     endpoint_status: [],
     health_checks: [],
     wallet_accounts: [],
@@ -86,6 +87,53 @@ function matchesFilters(row: any, filters: any) {
   return true;
 }
 
+function conflictError(message: string, details?: string) {
+  return Object.assign(new Error(message), {
+    statusCode: 409,
+    code: "local_store_conflict",
+    details,
+  });
+}
+
+function providerTaskConflict(existing: any[], row: any) {
+  if (!row.provider_task_id) return null;
+  return existing.find(
+    (item: any) =>
+      item.id !== row.id &&
+      item.api_key_id === row.api_key_id &&
+      item.endpoint_id === row.endpoint_id &&
+      item.provider_task_id === row.provider_task_id,
+  ) || null;
+}
+
+function startingTaskConflict(existing: any[], row: any) {
+  if (!row.dedupe_key || row.provider_task_id) return null;
+  return existing.find(
+    (item: any) =>
+      item.id !== row.id &&
+      item.api_key_id === row.api_key_id &&
+      item.endpoint_id === row.endpoint_id &&
+      item.dedupe_key === row.dedupe_key &&
+      !item.provider_task_id &&
+      item.status !== "error",
+  ) || null;
+}
+
+function assertEndpointTaskUnique(existing: any[], row: any) {
+  if (providerTaskConflict(existing, row)) {
+    throw conflictError(
+      'duplicate key value violates unique constraint "endpoint_tasks_api_key_provider_task_key"',
+      `Key (api_key_id, endpoint_id, provider_task_id)=(${row.api_key_id}, ${row.endpoint_id}, ${row.provider_task_id}) already exists.`,
+    );
+  }
+  if (startingTaskConflict(existing, row)) {
+    throw conflictError(
+      'duplicate key value violates unique constraint "endpoint_tasks_starting_dedupe_key"',
+      `Key (api_key_id, endpoint_id, dedupe_key)=(${row.api_key_id}, ${row.endpoint_id}, ${row.dedupe_key}) already exists.`,
+    );
+  }
+}
+
 export class LocalStore {
   path: string;
 
@@ -97,6 +145,7 @@ export class LocalStore {
     const data = readJson(this.path, initialData());
     data.api_keys ||= [];
     data.requests ||= [];
+    data.endpoint_tasks ||= [];
     data.endpoint_status ||= [];
     data.health_checks ||= [];
     data.wallet_accounts ||= [];
@@ -123,13 +172,9 @@ export class LocalStore {
       (key: any) => key.user_id === user_id && key.caller_id === caller_id && !key.disabled_at,
     );
     if (activeDuplicate) {
-      throw Object.assign(
-        new Error('duplicate key value violates unique constraint "api_keys_user_caller_active_key"'),
-        {
-          statusCode: 409,
-          code: "local_store_conflict",
-          details: `Key (user_id, caller_id)=(${user_id}, ${caller_id}) already exists.`,
-        },
+      throw conflictError(
+        'duplicate key value violates unique constraint "api_keys_user_caller_active_key"',
+        `Key (user_id, caller_id)=(${user_id}, ${caller_id}) already exists.`,
       );
     }
     const rawKey = createApiKey();
@@ -185,6 +230,92 @@ export class LocalStore {
 
   async getRequest(id: string) {
     return this.read().requests.find((row: any) => row.id === id) || null;
+  }
+
+  async insertEndpointTask(row: any) {
+    const data = this.read();
+    assertEndpointTaskUnique(data.endpoint_tasks, row);
+    data.endpoint_tasks.unshift(row);
+    data.endpoint_tasks = data.endpoint_tasks.slice(0, 10000);
+    this.write(data);
+    return row;
+  }
+
+  async updateEndpointTask(row: any) {
+    const data = this.read();
+    const index = data.endpoint_tasks.findIndex((item: any) => item.id === row.id);
+    const next = { ...row, updated_at: row.updated_at || new Date().toISOString() };
+    assertEndpointTaskUnique(data.endpoint_tasks, next);
+    if (index >= 0) data.endpoint_tasks[index] = { ...data.endpoint_tasks[index], ...next };
+    else data.endpoint_tasks.unshift(next);
+    this.write(data);
+    return data.endpoint_tasks.find((item: any) => item.id === row.id) || next;
+  }
+
+  async findEndpointTaskByDedupeKey({
+    api_key_id,
+    endpoint_id,
+    dedupe_key,
+    now = new Date().toISOString(),
+  }: {
+    api_key_id: string;
+    endpoint_id: string;
+    dedupe_key: string;
+    now?: string;
+  }) {
+    return (
+      this.read().endpoint_tasks
+        .filter(
+          (row: any) =>
+            row.api_key_id === api_key_id &&
+            row.endpoint_id === endpoint_id &&
+            row.dedupe_key === dedupe_key &&
+            (!row.expires_at || Date.parse(row.expires_at) > Date.parse(now)),
+        )
+        .sort((a: any, b: any) => Date.parse(b.created_at || "") - Date.parse(a.created_at || ""))[0] || null
+    );
+  }
+
+  async findStartingEndpointTaskByDedupeKey({
+    api_key_id,
+    endpoint_id,
+    dedupe_key,
+  }: {
+    api_key_id: string;
+    endpoint_id: string;
+    dedupe_key: string;
+  }) {
+    return (
+      this.read().endpoint_tasks
+        .filter(
+          (row: any) =>
+            row.api_key_id === api_key_id &&
+            row.endpoint_id === endpoint_id &&
+            row.dedupe_key === dedupe_key &&
+            !row.provider_task_id &&
+            row.status !== "error",
+        )
+        .sort((a: any, b: any) => Date.parse(b.created_at || "") - Date.parse(a.created_at || ""))[0] || null
+    );
+  }
+
+  async findEndpointTaskByTaskId({
+    api_key_id,
+    endpoint_id,
+    task_id,
+  }: {
+    api_key_id: string;
+    endpoint_id: string;
+    task_id: string;
+  }) {
+    return (
+      this.read().endpoint_tasks.find(
+        (row: any) =>
+          row.api_key_id === api_key_id &&
+          row.endpoint_id === endpoint_id &&
+          (row.provider_task_id === task_id || row.id === task_id),
+      ) || null
+    );
   }
 
   async listEndpointStatus() {
@@ -456,6 +587,89 @@ export class SupabaseStore {
 
   async getRequest(id: string) {
     return (await this.request(`/requests?${qs({ id: `eq.${id}`, select: "*", limit: 1 })}`))?.[0] || null;
+  }
+
+  async insertEndpointTask(row: any) {
+    return (await this.request("/endpoint_tasks", {
+      method: "POST",
+      body: row,
+      prefer: "return=representation",
+    }))?.[0] || row;
+  }
+
+  async updateEndpointTask(row: any) {
+    return (await this.request(`/endpoint_tasks?${qs({ id: `eq.${row.id}`, select: "*" })}`, {
+      method: "PATCH",
+      body: row,
+      prefer: "return=representation",
+    }))?.[0] || row;
+  }
+
+  async findEndpointTaskByDedupeKey({
+    api_key_id,
+    endpoint_id,
+    dedupe_key,
+    now = new Date().toISOString(),
+  }: {
+    api_key_id: string;
+    endpoint_id: string;
+    dedupe_key: string;
+    now?: string;
+  }) {
+    const params = qs({
+      api_key_id: `eq.${api_key_id}`,
+      endpoint_id: `eq.${endpoint_id}`,
+      dedupe_key: `eq.${dedupe_key}`,
+      expires_at: `gt.${now}`,
+      select: "*",
+      order: "created_at.desc",
+      limit: 1,
+    });
+    return (await this.request(`/endpoint_tasks?${params}`))?.[0] || null;
+  }
+
+  async findStartingEndpointTaskByDedupeKey({
+    api_key_id,
+    endpoint_id,
+    dedupe_key,
+  }: {
+    api_key_id: string;
+    endpoint_id: string;
+    dedupe_key: string;
+  }) {
+    const params = qs({
+      api_key_id: `eq.${api_key_id}`,
+      endpoint_id: `eq.${endpoint_id}`,
+      dedupe_key: `eq.${dedupe_key}`,
+      provider_task_id: "is.null",
+      status: "neq.error",
+      select: "*",
+      order: "created_at.desc",
+      limit: 1,
+    });
+    return (await this.request(`/endpoint_tasks?${params}`))?.[0] || null;
+  }
+
+  async findEndpointTaskByTaskId({
+    api_key_id,
+    endpoint_id,
+    task_id,
+  }: {
+    api_key_id: string;
+    endpoint_id: string;
+    task_id: string;
+  }) {
+    return (
+      (await this.request(
+        `/endpoint_tasks?${qs({
+          api_key_id: `eq.${api_key_id}`,
+          endpoint_id: `eq.${endpoint_id}`,
+          or: `(provider_task_id.eq.${task_id},id.eq.${task_id})`,
+          select: "*",
+          limit: 1,
+        })}`,
+      ))?.[0] || null
+    );
   }
 
   async listEndpointStatus() {

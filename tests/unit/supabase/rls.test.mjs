@@ -10,6 +10,10 @@ const apiKeyNamesMigration = readFileSync(
   new URL("../../../supabase/migrations/0009_api_key_names_per_user.sql", import.meta.url),
   "utf8",
 );
+const endpointTasksMigration = readFileSync(
+  new URL("../../../supabase/migrations/0010_endpoint_tasks.sql", import.meta.url),
+  "utf8",
+);
 
 describe("Supabase RLS migration", () => {
   it("enables RLS on every durable router table", () => {
@@ -26,6 +30,7 @@ describe("Supabase RLS migration", () => {
       assert.match(migration, new RegExp(`alter table ${table} enable row level security;`));
     }
     assert.match(purchasesMigration, /alter table credit_purchases enable row level security;/);
+    assert.match(endpointTasksMigration, /alter table public\.endpoint_tasks enable row level security;/);
   });
 
   it("does not grant client roles access to API key hashes", () => {
@@ -62,9 +67,12 @@ describe("Supabase RLS migration", () => {
     assert.match(migration, /credit_ledger_entries_select_own/);
     assert.match(migration, /wallet_transactions_select_own/);
     assert.match(purchasesMigration, /credit_purchases_select_own/);
+    assert.doesNotMatch(endpointTasksMigration, /create policy endpoint_tasks_select_own/);
     assert.match(migration, /using \(user_id = auth\.uid\(\)\);/);
     assert.match(purchasesMigration, /using \(user_id = auth\.uid\(\)\);/);
     assert.match(perfMigration, /using \(user_id = \(select auth\.uid\(\)\)\);/);
+    assert.match(endpointTasksMigration, /revoke all on public\.endpoint_tasks from anon, authenticated;/);
+    assert.doesNotMatch(endpointTasksMigration, /grant select on public\.endpoint_tasks to authenticated;/);
   });
 
   it("adds covering indexes for foreign keys used by production tables", () => {
@@ -84,6 +92,17 @@ describe("Supabase RLS migration", () => {
     assert.match(
       apiKeyNamesMigration,
       /create unique index api_keys_user_caller_active_key[\s\S]*on api_keys\(user_id, caller_id\)[\s\S]*where disabled_at is null;/,
+    );
+  });
+
+  it("adds async endpoint task constraints without browser grants", () => {
+    assert.match(
+      endpointTasksMigration,
+      /create unique index if not exists endpoint_tasks_api_key_provider_task_key[\s\S]*on public\.endpoint_tasks\(api_key_id, endpoint_id, provider_task_id\)[\s\S]*where provider_task_id is not null;/,
+    );
+    assert.match(
+      endpointTasksMigration,
+      /create unique index if not exists endpoint_tasks_starting_dedupe_key[\s\S]*on public\.endpoint_tasks\(api_key_id, endpoint_id, dedupe_key\)[\s\S]*where provider_task_id is null and status <> 'error';/,
     );
   });
 
