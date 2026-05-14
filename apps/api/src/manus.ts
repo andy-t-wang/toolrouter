@@ -71,6 +71,10 @@ function x402Network(): NetworkId {
   return (process.env.X402_DEFAULT_CHAIN_ID || DEFAULT_NETWORK) as NetworkId;
 }
 
+function isBaseMainnetNetwork(network: string) {
+  return network === "eip155:8453" || network === "base";
+}
+
 function normalizeCoinbaseKeySecret(value: string) {
   return value.trim().replace(/\\n/gu, "\n");
 }
@@ -92,6 +96,12 @@ export function createManusFacilitatorConfig() {
       });
     }
     return createFacilitatorConfig(keyId, keySecret);
+  }
+  if (isBaseMainnetNetwork(x402Network())) {
+    throw Object.assign(new Error("Coinbase/CDP facilitator credentials are required for Base mainnet Manus settlement"), {
+      statusCode: 503,
+      code: "coinbase_facilitator_credentials_required",
+    });
   }
   return {
     url: process.env.X402_FACILITATOR_URL || "https://x402.org/facilitator",

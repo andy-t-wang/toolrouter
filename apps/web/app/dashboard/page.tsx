@@ -391,16 +391,31 @@ function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function safeApiErrorMessage(body: any, status: number) {
+  const code = body?.error?.code;
+  const known: Record<string, string> = {
+    api_key_name_conflict: "An API key with that name already exists.",
+    budget_exceeded: "The request exceeds the selected spend cap.",
+    insufficient_credits: "Add credits before running paid ToolRouter requests.",
+    invalid_amount: "Enter a valid USD amount.",
+    invalid_request: "Check the request and try again.",
+    session_required: "Sign in again to continue.",
+    unauthorized: "Sign in again to continue.",
+  };
+  if (code && known[code]) return known[code];
+  if (status >= 500) return "ToolRouter is temporarily unavailable. Try again shortly.";
+  return "The request could not be completed. Check the form and try again.";
+}
+
 async function jsonFetch(
   path: string,
-  { token, apiKey, ...options }: any = {},
+  { token, ...options }: any = {},
 ) {
   const response = await fetch(`${apiBase}${path}`, {
     ...options,
     headers: {
       accept: "application/json",
       ...(token ? { authorization: `Bearer ${token}` } : {}),
-      ...(apiKey ? { authorization: `Bearer ${apiKey}` } : {}),
       ...(options.body ? { "content-type": "application/json" } : {}),
       ...(options.headers || {}),
     },
@@ -418,10 +433,7 @@ async function jsonFetch(
       );
     }
   }
-  if (!response.ok)
-    throw new Error(
-      body.error?.message || `Request failed: ${response.status}`,
-    );
+  if (!response.ok) throw new Error(safeApiErrorMessage(body, response.status));
   return body;
 }
 
@@ -518,6 +530,7 @@ export default function DashboardPage() {
           ? "Finishing"
           : "Verify with AgentKit";
   const activeTopUps = topUps.filter(isActiveTopUp);
+  const maxTopUpUsd = balance?.limits?.max_top_up_usd || "5";
 
   function dashboardRequestsPath(cursor = "") {
     const params = new URLSearchParams({
@@ -897,16 +910,13 @@ export default function DashboardPage() {
                   <div>
                     <h1 className="display">Dashboard</h1>
                     <p className="sub">
-                      Last 100 requests · refreshed just now
+                      Showing up to {recentCallsPageSize} requests · refreshed just now
                     </p>
                   </div>
                   <div className="page-actions">
                     <span className="pill">
                       <span className="dot live" /> live
                     </span>
-                    <button className="button ghost compact" type="button">
-                      This month ▾
-                    </button>
                   </div>
                 </div>
 
@@ -1149,7 +1159,7 @@ export default function DashboardPage() {
                           id="top-up-amount"
                           className="input mono"
                           inputMode="decimal"
-                          max="5"
+                          max={maxTopUpUsd}
                           min="0.01"
                           value={topUpAmount}
                           onChange={(event) =>

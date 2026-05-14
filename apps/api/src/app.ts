@@ -6,9 +6,11 @@ import { createCache, enforceRequestPolicy } from "@toolrouter/cache";
 import { createStore } from "@toolrouter/db";
 import {
   executeEndpoint,
+  countsAsAgentKitEvidence,
   getEndpoint,
   listCategories,
   listEndpoints,
+  realizedAgentKitValue,
   validateRegistry,
 } from "@toolrouter/router-core";
 import {
@@ -20,6 +22,7 @@ import {
   finalizeCreditReservation,
   getCreditBalance,
   markCreditPurchaseFailed,
+  parseUsd,
   releaseCreditReservation,
   reserveCredits,
   settleFundedCreditPurchase,
@@ -74,10 +77,10 @@ function decodeRequestCursor(value: any) {
   }
 }
 
-async function requestPage(store: any, filters: any) {
+async function requestPage(store: any, filters: any, rowMapper = apiTraceDto) {
   const limit = requestPageLimit(filters.limit);
   const rows = await store.listRequests({ ...filters, limit: limit + 1 });
-  const requests = rows.slice(0, limit).map(publicRequestRow);
+  const requests = rows.slice(0, limit).map(rowMapper);
   return {
     requests,
     next_cursor: rows.length > limit ? encodeRequestCursor(requests[requests.length - 1]) : null,
@@ -85,10 +88,76 @@ async function requestPage(store: any, filters: any) {
   };
 }
 
-function publicRequestRow(row: any) {
-  if (!row || typeof row !== "object") return row;
-  const { body: _body, ...safe } = row;
-  return safe;
+function apiTraceDto(row: any) {
+  return {
+    id: row.id,
+    ts: row.ts || null,
+    trace_id: row.trace_id,
+    user_id: row.user_id,
+    api_key_id: row.api_key_id,
+    caller_id: row.caller_id,
+    endpoint_id: row.endpoint_id,
+    category: row.category || null,
+    url_host: row.url_host || null,
+    status_code: row.status_code ?? null,
+    ok: Boolean(row.ok),
+    path: row.path || null,
+    charged: Boolean(row.charged),
+    estimated_usd: row.estimated_usd ?? null,
+    amount_usd: row.amount_usd ?? null,
+    currency: row.currency ?? null,
+    credit_reservation_id: row.credit_reservation_id || null,
+    credit_reserved_usd: row.credit_reserved_usd ?? null,
+    credit_captured_usd: row.credit_captured_usd ?? null,
+    credit_released_usd: row.credit_released_usd ?? null,
+    agentkit_value_type: row.agentkit_value_type || null,
+    agentkit_value_label: row.agentkit_value_label || null,
+    latency_ms: row.latency_ms ?? null,
+    error: row.error || null,
+  };
+}
+
+function dashboardRequestDto(row: any) {
+  const safe = apiTraceDto(row);
+  const {
+    user_id: _user_id,
+    error: _error,
+    payment_reference: _payment_reference,
+    payment_network: _payment_network,
+    payment_error: _payment_error,
+    ...dashboard
+  } = safe as any;
+  return dashboard;
+}
+
+function endpointDto(endpoint: any) {
+  return {
+    id: endpoint.id,
+    provider: endpoint.provider,
+    category: endpoint.category,
+    name: endpoint.name,
+    description: endpoint.description,
+    url_host: endpoint.url_host,
+    method: endpoint.method,
+    agentkit: Boolean(endpoint.agentkit),
+    x402: Boolean(endpoint.x402),
+    agentkit_proof_header: Boolean(endpoint.agentkit_proof_header),
+    estimated_cost_usd: endpoint.estimated_cost_usd,
+    agentkit_value_type: endpoint.agentkit_value_type,
+    agentkit_value_label: endpoint.agentkit_value_label,
+    default_payment_mode: endpoint.default_payment_mode,
+    enabled: Boolean(endpoint.enabled),
+    ui: endpoint.ui
+      ? {
+          displayName: endpoint.ui.displayName,
+          icon: endpoint.ui.icon,
+          primaryField: endpoint.ui.primaryField,
+          fieldOrder: endpoint.ui.fieldOrder || [],
+          badge: endpoint.ui.badge,
+          fixture_label: endpoint.ui.fixture_label,
+        }
+      : null,
+  };
 }
 
 function publicStatusError(row: any) {
@@ -103,10 +172,21 @@ function publicStatusError(row: any) {
   return "Latest check failed";
 }
 
+function publicRequestError(row: any) {
+  const statusCode = Number(row?.status_code);
+  const raw = String(row?.error || "");
+  if (!raw && (!Number.isFinite(statusCode) || statusCode < 400)) return null;
+  if (statusCode === 402) return "Payment required";
+  if (statusCode === 429) return "Rate limited";
+  if (statusCode === 504 || /timed out|timeout/iu.test(raw)) return "Request timed out";
+  if (Number.isFinite(statusCode) && statusCode >= 500) return "Provider error";
+  return "Request failed";
+}
+
 function publicEndpoint(endpoint: any, statusByEndpoint: Map<string, any>) {
   const status = statusByEndpoint.get(endpoint.id);
   return {
-    ...endpoint,
+    ...endpointDto(endpoint),
     status: status?.status || "unverified",
     last_checked_at: status?.last_checked_at || null,
     latency_ms: status?.latency_ms || null,
@@ -123,6 +203,21 @@ function publicTopUp(purchase: any) {
     created_at: purchase.created_at || null,
     updated_at: purchase.updated_at || null,
     error: publicTopUpError(purchase),
+  };
+}
+
+function topUpLimitUsd() {
+  return assertTopUpAmount(process.env.TOOLROUTER_MAX_TOP_UP_USD || "5");
+}
+
+function dashboardBalanceDto(account: any, wallet: any) {
+  return {
+    available_usd: account.available_usd,
+    currency: account.currency || "USD",
+    agentkit_verification: safeAgentKitVerification(wallet),
+    limits: {
+      max_top_up_usd: topUpLimitUsd(),
+    },
   };
 }
 
@@ -259,13 +354,6 @@ function lastThirtyDayKeys(now = new Date()) {
 
 function checkCountsAsUp(check: any) {
   return check.status === "healthy" || check.status === "degraded";
-}
-
-function checkCountsAsAgentKit(check: any, endpoint: any) {
-  if (endpoint?.agentkit_value_type === "free_trial") {
-    return check?.path === "agentkit" && !check?.charged;
-  }
-  return check?.path === "agentkit" || check?.path === "agentkit_to_x402";
 }
 
 function average(values: number[]) {
@@ -515,7 +603,7 @@ async function monitoringPayload(store: any, user_id: string) {
         ts: row.ts,
         endpoint_id: row.endpoint_id,
         status_code: row.status_code,
-        error: row.error,
+        error: publicRequestError(row),
       })),
     },
     requests_30d: {
@@ -542,7 +630,7 @@ async function monitoringPayload(store: any, user_id: string) {
   };
 }
 
-function healthSummaryForEndpoint(
+function publicStatusDto(
   endpoint: any,
   status: any,
   checks: any[],
@@ -568,8 +656,8 @@ function healthSummaryForEndpoint(
     .filter(Number.isFinite);
   const currentStatus = status?.status || latestCheck?.status || "unverified";
   const latestAgentKitEvidence = latestByCheckedAt([
-    ...(status && checkCountsAsAgentKit(status, endpoint) ? [status] : []),
-    ...checks.filter((check) => checkCountsAsAgentKit(check, endpoint)),
+    ...(status && countsAsAgentKitEvidence(endpoint, status) ? [status] : []),
+    ...checks.filter((check) => countsAsAgentKitEvidence(endpoint, check)),
   ]);
   return {
     id: endpoint.id,
@@ -625,7 +713,7 @@ async function publicStatusRows(store: any, category?: string) {
   }
   return listEndpoints({ category })
     .map((endpoint: any) =>
-      healthSummaryForEndpoint(
+      publicStatusDto(
         endpoint,
         statusByEndpoint.get(endpoint.id),
         checksByEndpoint.get(endpoint.id) || [],
@@ -673,28 +761,6 @@ function normalizePayment(result: any) {
   };
 }
 
-function agentKitValueForRequest(endpoint: any, result: any) {
-  const path = String(result?.path || "").toLowerCase();
-  const type = endpoint?.agentkit_value_type || null;
-  const label = endpoint?.agentkit_value_label || null;
-  if (!type || !label) {
-    return { agentkit_value_type: null, agentkit_value_label: null };
-  }
-
-  const isFreeAgentKit = path === "agentkit" && !result?.charged;
-  const isAgentKitAccessOrDiscount =
-    path === "agentkit_to_x402" && type !== "free_trial";
-
-  if (!isFreeAgentKit && !isAgentKitAccessOrDiscount) {
-    return { agentkit_value_type: null, agentkit_value_label: null };
-  }
-
-  return {
-    agentkit_value_type: type,
-    agentkit_value_label: label,
-  };
-}
-
 function shouldPreflightAgentKitFreeTrial(endpoint: any, paymentMode: any) {
   return endpoint?.agentkit_value_type === "free_trial" && paymentMode !== "x402_only";
 }
@@ -705,10 +771,8 @@ function isInsufficientCreditsError(error: any) {
 
 function realizedFreeTrial(endpoint: any, result: any) {
   return (
-    endpoint?.agentkit_value_type === "free_trial" &&
     result?.ok === true &&
-    result?.path === "agentkit" &&
-    !result?.charged
+    realizedAgentKitValue(endpoint, result).agentkit_value_type === "free_trial"
   );
 }
 
@@ -726,7 +790,7 @@ function createRequestRow({
   result,
   credit,
 }: any) {
-  const agentKitValue = agentKitValueForRequest(endpoint, result);
+  const agentKitValue = realizedAgentKitValue(endpoint, result);
   const resultError = result.error || safeResultBodyError(endpoint, result);
   return {
     id: `req_${randomUUID()}`,
@@ -1515,6 +1579,57 @@ function purchaseIdFromCheckoutSession(session: any) {
   );
 }
 
+function usdToCents(value: any, label: string) {
+  const atomic = parseUsd(value, label);
+  if (atomic % 10_000n !== 0n) {
+    throw Object.assign(new Error(`${label} must be in whole cents`), {
+      statusCode: 400,
+      code: "invalid_webhook",
+    });
+  }
+  return atomic / 10_000n;
+}
+
+function assertPaidCheckoutSession(session: any, purchase: any) {
+  const metadata = session?.metadata || {};
+  const expectedCents = usdToCents(purchase.amount_usd, "stored purchase amount");
+  const actualCents =
+    session?.amount_total === undefined || session?.amount_total === null
+      ? null
+      : BigInt(session.amount_total);
+  const metadataCents = metadata.amount_usd
+    ? usdToCents(metadata.amount_usd, "checkout metadata amount_usd")
+    : null;
+
+  const invalid = (message: string) =>
+    Object.assign(new Error(message), {
+      statusCode: 400,
+      code: "invalid_webhook",
+    });
+
+  if (session?.payment_status !== "paid") {
+    throw invalid("Stripe checkout session is not paid");
+  }
+  if (String(session?.currency || "").toLowerCase() !== "usd") {
+    throw invalid("Stripe checkout session currency must be USD");
+  }
+  if (actualCents === null || actualCents !== expectedCents) {
+    throw invalid("Stripe checkout session amount does not match purchase");
+  }
+  if (!session?.id || session.id !== purchase.provider_checkout_session_id) {
+    throw invalid("Stripe checkout session id does not match purchase");
+  }
+  if (metadata.toolrouter_purchase_id !== purchase.id) {
+    throw invalid("Stripe checkout session purchase metadata does not match");
+  }
+  if (metadata.toolrouter_user_id !== purchase.user_id) {
+    throw invalid("Stripe checkout session user metadata does not match");
+  }
+  if (metadataCents === null || metadataCents !== expectedCents) {
+    throw invalid("Stripe checkout session amount metadata does not match");
+  }
+}
+
 async function processStripeCheckoutCompleted({
   store,
   crossmint,
@@ -1524,6 +1639,16 @@ async function processStripeCheckoutCompleted({
 }: any) {
   const providerSessionId = session?.id || null;
   const purchaseId = purchaseIdFromCheckoutSession(session);
+  const existingPurchase =
+    (purchaseId ? await store.getCreditPurchase(purchaseId) : null) ||
+    (providerSessionId ? await store.findCreditPurchaseByProviderSession(providerSessionId) : null);
+  if (!existingPurchase) {
+    throw Object.assign(new Error("credit purchase not found"), {
+      statusCode: 404,
+      code: "not_found",
+    });
+  }
+  assertPaidCheckoutSession(session, existingPurchase);
   const { purchase, claimed, duplicate } = await claimCreditPurchaseForFunding({
     store,
     purchaseId,
@@ -1810,14 +1935,14 @@ export function createApiApp({
     const auth = await authenticateApiKey(request.headers, store);
     const filters = requestFilters(request.query || {});
     filters.api_key_id = auth.api_key_id;
-    return requestPage(store, filters);
+    return requestPage(store, filters, apiTraceDto);
   });
 
   app.get("/v1/dashboard/requests", async (request: any) => {
     const user = await authenticateSupabaseUser(request.headers);
     const filters = requestFilters(request.query || {});
     filters.user_id = user.user_id;
-    return requestPage(store, filters);
+    return requestPage(store, filters, dashboardRequestDto);
   });
 
   app.get("/v1/dashboard/monitoring", async (request: any) => {
@@ -1832,13 +1957,7 @@ export function createApiApp({
       getOrBootstrapVisibleAccount(store, crossmint, user),
     ]);
     return {
-      balance: {
-        available_usd: account.available_usd,
-        pending_usd: account.pending_usd,
-        reserved_usd: account.reserved_usd,
-        currency: account.currency || "USD",
-        agentkit_verification: safeAgentKitVerification(wallet),
-      },
+      balance: dashboardBalanceDto(account, wallet),
     };
   });
 
@@ -1875,8 +1994,17 @@ export function createApiApp({
     return result;
   });
 
-  app.post("/v1/wallet/agentkit-verification", async (request: any) => {
+  app.post("/v1/wallet/agentkit-verification", async (request: any, reply: any) => {
     const user = await authenticateSupabaseUser(request.headers);
+    request.log?.warn?.(
+      { route: "/v1/wallet/agentkit-verification" },
+      "deprecated wallet AgentKit verification route used",
+    );
+    datadog?.increment?.("toolrouter.deprecated_routes.count", {
+      route: "wallet_agentkit_verification",
+    }).catch(() => undefined);
+    reply.header("deprecation", "true");
+    reply.header("link", '</v1/agentkit/account-verification>; rel="successor-version"');
     return verifyAgentKitAccount({ store, crossmint, user, agentBookVerifier });
   });
 
@@ -1958,7 +2086,7 @@ export function createApiApp({
         code: "not_found",
       });
     }
-    return { request: publicRequestRow(row) };
+    return { request: apiTraceDto(row) };
   });
 
   async function requireOwnedManusTask(request: any) {

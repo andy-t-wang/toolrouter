@@ -20,6 +20,7 @@
     "start:worker": "npm --workspace @toolrouter/worker run start",
     "api:check": "npm --workspace @toolrouter/api run check",
     "mcp:check": "npm --workspace @worldcoin/toolrouter run check",
+    "mcp:pack-check": "npm --workspace @worldcoin/toolrouter run build && npm --workspace @worldcoin/toolrouter pack --dry-run",
     "web:check": "npm --workspace @toolrouter/web run check",
     "worker:check": "npm --workspace @toolrouter/worker run check",
     "type-check": "tsc -p tsconfig.json --noEmit",

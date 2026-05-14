@@ -388,6 +388,45 @@ describe("AgentKit/x402 executor", () => {
     assert.equal(seen.x402Calls.length, 1);
   });
 
+  it("derives allowed x402 hosts from the endpoint registry when no env allowlist is set", async () => {
+    delete process.env.X402_ALLOWED_HOSTS;
+    const seen = captures();
+    const result = await executeEndpoint({
+      endpoint: baseEndpoint(),
+      request: providerRequest(),
+      maxUsd: "0.01",
+      traceId: "trace_registry_allowed_host",
+      paymentMode: "x402_only",
+      paymentDeps: fakePaymentDeps({
+        captures: seen,
+        agentkitResponse: jsonResponse({ shouldNotBeUsed: true }),
+        x402Response: paymentResponse({ results: [] }),
+      }),
+    });
+
+    assert.equal(result.path, "x402");
+    assert.equal(seen.x402Calls.length, 1);
+
+    await assert.rejects(
+      executeEndpoint({
+        endpoint: baseEndpoint(),
+        request: {
+          ...providerRequest(),
+          url: "https://unlisted.example.test/search",
+        },
+        maxUsd: "0.01",
+        traceId: "trace_unlisted_host",
+        paymentMode: "x402_only",
+        paymentDeps: fakePaymentDeps({
+          captures: captures(),
+          agentkitResponse: jsonResponse({ shouldNotBeUsed: true }),
+          x402Response: paymentResponse({ results: [] }),
+        }),
+      }),
+      /host is not allowlisted: unlisted\.example\.test/u,
+    );
+  });
+
   it("sends Browserbase AgentKit proof headers through the x402 payment rail", async () => {
     process.env.X402_ALLOWED_HOSTS = "x402.browserbase.com";
     process.env.X402_ALLOWED_CHAINS = "eip155:8453";

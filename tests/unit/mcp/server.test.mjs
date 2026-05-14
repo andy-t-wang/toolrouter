@@ -475,7 +475,8 @@ describe("ToolRouter MCP server", () => {
 
   it("allows x402 payment headers in browser preflight", async () => {
     const { createApiApp } = await import("../../../apps/api/src/app.ts");
-    const app = createApiApp({ logger: false });
+    const { MemoryCache } = await import("../../../packages/cache/src/index.ts");
+    const app = createApiApp({ logger: false, cache: new MemoryCache() });
     const response = await app.inject({
       method: "OPTIONS",
       url: "/x402/manus/research",
@@ -534,5 +535,33 @@ describe("ToolRouter MCP server", () => {
     });
     assert.equal(result.isError, true);
     assert.match(result.content[0].text, /TOOLROUTER_API_KEY/);
+  });
+
+  it("accepts legacy MCP environment aliases only in explicit dev mode", async () => {
+    const prodAliasResult = await callTool("toolrouter_list_endpoints", {}, {
+      env: {
+        NEXT_PUBLIC_TOOLROUTER_API_URL: "http://router.test",
+        AGENTKIT_ROUTER_DEV_API_KEY: "tr_legacy",
+      },
+      fetchImpl: async () => response({ endpoints: [] }),
+    });
+    assert.equal(prodAliasResult.isError, true);
+    assert.match(prodAliasResult.content[0].text, /TOOLROUTER_API_KEY/u);
+
+    const calls = [];
+    const devAliasResult = await callTool("toolrouter_list_endpoints", {}, {
+      env: {
+        ROUTER_DEV_MODE: "true",
+        NEXT_PUBLIC_TOOLROUTER_API_URL: "http://router.test",
+        AGENTKIT_ROUTER_DEV_API_KEY: "tr_legacy",
+      },
+      fetchImpl: async (url, init) => {
+        calls.push({ url, init });
+        return response({ endpoints: [] });
+      },
+    });
+    assert.equal(devAliasResult.isError, false);
+    assert.equal(calls[0].url, "http://router.test/v1/endpoints");
+    assert.equal(calls[0].init.headers.authorization, "Bearer tr_legacy");
   });
 });

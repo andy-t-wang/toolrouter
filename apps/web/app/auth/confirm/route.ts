@@ -6,10 +6,6 @@ const supabaseAnonKey =
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
   process.env.SUPABASE_ANON_KEY ||
   "";
-const appBase = (process.env.NEXT_PUBLIC_TOOLROUTER_APP_URL || "").replace(
-  /\/$/u,
-  "",
-);
 const allowedTypes = new Set([
   "signup",
   "magiclink",
@@ -18,6 +14,10 @@ const allowedTypes = new Set([
   "email_change",
   "email",
 ]);
+
+function appBase() {
+  return (process.env.NEXT_PUBLIC_TOOLROUTER_APP_URL || "").replace(/\/$/u, "");
+}
 
 export async function GET(request: Request) {
   const requestUrl = new URL(request.url);
@@ -78,16 +78,31 @@ function redirectWithError(redirectTo: string, code: string) {
   return Response.redirect(target);
 }
 
-function safeRedirect(value: string | null, requestUrl: URL) {
-  const fallback = `${appBase || requestUrl.origin}/dashboard`;
+function isLocalOrigin(origin: string) {
+  try {
+    const parsed = new URL(origin);
+    return parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1";
+  } catch {
+    return false;
+  }
+}
+
+export function safeRedirect(value: string | null, requestUrl: URL) {
+  const base = appBase();
+  const fallback = `${base || requestUrl.origin}/dashboard`;
   if (!value) return fallback;
   try {
+    const localRedirectsAllowed =
+      isLocalOrigin(requestUrl.origin) ||
+      process.env.NEXT_PUBLIC_TOOLROUTER_DEV_AUTH === "true" ||
+      process.env.ROUTER_DEV_MODE === "true";
     const parsed = new URL(value);
+    const appOrigin = base ? new URL(base).origin : requestUrl.origin;
     const allowedOrigins = new Set([
-      requestUrl.origin,
-      ...(appBase ? [new URL(appBase).origin] : []),
-      "http://localhost:3000",
-      "http://127.0.0.1:3000",
+      appOrigin,
+      ...(localRedirectsAllowed
+        ? ["http://localhost:3000", "http://127.0.0.1:3000"]
+        : []),
     ]);
     if (!allowedOrigins.has(parsed.origin)) return fallback;
     return parsed.toString();

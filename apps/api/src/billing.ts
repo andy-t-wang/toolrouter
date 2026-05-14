@@ -58,6 +58,47 @@ function ledgerBase({ user_id, type, amount_usd, source, reference_id, metadata 
   };
 }
 
+function creditAccountingError(error: any, amount?: bigint) {
+  const message = error instanceof Error ? error.message : String(error);
+  if (/insufficient ToolRouter credits/iu.test(message)) {
+    return Object.assign(new Error("insufficient ToolRouter credits"), {
+      statusCode: 402,
+      code: "insufficient_credits",
+      details: amount
+        ? {
+            required_usd: formatUsd(amount),
+          }
+        : undefined,
+    });
+  }
+  if (/maxUsd must be greater than zero/iu.test(message)) {
+    return Object.assign(new Error("maxUsd must be greater than zero"), {
+      statusCode: 400,
+      code: "invalid_amount",
+    });
+  }
+  return error;
+}
+
+function creditResult({
+  reservation_id,
+  reserved_usd,
+  captured_usd,
+  released_usd,
+}: {
+  reservation_id: string;
+  reserved_usd: string | number;
+  captured_usd: string | number;
+  released_usd: string | number;
+}) {
+  return {
+    credit_reservation_id: reservation_id,
+    credit_reserved_usd: formatUsd(parseUsd(reserved_usd, "credit_reserved_usd")),
+    credit_captured_usd: formatUsd(parseUsd(captured_usd, "credit_captured_usd")),
+    credit_released_usd: formatUsd(parseUsd(released_usd, "credit_released_usd")),
+  };
+}
+
 export async function ensureCreditAccount(store: any, user_id: string) {
   const existing = await store.getCreditAccount({ user_id });
   if (existing) return existing;
@@ -123,6 +164,38 @@ export async function reserveCredits({
     });
   }
 
+  const reservation: CreditReservation = {
+    id: `crr_${randomUUID()}`,
+    user_id,
+    api_key_id: api_key_id || null,
+    trace_id: trace_id || null,
+    endpoint_id: endpoint_id || null,
+    amount_usd: formatUsd(amount),
+  };
+
+  if (typeof store.reserveCredits === "function") {
+    try {
+      const reserved = await store.reserveCredits({
+        user_id,
+        amount_usd: reservation.amount_usd,
+        reservation_id: reservation.id,
+        ledger_id: `cle_${randomUUID()}`,
+        api_key_id: reservation.api_key_id,
+        trace_id: reservation.trace_id,
+        endpoint_id: reservation.endpoint_id,
+      });
+      return {
+        ...reservation,
+        id: reserved?.credit_reservation_id || reservation.id,
+        amount_usd: formatUsd(
+          parseUsd(reserved?.credit_reserved_usd ?? reservation.amount_usd, "credit_reserved_usd"),
+        ),
+      };
+    } catch (error) {
+      throw creditAccountingError(error, amount);
+    }
+  }
+
   const account = await ensureCreditAccount(store, user_id);
   const balances = accountBigints(account);
   if (balances.available < amount) {
@@ -135,15 +208,6 @@ export async function reserveCredits({
       },
     });
   }
-
-  const reservation: CreditReservation = {
-    id: `crr_${randomUUID()}`,
-    user_id,
-    api_key_id: api_key_id || null,
-    trace_id: trace_id || null,
-    endpoint_id: endpoint_id || null,
-    amount_usd: formatUsd(amount),
-  };
 
   await store.upsertCreditAccount({
     ...account,
@@ -186,6 +250,31 @@ export async function finalizeCreditReservation({
   const requestedCapture = amountUsd === undefined || amountUsd === null || amountUsd === "" ? 0n : parseUsd(amountUsd, "captured amount");
   const captured = requestedCapture > reserved ? reserved : requestedCapture;
   const released = reserved - captured;
+  const metadataWithTrace = {
+    ...metadata,
+    trace_id: reservation.trace_id,
+    endpoint_id: reservation.endpoint_id,
+  };
+
+  if (typeof store.finalizeCreditReservation === "function") {
+    const result = await store.finalizeCreditReservation({
+      user_id: reservation.user_id,
+      reserved_usd: reservation.amount_usd,
+      captured_usd: formatUsd(captured),
+      reservation_id: reservation.id,
+      capture_ledger_id: captured > 0n ? `cle_${randomUUID()}` : null,
+      release_ledger_id: released > 0n ? `cle_${randomUUID()}` : null,
+      payment_reference: paymentReference || null,
+      metadata: metadataWithTrace,
+    });
+    return creditResult({
+      reservation_id: result?.credit_reservation_id || reservation.id,
+      reserved_usd: result?.credit_reserved_usd ?? reservation.amount_usd,
+      captured_usd: result?.credit_captured_usd ?? formatUsd(captured),
+      released_usd: result?.credit_released_usd ?? formatUsd(released),
+    });
+  }
+
   const account = await ensureCreditAccount(store, reservation.user_id);
   const balances = accountBigints(account);
 
@@ -205,10 +294,8 @@ export async function finalizeCreditReservation({
         source: "request",
         reference_id: reservation.id,
         metadata: {
-          ...metadata,
+          ...metadataWithTrace,
           payment_reference: paymentReference || null,
-          trace_id: reservation.trace_id,
-          endpoint_id: reservation.endpoint_id,
         },
       }),
     );
@@ -221,11 +308,7 @@ export async function finalizeCreditReservation({
         amount_usd: formatUsd(released),
         source: "request",
         reference_id: reservation.id,
-        metadata: {
-          ...metadata,
-          trace_id: reservation.trace_id,
-          endpoint_id: reservation.endpoint_id,
-        },
+        metadata: metadataWithTrace,
       }),
     );
   }
@@ -355,6 +438,18 @@ export async function settleFundedCreditPurchase({
   metadata?: Record<string, unknown>;
 }) {
   if (purchase.status === "funded") return { purchase, duplicate: true };
+
+  if (typeof store.settleCreditPurchase === "function") {
+    const updated = await store.settleCreditPurchase({
+      purchase_id: purchase.id,
+      wallet_account_id: wallet_account_id || purchase.wallet_account_id || null,
+      funding_reference: fundingReference || purchase.funding_provider_reference || null,
+      funding_transaction_id: fundingTransactionId || purchase.funding_transaction_id || null,
+      ledger_id: `cle_${randomUUID()}`,
+      metadata: metadata || {},
+    });
+    return { purchase: updated || purchase, duplicate: false };
+  }
 
   const amount = parseUsd(purchase.amount_usd, "top-up amount");
   const account = await ensureCreditAccount(store, purchase.user_id);

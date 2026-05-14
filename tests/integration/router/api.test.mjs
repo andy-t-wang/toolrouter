@@ -47,12 +47,14 @@ describe("router API", () => {
   let agentBookNonces;
   let agentBookRegistrations;
   let manusWrapperCalls;
+  let datadogMetrics;
 
   before(async () => {
     agentBookLookups = [];
     agentBookNonces = [];
     agentBookRegistrations = [];
     manusWrapperCalls = [];
+    datadogMetrics = [];
     store = createStore();
     app = createApiApp({
       logger: false,
@@ -82,6 +84,12 @@ describe("router API", () => {
             provider: "manus",
             task: { id: "task_test" },
           };
+        },
+      },
+      datadog: {
+        increment: async (metric, tags) => {
+          datadogMetrics.push({ metric, tags });
+          return { sent: true };
         },
       },
     });
@@ -411,7 +419,9 @@ describe("router API", () => {
     const pendingResponse = await fetch(`${baseUrl}/v1/balance`, { headers: sessionHeaders() });
     const pending = await pendingResponse.json();
     assert.equal(pending.balance.available_usd, "100");
-    assert.equal(pending.balance.pending_usd, "0");
+    assert.equal(pending.balance.pending_usd, undefined);
+    assert.equal(pending.balance.reserved_usd, undefined);
+    assert.equal(pending.balance.limits.max_top_up_usd, "5");
 
     const webhookBody = {
       id: "evt_dev_completed_1",
@@ -421,6 +431,13 @@ describe("router API", () => {
           id: createdPurchase.provider_checkout_session_id,
           client_reference_id: topUp.id,
           payment_status: "paid",
+          currency: "usd",
+          amount_total: 500,
+          metadata: {
+            toolrouter_purchase_id: topUp.id,
+            toolrouter_user_id: process.env.TOOLROUTER_DEV_USER_ID,
+            amount_usd: "5",
+          },
         },
       },
     };
@@ -442,7 +459,7 @@ describe("router API", () => {
     const settledResponse = await fetch(`${baseUrl}/v1/balance`, { headers: sessionHeaders() });
     const settled = await settledResponse.json();
     assert.equal(settled.balance.available_usd, "105");
-    assert.equal(settled.balance.pending_usd, "0");
+    assert.equal(settled.balance.pending_usd, undefined);
 
     const ledgerResponse = await fetch(`${baseUrl}/v1/ledger`, { headers: sessionHeaders() });
     const ledger = await ledgerResponse.json();
@@ -483,6 +500,61 @@ describe("router API", () => {
     const body = await topUpResponse.json();
     assert.equal(body.error.code, "invalid_amount");
     assert.match(body.error.message, /Top-ups are capped at \$5 for now\. Enter \$5 or less\./);
+  });
+
+  it("rejects unpaid or mismatched Stripe completion webhooks before funding", async () => {
+    const topUpResponse = await fetch(`${baseUrl}/v1/top-ups`, {
+      method: "POST",
+      headers: sessionHeaders(),
+      body: JSON.stringify({ amountUsd: "5" }),
+    });
+    assert.equal(topUpResponse.status, 201);
+    const topUp = (await topUpResponse.json()).top_up;
+    const purchase = await store.getCreditPurchase(topUp.id);
+
+    const validSession = {
+      id: purchase.provider_checkout_session_id,
+      client_reference_id: topUp.id,
+      payment_status: "paid",
+      currency: "usd",
+      amount_total: 500,
+      metadata: {
+        toolrouter_purchase_id: topUp.id,
+        toolrouter_user_id: process.env.TOOLROUTER_DEV_USER_ID,
+        amount_usd: "5",
+      },
+    };
+    const invalidSessions = [
+      { ...validSession, payment_status: "unpaid" },
+      { ...validSession, id: "cs_wrong_session" },
+      Object.fromEntries(Object.entries(validSession).filter(([key]) => key !== "id")),
+      { ...validSession, amount_total: 499 },
+      {
+        ...validSession,
+        metadata: {
+          ...validSession.metadata,
+          toolrouter_user_id: "00000000-0000-4000-8000-000000000099",
+        },
+      },
+    ];
+
+    for (const [index, session] of invalidSessions.entries()) {
+      const invalidWebhook = await fetch(`${baseUrl}/webhooks/stripe`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          id: `evt_dev_invalid_${index}`,
+          type: "checkout.session.completed",
+          data: { object: session },
+        }),
+      });
+      assert.equal(invalidWebhook.status, 400);
+      assert.equal((await invalidWebhook.json()).error.code, "invalid_webhook");
+
+      const unchanged = await store.getCreditPurchase(topUp.id);
+      assert.equal(unchanged.status, "checkout_pending");
+      assert.equal(unchanged.funding_provider_reference ?? null, null);
+    }
   });
 
   it("alerts and retries Stripe settlement when funding fails", async () => {
@@ -536,6 +608,13 @@ describe("router API", () => {
           id: createdPurchase.provider_checkout_session_id,
           client_reference_id: topUp.id,
           payment_status: "paid",
+          currency: "usd",
+          amount_total: 500,
+          metadata: {
+            toolrouter_purchase_id: topUp.id,
+            toolrouter_user_id: process.env.TOOLROUTER_DEV_USER_ID,
+            amount_usd: "5",
+          },
         },
       },
     };
@@ -592,6 +671,18 @@ describe("router API", () => {
       body: JSON.stringify({}),
     });
     assert.equal(compatibilityResponse.status, 200);
+    assert.equal(compatibilityResponse.headers.get("deprecation"), "true");
+    assert.match(
+      compatibilityResponse.headers.get("link") || "",
+      /\/v1\/agentkit\/account-verification/u,
+    );
+    assert.ok(
+      datadogMetrics.some(
+        (entry) =>
+          entry.metric === "toolrouter.deprecated_routes.count" &&
+          entry.tags.route === "wallet_agentkit_verification",
+      ),
+    );
   });
 
   it("prepares and completes AgentKit account registration", async () => {
@@ -700,7 +791,8 @@ describe("router API", () => {
     const listResponse = await fetch(`${baseUrl}/v1/requests`, { headers: authHeaders() });
     const listed = await listResponse.json();
     assert.equal(listed.requests[0].id, created.id);
-    assert.equal(listed.requests[0].payment_reference, null);
+    assert.equal(listed.requests[0].payment_reference, undefined);
+    assert.equal(listed.requests[0].payment_network, undefined);
     assert.equal(listed.requests[0].credit_reservation_id.startsWith("crr_"), true);
     assert.equal(listed.requests[0].agentkit_value_label, null);
     assert.equal(listed.requests[0].body, undefined);
@@ -783,6 +875,15 @@ describe("router API", () => {
           status_code: 200,
           path: "agentkit",
           charged: false,
+          ...(index === 2
+            ? {
+                payment_reference: "pay_dashboard_hidden",
+                payment_network: "eip155:8453",
+                payment_error: "raw payment error",
+                error: "raw provider error",
+                body: { secret: "raw provider body" },
+              }
+            : {}),
         });
       }
 
@@ -796,6 +897,12 @@ describe("router API", () => {
         firstPage.requests.map((row) => row.id),
         ["req_page_2", "req_page_1"],
       );
+      assert.equal(firstPage.requests[0].user_id, undefined);
+      assert.equal(firstPage.requests[0].payment_reference, undefined);
+      assert.equal(firstPage.requests[0].payment_network, undefined);
+      assert.equal(firstPage.requests[0].payment_error, undefined);
+      assert.equal(firstPage.requests[0].error, undefined);
+      assert.equal(firstPage.requests[0].body, undefined);
       assert.equal(firstPage.has_more, true);
       assert.ok(firstPage.next_cursor);
 

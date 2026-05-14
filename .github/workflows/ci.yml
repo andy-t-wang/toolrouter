@@ -18,3 +18,15 @@ jobs:
       - run: npm ci
       - run: npm run type-check
       - run: npm test
+      - run: npm run mcp:pack-check
+      - run: npm run test:live:endpoints
+        env:
+          RUN_LIVE_EXA_TESTS: "false"
+          RUN_LIVE_EXA_PAID_SMOKE: "false"
+          RUN_LIVE_BROWSERBASE_TESTS: "false"
+          RUN_LIVE_BROWSERBASE_PAID_SMOKE: "false"
+          RUN_LIVE_MANUS_TESTS: "false"
+          RUN_LIVE_MANUS_PAID_SMOKE: "false"
+          RUN_LIVE_MANUS_API_PROXY_TESTS: "false"
+          RUN_LIVE_MCP_TESTS: "false"
+          RUN_LIVE_MCP_PAID_SMOKE: "false"

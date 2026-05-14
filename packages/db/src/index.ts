@@ -41,6 +41,62 @@ function initialData() {
   };
 }
 
+export type ToolRouterStore = {
+  findApiKeyByHash(keyHash: string): Promise<any>;
+  createApiKey(input: { user_id?: string; caller_id: string }): Promise<any>;
+  listApiKeys(input?: { user_id?: string }): Promise<any[]>;
+  disableApiKey(input: { id: string; user_id?: string }): Promise<any>;
+  insertRequest(row: any): Promise<any>;
+  listRequests(filters?: any): Promise<any[]>;
+  getRequest(id: string): Promise<any>;
+  listEndpointStatus(): Promise<any[]>;
+  listHealthChecks(filters?: any): Promise<any[]>;
+  insertHealthCheck(row: any): Promise<any>;
+  upsertEndpointStatus(row: any): Promise<any>;
+  getWalletAccount(input: { user_id: string }): Promise<any>;
+  upsertWalletAccount(row: any): Promise<any>;
+  getCreditAccount(input: { user_id: string }): Promise<any>;
+  upsertCreditAccount(row: any): Promise<any>;
+  insertCreditLedgerEntry(row: any): Promise<any>;
+  listCreditLedgerEntries(input: { user_id: string; limit?: number; source_not?: string }): Promise<any[]>;
+  reserveCredits?(input: {
+    user_id: string;
+    amount_usd: string;
+    reservation_id: string;
+    ledger_id: string;
+    api_key_id?: string | null;
+    trace_id?: string | null;
+    endpoint_id?: string | null;
+  }): Promise<any>;
+  finalizeCreditReservation?(input: {
+    user_id: string;
+    reserved_usd: string;
+    captured_usd: string;
+    reservation_id: string;
+    capture_ledger_id?: string | null;
+    release_ledger_id?: string | null;
+    payment_reference?: string | null;
+    metadata?: Record<string, unknown>;
+  }): Promise<any>;
+  settleCreditPurchase?(input: {
+    purchase_id: string;
+    wallet_account_id?: string | null;
+    funding_reference?: string | null;
+    funding_transaction_id?: string | null;
+    ledger_id: string;
+    metadata?: Record<string, unknown>;
+  }): Promise<any>;
+  insertCreditPurchase(row: any): Promise<any>;
+  updateCreditPurchase(row: any): Promise<any>;
+  getCreditPurchase(id: string): Promise<any>;
+  findCreditPurchaseByProviderSession(provider_checkout_session_id: string): Promise<any>;
+  claimCreditPurchaseForFunding(input: { id?: string; provider_checkout_session_id?: string }): Promise<any>;
+  listCreditPurchases(input?: { user_id?: string; status?: string; since?: string; limit?: number }): Promise<any[]>;
+  insertWalletTransaction(row: any): Promise<any>;
+  updateWalletTransaction(row: any): Promise<any>;
+  findWalletTransactionByProviderReference(provider_reference: string): Promise<any>;
+};
+
 function qs(params: Record<string, any>) {
   const search = new URLSearchParams();
   for (const [key, value] of Object.entries(params)) {
@@ -134,7 +190,7 @@ function assertEndpointTaskUnique(existing: any[], row: any) {
   }
 }
 
-export class LocalStore {
+export class LocalStore implements ToolRouterStore {
   path: string;
 
   constructor({ path = process.env.AGENTKIT_ROUTER_LOCAL_STORE || DEFAULT_PATH } = {}) {
@@ -479,7 +535,7 @@ export class LocalStore {
   }
 }
 
-export class SupabaseStore {
+export class SupabaseStore implements ToolRouterStore {
   url: string;
   serviceRoleKey: string;
 
@@ -511,6 +567,13 @@ export class SupabaseStore {
       });
     }
     return data;
+  }
+
+  async rpc(name: string, body: Record<string, unknown>) {
+    return this.request(`/rpc/${name}`, {
+      method: "POST",
+      body,
+    });
   }
 
   async findApiKeyByHash(keyHash: string) {
@@ -748,6 +811,92 @@ export class SupabaseStore {
     );
   }
 
+  async reserveCredits({
+    user_id,
+    amount_usd,
+    reservation_id,
+    ledger_id,
+    api_key_id = null,
+    trace_id = null,
+    endpoint_id = null,
+  }: {
+    user_id: string;
+    amount_usd: string;
+    reservation_id: string;
+    ledger_id: string;
+    api_key_id?: string | null;
+    trace_id?: string | null;
+    endpoint_id?: string | null;
+  }) {
+    const result = await this.rpc("toolrouter_reserve_credits", {
+      p_user_id: user_id,
+      p_amount_usd: amount_usd,
+      p_reservation_id: reservation_id,
+      p_ledger_id: ledger_id,
+      p_api_key_id: api_key_id,
+      p_trace_id: trace_id,
+      p_endpoint_id: endpoint_id,
+    });
+    return Array.isArray(result) ? result[0] : result;
+  }
+
+  async finalizeCreditReservation({
+    user_id,
+    reserved_usd,
+    captured_usd,
+    reservation_id,
+    capture_ledger_id = null,
+    release_ledger_id = null,
+    payment_reference = null,
+    metadata = {},
+  }: {
+    user_id: string;
+    reserved_usd: string;
+    captured_usd: string;
+    reservation_id: string;
+    capture_ledger_id?: string | null;
+    release_ledger_id?: string | null;
+    payment_reference?: string | null;
+    metadata?: Record<string, unknown>;
+  }) {
+    const result = await this.rpc("toolrouter_finalize_credit_reservation", {
+      p_user_id: user_id,
+      p_reserved_usd: reserved_usd,
+      p_captured_usd: captured_usd,
+      p_reservation_id: reservation_id,
+      p_capture_ledger_id: capture_ledger_id,
+      p_release_ledger_id: release_ledger_id,
+      p_payment_reference: payment_reference,
+      p_metadata: metadata,
+    });
+    return Array.isArray(result) ? result[0] : result;
+  }
+
+  async settleCreditPurchase({
+    purchase_id,
+    wallet_account_id = null,
+    funding_reference = null,
+    funding_transaction_id = null,
+    ledger_id,
+    metadata = {},
+  }: {
+    purchase_id: string;
+    wallet_account_id?: string | null;
+    funding_reference?: string | null;
+    funding_transaction_id?: string | null;
+    ledger_id: string;
+    metadata?: Record<string, unknown>;
+  }) {
+    return this.rpc("toolrouter_settle_credit_purchase", {
+      p_purchase_id: purchase_id,
+      p_wallet_account_id: wallet_account_id,
+      p_funding_reference: funding_reference,
+      p_funding_transaction_id: funding_transaction_id,
+      p_ledger_id: ledger_id,
+      p_metadata: metadata,
+    });
+  }
+
   async insertCreditPurchase(row: any) {
     return (await this.request("/credit_purchases", {
       method: "POST",
@@ -854,7 +1003,7 @@ export class SupabaseStore {
   }
 }
 
-export function createStore() {
+export function createStore(): ToolRouterStore {
   if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
     return new SupabaseStore();
   }

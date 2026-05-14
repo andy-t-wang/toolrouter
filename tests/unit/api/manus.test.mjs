@@ -23,6 +23,7 @@ const FACILITATOR_ENV = [
   "CDP_API_KEY_ID",
   "CDP_API_KEY_SECRET",
   "X402_FACILITATOR_URL",
+  "X402_DEFAULT_CHAIN_ID",
 ];
 
 function withCleanPriceEnv(fn) {
@@ -132,10 +133,38 @@ describe("Manus x402 facilitator config", () => {
 
   it("falls back to an explicit facilitator URL without Coinbase credentials", () => {
     withCleanFacilitatorEnv(() => {
+      process.env.X402_DEFAULT_CHAIN_ID = "eip155:84532";
       process.env.X402_FACILITATOR_URL = "https://facilitator.example.test";
       const config = createManusFacilitatorConfig();
       assert.equal(config.url, "https://facilitator.example.test");
       assert.equal(config.createAuthHeaders, undefined);
+    });
+  });
+
+  it("does not allow explicit non-Coinbase facilitator URLs to bypass Base mainnet credentials", () => {
+    withCleanFacilitatorEnv(() => {
+      process.env.X402_FACILITATOR_URL = "https://facilitator.example.test";
+      assert.throws(
+        () => createManusFacilitatorConfig(),
+        /Coinbase\/CDP facilitator credentials are required/u,
+      );
+    });
+  });
+
+  it("requires Coinbase facilitator credentials for Base mainnet without an explicit facilitator URL", () => {
+    withCleanFacilitatorEnv(() => {
+      assert.throws(
+        () => createManusFacilitatorConfig(),
+        /Coinbase\/CDP facilitator credentials are required/u,
+      );
+    });
+  });
+
+  it("allows the generic x402 facilitator fallback on non-Base networks", () => {
+    withCleanFacilitatorEnv(() => {
+      process.env.X402_DEFAULT_CHAIN_ID = "eip155:84532";
+      const config = createManusFacilitatorConfig();
+      assert.equal(config.url, "https://x402.org/facilitator");
     });
   });
 });

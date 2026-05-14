@@ -41,9 +41,17 @@ function normalizeApiBase(value: string) {
 }
 
 function apiConfig(env: any) {
+  const devAliasesAllowed = env.ROUTER_DEV_MODE === "true" || env.TOOLROUTER_MCP_DEV_ALIASES === "true";
   return {
-    apiBase: normalizeApiBase(envValue(env, ["TOOLROUTER_API_URL", "NEXT_PUBLIC_TOOLROUTER_API_URL"])),
-    apiKey: envValue(env, ["TOOLROUTER_API_KEY", "AGENTKIT_ROUTER_API_KEY", "AGENTKIT_ROUTER_DEV_API_KEY"]),
+    apiBase: normalizeApiBase(
+      env.TOOLROUTER_API_URL ||
+        (devAliasesAllowed ? env.NEXT_PUBLIC_TOOLROUTER_API_URL : ""),
+    ),
+    apiKey:
+      env.TOOLROUTER_API_KEY ||
+      (devAliasesAllowed
+        ? envValue(env, ["AGENTKIT_ROUTER_API_KEY", "AGENTKIT_ROUTER_DEV_API_KEY"])
+        : ""),
   };
 }
 
