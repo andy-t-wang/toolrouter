@@ -1,7 +1,23 @@
 import { describe, it, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 
-import { MemoryCache, enforceRequestPolicy } from "../../../packages/cache/src/index.ts";
+import { MemoryCache, createCache, enforceRequestPolicy } from "../../../packages/cache/src/index.ts";
+
+const CACHE_ENV = ["ROUTER_DEV_MODE", "VALKEY_URL", "REDIS_URL"];
+
+function withCacheEnv(values, fn) {
+  const previous = Object.fromEntries(CACHE_ENV.map((key) => [key, process.env[key]]));
+  for (const key of CACHE_ENV) delete process.env[key];
+  Object.assign(process.env, values);
+  try {
+    return fn();
+  } finally {
+    for (const key of CACHE_ENV) {
+      if (previous[key] === undefined) delete process.env[key];
+      else process.env[key] = previous[key];
+    }
+  }
+}
 
 describe("request policy", () => {
   beforeEach(() => {
@@ -45,4 +61,21 @@ describe("request policy", () => {
     );
   });
 
+  it("prunes expired memory-cache entries before reads and writes", async () => {
+    const cache = new MemoryCache();
+    await cache.set({ key: "nonce_1", windowSeconds: 1 });
+    assert.equal(await cache.has({ key: "nonce_1" }), true);
+    cache.pruneExpired(Date.now() + 2_000);
+    assert.equal(await cache.has({ key: "nonce_1" }), false);
+    assert.equal(cache.counters.size, 0);
+  });
+
+  it("requires Redis or Valkey outside dev mode", () => {
+    withCacheEnv({ ROUTER_DEV_MODE: "false" }, () => {
+      assert.throws(() => createCache(), /VALKEY_URL or REDIS_URL is required outside ROUTER_DEV_MODE/u);
+    });
+    withCacheEnv({ ROUTER_DEV_MODE: "true" }, () => {
+      assert.ok(createCache() instanceof MemoryCache);
+    });
+  });
 });

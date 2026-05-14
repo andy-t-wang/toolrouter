@@ -14,6 +14,13 @@ jobs:
       RUN_LIVE_EXA_PAID_SMOKE: "true"
       RUN_LIVE_BROWSERBASE_TESTS: "true"
       RUN_LIVE_BROWSERBASE_PAID_SMOKE: "true"
+      RUN_LIVE_MANUS_TESTS: "true"
+      RUN_LIVE_MANUS_PAID_SMOKE: "true"
+      RUN_LIVE_MANUS_API_PROXY_TESTS: "true"
+      RUN_LIVE_MCP_TESTS: "true"
+      RUN_LIVE_MCP_PAID_SMOKE: "false"
+      TOOLROUTER_API_URL: "https://toolrouter.world"
+      TOOLROUTER_API_KEY: ${{ secrets.TOOLROUTER_API_KEY }}
       AGENT_WALLET_PRIVATE_KEY: ${{ secrets.AGENT_WALLET_PRIVATE_KEY }}
       CROSSMINT_ENV: "production"
       CROSSMINT_SERVER_SIDE_API_KEY: ${{ secrets.CROSSMINT_SERVER_SIDE_API_KEY }}

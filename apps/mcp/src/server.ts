@@ -41,9 +41,17 @@ function normalizeApiBase(value: string) {
 }
 
 function apiConfig(env: any) {
+  const devAliasesAllowed = env.ROUTER_DEV_MODE === "true" || env.TOOLROUTER_MCP_DEV_ALIASES === "true";
   return {
-    apiBase: normalizeApiBase(envValue(env, ["TOOLROUTER_API_URL", "NEXT_PUBLIC_TOOLROUTER_API_URL"])),
-    apiKey: envValue(env, ["TOOLROUTER_API_KEY", "AGENTKIT_ROUTER_API_KEY", "AGENTKIT_ROUTER_DEV_API_KEY"]),
+    apiBase: normalizeApiBase(
+      env.TOOLROUTER_API_URL ||
+        (devAliasesAllowed ? env.NEXT_PUBLIC_TOOLROUTER_API_URL : ""),
+    ),
+    apiKey:
+      env.TOOLROUTER_API_KEY ||
+      (devAliasesAllowed
+        ? envValue(env, ["AGENTKIT_ROUTER_API_KEY", "AGENTKIT_ROUTER_DEV_API_KEY"])
+        : ""),
   };
 }
 
@@ -65,6 +73,43 @@ function jsonSchemaAnyOf(properties: Record<string, any>, requiredAlternatives: 
   };
 }
 
+const PAYMENT_PROPERTIES = Object.freeze({
+  maxUsd: { type: "string", description: "Optional caller spend cap in USD decimal form." },
+  max_usd: { type: "string", description: "Compatibility alias for maxUsd." },
+  payment_mode: {
+    type: "string",
+    enum: ["agentkit_first", "x402_only"],
+    description: "Optional execution path override for explicit smoke tests.",
+  },
+  paymentMode: {
+    type: "string",
+    enum: ["agentkit_first", "x402_only"],
+    description: "Compatibility alias for payment_mode.",
+  },
+});
+const SEARCH_TYPE_VALUES = Object.freeze(["fast", "auto", "instant", "deep-lite", "deep", "deep-reasoning", "deep-max"]);
+const MANUS_DEPTH_VALUES = Object.freeze(["quick", "standard", "deep"]);
+const SEARCH_PROPERTIES = Object.freeze({
+  query: { type: "string" },
+  search_type: { type: "string", enum: SEARCH_TYPE_VALUES },
+  num_results: { type: "integer", minimum: 1, maximum: 10 },
+  include_summary: { type: "boolean" },
+  ...PAYMENT_PROPERTIES,
+});
+const BROWSER_PROPERTIES = Object.freeze({
+  estimated_minutes: { type: "integer", minimum: 5, maximum: 120 },
+  ...PAYMENT_PROPERTIES,
+});
+const RESEARCH_PROPERTIES = Object.freeze({
+  query: { type: "string" },
+  prompt: { type: "string", description: "Alias for query." },
+  task_type: { type: "string" },
+  depth: { type: "string", enum: MANUS_DEPTH_VALUES },
+  urls: { type: "array", items: { type: "string" }, maxItems: 10 },
+  images: { type: "array", items: { type: "string" }, maxItems: 5 },
+  force_new: { type: "boolean", description: "Set true only when the user explicitly wants a fresh Manus task for the same query." },
+  ...PAYMENT_PROPERTIES,
+});
 const MANUS_DEFAULT_MAX_USD: Record<string, string> = Object.freeze({
   quick: "0.03",
   standard: "0.05",
@@ -78,6 +123,32 @@ function defaultManusMaxUsd(depth: any, env: any) {
   return /^\d+(\.\d+)?$/u.test(raw) ? raw : MANUS_DEFAULT_MAX_USD[normalized];
 }
 
+const TOOL_INPUTS: Record<string, any> = Object.freeze({
+  browser: { properties: BROWSER_PROPERTIES },
+  research: { properties: RESEARCH_PROPERTIES, requiredAlternatives: [["query"], ["prompt"]] },
+  search: { properties: SEARCH_PROPERTIES, required: ["query"] },
+});
+const ENDPOINT_TOOL_DEFINITIONS = Object.freeze([
+  ["toolrouter_search", "Search", "Run a search through ToolRouter's recommended search endpoint.", "search", { category: "search" }],
+  ["toolrouter_browser_use", "Browser use", "Start a browser session through ToolRouter's recommended browser-use endpoint.", "browser", { category: "browser_usage" }],
+  ["exa_search", "Exa search", "Run Exa search through ToolRouter with AgentKit first and x402 fallback.", "search", { endpointId: "exa.search" }],
+  ["browserbase_session_create", "Browserbase session", "Create a paid Browserbase browser session through ToolRouter.", "browser", { endpointId: "browserbase.session" }],
+  ["manus_research_start", "Start Manus research", "Use this when the user asks for deep research, multi-source investigation, visual lookup, vendor research, or docs investigation. This starts one async Manus task through endpoint id manus.research and returns a task handle, not the final answer. Do not call start again for the same query; use manus_research_status or manus_research_result with the returned task_id unless the user explicitly asks for a new task.", "research", { endpointId: "manus.research" }],
+]);
+const ENDPOINT_TOOL_SPECS = Object.freeze(ENDPOINT_TOOL_DEFINITIONS.map(([name, title, description, inputKind, target]: any) => {
+  const input = TOOL_INPUTS[inputKind];
+  return {
+    name,
+    title,
+    description,
+    ...target,
+    inputSchema: input.requiredAlternatives
+      ? jsonSchemaAnyOf(input.properties, input.requiredAlternatives)
+      : jsonSchema(input.properties, input.required || []),
+  };
+}));
+const ENDPOINT_TOOL_BY_NAME = new Map(ENDPOINT_TOOL_SPECS.map((tool) => [tool.name, tool]));
+
 const GENERIC_ENDPOINT_CONTROL_FIELDS = new Set([
   "endpoint_id",
   "endpointId",
@@ -86,6 +157,8 @@ const GENERIC_ENDPOINT_CONTROL_FIELDS = new Set([
   "max_usd",
   "payment_mode",
   "paymentMode",
+  "force_new",
+  "forceNew",
 ]);
 
 function topLevelEndpointInput(args: any) {
@@ -97,11 +170,13 @@ function topLevelEndpointInput(args: any) {
 function genericEndpointPayload(args: any) {
   const paymentMode = args.payment_mode ?? args.paymentMode;
   const maxUsd = args.maxUsd ?? args.max_usd;
+  const forceNew = args.force_new ?? args.forceNew;
   return {
     endpoint_id: args.endpoint_id || args.endpointId,
     input: args.input !== undefined ? args.input : topLevelEndpointInput(args),
     ...(maxUsd !== undefined ? { maxUsd } : {}),
     ...(paymentMode !== undefined ? { payment_mode: paymentMode } : {}),
+    ...(forceNew !== undefined ? { force_new: Boolean(forceNew) } : {}),
   };
 }
 
@@ -142,79 +217,53 @@ export function tools(): McpTool[] {
         query: { type: "string", description: "Shortcut input field for endpoints that take a query." },
         prompt: { type: "string", description: "Alias for query on research endpoints." },
         task_type: { type: "string", description: "Shortcut Manus research task type." },
-        depth: { type: "string", enum: ["quick", "standard", "deep"], description: "Shortcut Manus research depth." },
+        depth: { type: "string", enum: MANUS_DEPTH_VALUES, description: "Shortcut Manus research depth." },
         urls: { type: "array", items: { type: "string" }, maxItems: 10 },
         images: { type: "array", items: { type: "string" }, maxItems: 5 },
-        search_type: { type: "string", enum: ["fast", "auto", "instant", "deep-lite", "deep", "deep-reasoning", "deep-max"] },
+        search_type: { type: "string", enum: SEARCH_TYPE_VALUES },
         num_results: { type: "integer", minimum: 1, maximum: 10 },
         include_summary: { type: "boolean" },
         estimated_minutes: { type: "integer", minimum: 5, maximum: 120 },
-        maxUsd: { type: "string", description: "Optional caller spend cap in USD decimal form." },
-        max_usd: { type: "string", description: "Compatibility alias for maxUsd." },
-        payment_mode: { type: "string", enum: ["agentkit_first", "x402_only"], description: "Optional execution path override for explicit smoke tests." },
-        paymentMode: { type: "string", enum: ["agentkit_first", "x402_only"], description: "Compatibility alias for payment_mode." },
+        ...PAYMENT_PROPERTIES,
+        force_new: { type: "boolean", description: "Set true only when calling Manus research and the user explicitly wants a fresh task." },
+        forceNew: { type: "boolean", description: "Compatibility alias for force_new." },
       }, [["endpoint_id"], ["endpointId"]]),
     },
     {
-      name: "toolrouter_search",
-      title: "Search",
-      description: "Use this when the user needs a quick synchronous web lookup through ToolRouter's recommended search endpoint. Launch recommendation: exa.search. Do not use this for deep research; use manus_research_start for long-running research tasks.",
+      name: "toolrouter_get_request",
+      title: "Get ToolRouter request",
+      description: "Fetch one request trace created by this API key.",
       inputSchema: jsonSchema({
-        query: { type: "string" },
-        search_type: { type: "string", enum: ["fast", "auto", "instant", "deep-lite", "deep", "deep-reasoning", "deep-max"] },
-        num_results: { type: "integer", minimum: 1, maximum: 10 },
-        include_summary: { type: "boolean" },
-        maxUsd: { type: "string" },
-        payment_mode: { type: "string", enum: ["agentkit_first", "x402_only"] },
-      }, ["query"]),
+        id: { type: "string", description: "ToolRouter request id." },
+      }, ["id"]),
     },
-    {
-      name: "toolrouter_browser_use",
-      title: "Browser use",
-      description: "Start a browser session through ToolRouter's recommended browser-use endpoint.",
-      inputSchema: jsonSchema({
-        estimated_minutes: { type: "integer", minimum: 5, maximum: 120 },
-        maxUsd: { type: "string" },
-        payment_mode: { type: "string", enum: ["agentkit_first", "x402_only"] },
-      }),
-    },
-    {
-      name: "manus_research_start",
-      title: "Start Manus research",
-      description: "Use this when the user asks for deep research, multi-source investigation, visual lookup, vendor research, or docs investigation. This starts one async Manus task through endpoint id manus.research and returns a task handle, not the final answer. Do not call start again for the same query; use manus_research_status or manus_research_result with the returned task_id unless the user explicitly asks for a new task.",
-      inputSchema: jsonSchemaAnyOf({
-        query: { type: "string" },
-        prompt: { type: "string", description: "Alias for query." },
-        task_type: { type: "string", description: "Optional category such as visual_lookup, tool_discovery, vendor_research, or docs_investigation." },
-        depth: { type: "string", enum: ["quick", "standard", "deep"] },
-        urls: { type: "array", items: { type: "string" }, maxItems: 10 },
-        images: { type: "array", items: { type: "string" }, maxItems: 5 },
-        maxUsd: { type: "string" },
-        force_new: { type: "boolean", description: "Set true only when the user explicitly wants a fresh Manus task for the same query." },
-        payment_mode: { type: "string", enum: ["agentkit_first", "x402_only"] },
-      }, [["query"], ["prompt"]]),
-      outputSchema: jsonSchema({
-        id: { type: ["string", "null"] },
-        endpoint_id: { type: "string" },
-        path: { type: ["string", "null"] },
-        charged: { type: ["boolean", "null"] },
-        status_code: { type: ["integer", "null"] },
-        credit_reserved_usd: { type: ["string", "number", "null"] },
-        credit_captured_usd: { type: ["string", "number", "null"] },
-        credit_released_usd: { type: ["string", "number", "null"] },
-        task_created: { type: "boolean" },
-        deduped: { type: "boolean" },
-        request_id: { type: ["string", "null"] },
-        trace_id: { type: ["string", "null"] },
-        task_id: { type: "string" },
-        task_url: { type: ["string", "null"] },
-        status: { type: "string" },
-        poll_after_seconds: { type: "integer" },
-        next_tools: { type: "object" },
-        repeat_for_same_query: { type: "boolean" },
-      }, ["task_created", "deduped", "task_id", "status", "poll_after_seconds", "next_tools", "repeat_for_same_query"]),
-      annotations: { readOnlyHint: false, idempotentHint: true, openWorldHint: true },
-    },
+    ...ENDPOINT_TOOL_SPECS.map(({ name, title, description, inputSchema }) => {
+      const tool: McpTool = { name, title, description, inputSchema };
+      if (name === "manus_research_start") {
+        tool.outputSchema = jsonSchema({
+          id: { type: ["string", "null"] },
+          endpoint_id: { type: "string" },
+          path: { type: ["string", "null"] },
+          charged: { type: ["boolean", "null"] },
+          status_code: { type: ["integer", "null"] },
+          credit_reserved_usd: { type: ["string", "number", "null"] },
+          credit_captured_usd: { type: ["string", "number", "null"] },
+          credit_released_usd: { type: ["string", "number", "null"] },
+          task_created: { type: "boolean" },
+          deduped: { type: "boolean" },
+          request_id: { type: ["string", "null"] },
+          trace_id: { type: ["string", "null"] },
+          task_id: { type: "string" },
+          task_url: { type: ["string", "null"] },
+          status: { type: "string" },
+          poll_after_seconds: { type: "integer" },
+          next_tools: { type: "object" },
+          repeat_for_same_query: { type: "boolean" },
+        }, ["task_created", "deduped", "task_id", "status", "poll_after_seconds", "next_tools", "repeat_for_same_query"]);
+        tool.annotations = { readOnlyHint: false, idempotentHint: true, openWorldHint: true };
+      }
+      return tool;
+    }),
     {
       name: "manus_research_status",
       title: "Check Manus research status",
@@ -255,37 +304,6 @@ export function tools(): McpTool[] {
         isError: { type: "boolean" },
       }, ["task_id", "status", "final_answer_available", "messages"]),
       annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
-    },
-    {
-      name: "toolrouter_get_request",
-      title: "Get ToolRouter request",
-      description: "Fetch one request trace created by this API key.",
-      inputSchema: jsonSchema({
-        id: { type: "string", description: "ToolRouter request id." },
-      }, ["id"]),
-    },
-    {
-      name: "exa_search",
-      title: "Exa search",
-      description: "Use this when the user needs a quick synchronous Exa lookup through ToolRouter with AgentKit first and x402 fallback. Do not use this for deep research; use manus_research_start for long-running research tasks.",
-      inputSchema: jsonSchema({
-        query: { type: "string" },
-        search_type: { type: "string", enum: ["fast", "auto", "instant", "deep-lite", "deep", "deep-reasoning", "deep-max"] },
-        num_results: { type: "integer", minimum: 1, maximum: 10 },
-        include_summary: { type: "boolean" },
-        maxUsd: { type: "string" },
-        payment_mode: { type: "string", enum: ["agentkit_first", "x402_only"] },
-      }, ["query"]),
-    },
-    {
-      name: "browserbase_session_create",
-      title: "Browserbase session",
-      description: "Create a paid Browserbase browser session through ToolRouter.",
-      inputSchema: jsonSchema({
-        estimated_minutes: { type: "integer", minimum: 5, maximum: 120 },
-        maxUsd: { type: "string" },
-        payment_mode: { type: "string", enum: ["agentkit_first", "x402_only"] },
-      }),
     },
   ];
 }
@@ -377,49 +395,6 @@ function manusResearchFinalResult(data: any) {
   return textResult(text, data, isError);
 }
 
-function endpointPayload(name: string, args: any, env: any) {
-  const paymentMode = args.payment_mode || args.paymentMode;
-  if (name === "toolrouter_search" || name === "exa_search") {
-    return {
-      endpoint_id: "exa.search",
-      input: {
-        query: args.query,
-        search_type: args.search_type || "fast",
-        num_results: args.num_results || 5,
-        include_summary: Boolean(args.include_summary),
-      },
-      maxUsd: args.maxUsd || "0.01",
-      ...(paymentMode ? { payment_mode: paymentMode } : {}),
-    };
-  }
-  if (name === "toolrouter_browser_use" || name === "browserbase_session_create") {
-    const minutes = args.estimated_minutes || args.estimatedMinutes || 5;
-    return {
-      endpoint_id: "browserbase.session",
-      input: { estimated_minutes: minutes },
-      maxUsd: args.maxUsd || "0.02",
-      ...(paymentMode ? { payment_mode: paymentMode } : {}),
-    };
-  }
-  if (name === "manus_research_start") {
-    const query = args.query || args.prompt;
-    return {
-      endpoint_id: "manus.research",
-      input: {
-        query,
-        task_type: args.task_type || args.taskType || "general_research",
-        depth: args.depth || "standard",
-        urls: args.urls || [],
-        images: args.images || args.image_urls || [],
-      },
-      maxUsd: args.maxUsd || defaultManusMaxUsd(args.depth || "standard", env),
-      ...(args.force_new !== undefined || args.forceNew !== undefined ? { force_new: Boolean(args.force_new ?? args.forceNew) } : {}),
-      ...(paymentMode ? { payment_mode: paymentMode } : {}),
-    };
-  }
-  return null;
-}
-
 async function routerFetch(path: string, { env, fetchImpl, method = "GET", body }: any) {
   const { apiBase, apiKey } = apiConfig(env);
   if (!apiKey) {
@@ -440,6 +415,47 @@ async function routerFetch(path: string, { env, fetchImpl, method = "GET", body 
     throw new Error(data?.error?.message || `ToolRouter request failed with ${response.status}`);
   }
   return data;
+}
+
+async function recommendedEndpointId(categoryId: string, { env, fetchImpl }: any) {
+  const data = await routerFetch("/v1/categories?include_empty=true", { env, fetchImpl });
+  const category = data.categories.find((candidate: any) => candidate.id === categoryId);
+  if (!category) throw new Error(`unknown category: ${categoryId}`);
+  const endpointId = category.recommended_endpoint?.id || category.recommended_endpoint_id;
+  if (!endpointId) throw new Error(`category has no recommended endpoint yet: ${categoryId}`);
+  return endpointId;
+}
+
+function requestedManusDepth(args: any) {
+  const input = args.input && typeof args.input === "object" && !Array.isArray(args.input)
+    ? args.input
+    : {};
+  return args.depth || input.depth || "standard";
+}
+
+function defaultMaxUsd(endpointId: string, args: any, env: any) {
+  if (endpointId === "manus.research") return defaultManusMaxUsd(requestedManusDepth(args), env);
+  if (endpointId === "exa.search") return "0.01";
+  if (endpointId === "browserbase.session") return "0.02";
+  return undefined;
+}
+
+async function endpointPayload(name: string, args: any, { env, fetchImpl }: any) {
+  const spec: any = ENDPOINT_TOOL_BY_NAME.get(name);
+  if (!spec) return null;
+  const endpointId = spec.endpointId || await recommendedEndpointId(spec.category, { env, fetchImpl });
+  const paymentMode = args.payment_mode ?? args.paymentMode;
+  const maxUsd = args.maxUsd ?? args.max_usd ?? defaultMaxUsd(endpointId, args, env);
+  const forceNew = args.force_new ?? args.forceNew;
+  return {
+    endpoint_id: endpointId,
+    input: args.input !== undefined ? args.input : topLevelEndpointInput(args),
+    ...(maxUsd !== undefined ? { maxUsd } : {}),
+    ...(paymentMode !== undefined ? { payment_mode: paymentMode } : {}),
+    ...(name === "manus_research_start" && forceNew !== undefined
+      ? { force_new: Boolean(forceNew) }
+      : {}),
+  };
 }
 
 export async function callTool(name: string, args: any = {}, options: any = {}) {
@@ -484,7 +500,9 @@ export async function callTool(name: string, args: any = {}, options: any = {}) 
       const data = await routerFetch(`/v1/manus/tasks/${encodeURIComponent(args.task_id)}/result`, { env, fetchImpl });
       return manusResearchFinalResult(data);
     }
-    const payload = name === "toolrouter_call_endpoint" ? genericEndpointPayload(args) : endpointPayload(name, args, env);
+    const payload = name === "toolrouter_call_endpoint"
+      ? genericEndpointPayload(args)
+      : await endpointPayload(name, args, { env, fetchImpl });
     if (!payload) throw new Error(`unknown tool: ${name}`);
     const data = await routerFetch("/v1/requests", { env, fetchImpl, method: "POST", body: payload });
     if (name === "manus_research_start") {

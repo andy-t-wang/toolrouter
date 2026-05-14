@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 
+import { countsAsAgentKitEvidence } from "../agentkitValue.ts";
 import { endpointRegistry } from "../endpoints/registry.ts";
 
 export const DEFAULT_HEALTH_CHECK_INTERVAL_MS = 12 * 60 * 60 * 1000;
@@ -8,8 +9,6 @@ export const DEFAULT_HEALTH_FAILURE_RETRY_BASE_MS = 15 * 60 * 1000;
 export const DEFAULT_HEALTH_FAILURE_RETRY_MAX_MS = DEFAULT_HEALTH_CHECK_INTERVAL_MS;
 
 export const HEALTH_STATUSES = Object.freeze(["healthy", "degraded", "failing", "unverified"]);
-const AGENTKIT_HEALTH_PATHS = new Set(["agentkit", "agentkit_to_x402"]);
-const FREE_TRIAL_VALUE_TYPE = "free_trial";
 
 function maybeNumber(value) {
   if (value === undefined || value === null) return null;
@@ -120,20 +119,11 @@ function normalizeExecutionResult(result, fallbackLatencyMs) {
   };
 }
 
-function freeTrialValueRealized(endpoint, row) {
-  return endpoint?.agentkit_value_type !== FREE_TRIAL_VALUE_TYPE || (row?.path === "agentkit" && !row?.charged);
-}
-
-function agentKitValueRealized(endpoint, row) {
-  if (endpoint?.agentkit_value_type === FREE_TRIAL_VALUE_TYPE) return freeTrialValueRealized(endpoint, row);
-  return AGENTKIT_HEALTH_PATHS.has(row?.path);
-}
-
 function statusFromResult(result, endpoint, { requireAgentKitValue = false } = {}) {
   if (result.payment_error) return "degraded";
   if (result.ok) {
     if (result.latency_ms > latencyBudgetMs(endpoint)) return "degraded";
-    if (requireAgentKitValue && !freeTrialValueRealized(endpoint, result)) return "degraded";
+    if (requireAgentKitValue && !countsAsAgentKitEvidence(endpoint, result)) return "degraded";
     return "healthy";
   }
   if (result.status_code === null) return "failing";
@@ -142,7 +132,7 @@ function statusFromResult(result, endpoint, { requireAgentKitValue = false } = {
 }
 
 function isSuccessfulAgentKitRequest(endpoint, row) {
-  if (!agentKitValueRealized(endpoint, row)) return false;
+  if (!countsAsAgentKitEvidence(endpoint, row)) return false;
   if (row?.error) return false;
   if (row?.ok === false) return false;
   const statusCode = maybeNumber(row?.status_code);

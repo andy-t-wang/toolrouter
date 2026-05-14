@@ -20,8 +20,15 @@ type KeyTtlOptions = {
 export class MemoryCache {
   counters = new Map<string, { value: number; expiresAt: number }>();
 
+  pruneExpired(now = Date.now()) {
+    for (const [key, record] of this.counters.entries()) {
+      if (record.expiresAt <= now) this.counters.delete(key);
+    }
+  }
+
   async increment({ key, limit, windowSeconds, amount = 1 }: LimitOptions): Promise<CounterResult> {
     const now = Date.now();
+    this.pruneExpired(now);
     const current = this.counters.get(key);
     const record = current && current.expiresAt > now ? current : { value: 0, expiresAt: now + windowSeconds * 1000 };
     record.value += amount;
@@ -35,11 +42,13 @@ export class MemoryCache {
   }
 
   async has({ key }: Pick<KeyTtlOptions, "key">) {
+    this.pruneExpired();
     const current = this.counters.get(key);
     return Boolean(current && current.expiresAt > Date.now());
   }
 
   async set({ key, windowSeconds }: KeyTtlOptions) {
+    this.pruneExpired();
     this.counters.set(key, { value: 1, expiresAt: Date.now() + windowSeconds * 1000 });
   }
 }
@@ -85,6 +94,12 @@ export class RedisCache {
 
 export function createCache() {
   if (process.env.VALKEY_URL || process.env.REDIS_URL) return new RedisCache();
+  if (process.env.ROUTER_DEV_MODE !== "true") {
+    throw Object.assign(new Error("VALKEY_URL or REDIS_URL is required outside ROUTER_DEV_MODE"), {
+      statusCode: 500,
+      code: "cache_not_configured",
+    });
+  }
   return new MemoryCache();
 }
 

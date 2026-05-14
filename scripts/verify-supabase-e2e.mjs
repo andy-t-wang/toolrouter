@@ -286,7 +286,9 @@ try {
   const requestIds = new Set(dashboardRequests.requests.map((request) => request.id));
   assert.ok(requestIds.has(createdRequest.id), "dashboard request list should include API-created trace");
   assert.ok(requestIds.has(fallbackRequestId), "dashboard request list should include fallback trace");
-  assert.ok(dashboardRequests.requests.every((request) => request.user_id === userId), "dashboard requests must be user scoped");
+  assert.ok(dashboardRequests.requests.every((request) => request.user_id === undefined), "dashboard requests must omit user ids");
+  assert.ok(dashboardRequests.requests.every((request) => request.payment_reference === undefined), "dashboard requests must omit payment references");
+  assert.ok(dashboardRequests.requests.every((request) => request.payment_network === undefined), "dashboard requests must omit payment networks");
 
   const metrics = computeDashboardMetrics(dashboardRequests.requests);
   assert.equal(metrics.totalRequests, 2);
@@ -306,7 +308,8 @@ try {
 
   const balanceAfter = await api("/v1/balance", { token: sessionToken });
   assert.equal(String(balanceAfter.balance.available_usd), "100");
-  assert.equal(String(balanceAfter.balance.reserved_usd), "0");
+  assert.equal(balanceAfter.balance.pending_usd, undefined);
+  assert.equal(balanceAfter.balance.reserved_usd, undefined);
 
   if (keepArtifacts) {
     const link = await adminAuth("/admin/generate_link", {

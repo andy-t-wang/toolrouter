@@ -1,5 +1,7 @@
 import { randomBytes } from "node:crypto";
 
+import { endpointRegistry } from "../endpoints/registry.ts";
+
 function decimalUsdToAtomic(value) {
   const normalized = String(value || "0").trim();
   if (!/^\d+(\.\d+)?$/.test(normalized)) throw new Error(`invalid USD amount: ${value}`);
@@ -76,8 +78,12 @@ function timeoutResult({ endpoint, request, traceId, started, timeoutMs, path })
 }
 
 function allowedHosts() {
+  const configured = process.env.X402_ALLOWED_HOSTS;
+  if (!configured) {
+    return new Set(endpointRegistry.map((endpoint) => new URL(endpoint.url).hostname));
+  }
   return new Set(
-    (process.env.X402_ALLOWED_HOSTS || "api.exa.ai,x402.browserbase.com,toolrouter.world")
+    configured
       .split(",")
       .map((host) => host.trim())
       .filter(Boolean),

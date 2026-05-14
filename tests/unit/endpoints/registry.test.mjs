@@ -51,6 +51,12 @@ describe("endpoint registry", () => {
   });
 
   it("builds Exa search requests from typed input", () => {
+    const defaultRequest = buildEndpointRequest("exa.search", {
+      query: "AgentKit",
+    });
+    assert.equal(defaultRequest.json.type, "fast");
+    assert.equal(defaultRequest.json.numResults, 5);
+
     const request = buildEndpointRequest("exa.search", {
       query: "AgentKit",
       search_type: "fast",
@@ -102,6 +108,23 @@ describe("endpoint registry", () => {
   });
 
   it("builds Manus research requests for the ToolRouter x402 wrapper", () => {
+    assert.throws(
+      () =>
+        buildEndpointRequest("manus.research", {
+          query: "Find a tool for visual product lookup",
+          urls: ["http://example.com/docs"],
+        }),
+      /urls\[0\] must use https/u,
+    );
+    assert.throws(
+      () =>
+        buildEndpointRequest("manus.research", {
+          query: "Find a tool for visual product lookup",
+          images: ["not-a-url"],
+        }),
+      /images\[0\] must be a valid URL/u,
+    );
+
     const request = buildEndpointRequest("manus.research", {
       query: "Find a tool for visual product lookup",
       task_type: "tool_discovery",

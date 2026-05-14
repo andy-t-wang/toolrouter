@@ -4,9 +4,13 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+function tmpStorePath(prefix) {
+  return join(mkdtempSync(join(tmpdir(), prefix)), "store.json");
+}
+
 process.env.ROUTER_DEV_MODE = "true";
 process.env.AGENTKIT_ROUTER_DEV_API_KEY = "test_dev_key";
-process.env.AGENTKIT_ROUTER_LOCAL_STORE = join(mkdtempSync(join(tmpdir(), "toolrouter-")), "store.json");
+process.env.AGENTKIT_ROUTER_LOCAL_STORE = tmpStorePath("toolrouter-");
 process.env.X402_MAX_USD_PER_REQUEST = "0.05";
 process.env.TOOLROUTER_RATE_LIMIT_PER_MINUTE = "100";
 process.env.TOOLROUTER_IP_RATE_LIMIT_PER_MINUTE = "100";
@@ -17,6 +21,78 @@ process.env.TOOLROUTER_DEV_USER_ID = "00000000-0000-4000-8000-000000000001";
 const { createApiApp } = await import("../../../apps/api/src/app.ts");
 const { MemoryCache } = await import("../../../packages/cache/src/index.ts");
 const { LocalStore, createStore } = await import("../../../packages/db/src/index.ts");
+
+function newLocalStore(prefix) {
+  return new LocalStore({ path: tmpStorePath(prefix) });
+}
+
+async function withIsolatedApp(prefix, options, run) {
+  const isolatedStore = options.store || newLocalStore(prefix);
+  const isolatedApp = createApiApp({
+    logger: false,
+    cache: new MemoryCache(),
+    ...options,
+    store: isolatedStore,
+  });
+  await isolatedApp.listen({ port: 0, host: "127.0.0.1" });
+  const isolatedBaseUrl = `http://127.0.0.1:${isolatedApp.server.address().port}`;
+  try {
+    return await run({ app: isolatedApp, baseUrl: isolatedBaseUrl, store: isolatedStore });
+  } finally {
+    await isolatedApp.close();
+  }
+}
+
+function executorResult(payload, overrides = {}) {
+  return {
+    trace_id: payload.traceId,
+    endpoint_id: payload.endpoint.id,
+    status_code: 200,
+    ok: true,
+    path: "x402",
+    charged: true,
+    estimated_usd: payload.request.estimatedUsd,
+    amount_usd: "0",
+    currency: "USD",
+    payment_reference: null,
+    payment_network: null,
+    payment_error: null,
+    latency_ms: 1,
+    body: { ok: true },
+    ...overrides,
+  };
+}
+
+function paidCheckoutSession({
+  sessionId,
+  purchaseId,
+  userId = process.env.TOOLROUTER_DEV_USER_ID,
+  amountUsd = "5",
+  amountTotal = 500,
+}) {
+  return {
+    id: sessionId,
+    client_reference_id: purchaseId,
+    payment_status: "paid",
+    currency: "usd",
+    amount_total: amountTotal,
+    metadata: {
+      toolrouter_purchase_id: purchaseId,
+      toolrouter_user_id: userId,
+      amount_usd: amountUsd,
+    },
+  };
+}
+
+function paidCheckoutEvent({ eventId, sessionId, purchaseId }) {
+  return {
+    id: eventId,
+    type: "checkout.session.completed",
+    data: {
+      object: paidCheckoutSession({ sessionId, purchaseId }),
+    },
+  };
+}
 
 function authHeaders() {
   return {
@@ -47,12 +123,14 @@ describe("router API", () => {
   let agentBookNonces;
   let agentBookRegistrations;
   let manusWrapperCalls;
+  let datadogMetrics;
 
   before(async () => {
     agentBookLookups = [];
     agentBookNonces = [];
     agentBookRegistrations = [];
     manusWrapperCalls = [];
+    datadogMetrics = [];
     store = createStore();
     app = createApiApp({
       logger: false,
@@ -82,6 +160,12 @@ describe("router API", () => {
             provider: "manus",
             task: { id: "task_test" },
           };
+        },
+      },
+      datadog: {
+        increment: async (metric, tags) => {
+          datadogMetrics.push({ metric, tags });
+          return { sent: true };
         },
       },
     });
@@ -131,7 +215,7 @@ describe("router API", () => {
     const retryApp = createApiApp({
       logger: false,
       cache: new MemoryCache(),
-      store: new LocalStore(join(mkdtempSync(join(tmpdir(), "toolrouter-manus-retry-")), "store.json")),
+      store: newLocalStore("toolrouter-manus-retry-"),
       agentBookVerifier: {
         lookupHuman: async () => "human_retry",
       },
@@ -289,19 +373,9 @@ describe("router API", () => {
   });
 
   it("redacts raw health errors from public status", async () => {
-    const isolatedStore = new LocalStore({
-      path: join(mkdtempSync(join(tmpdir(), "toolrouter-public-status-redaction-")), "store.json"),
-    });
-    const isolatedApp = createApiApp({
-      logger: false,
-      cache: new MemoryCache(),
-      store: isolatedStore,
-    });
-    await isolatedApp.listen({ port: 0, host: "127.0.0.1" });
-    const isolatedBaseUrl = `http://127.0.0.1:${isolatedApp.server.address().port}`;
-    try {
+    await withIsolatedApp("toolrouter-public-status-redaction-", {}, async ({ baseUrl, store }) => {
       const checkedAt = new Date().toISOString();
-      await isolatedStore.insertHealthCheck({
+      await store.insertHealthCheck({
         id: "hc_raw_error",
         endpoint_id: "exa.search",
         checked_at: checkedAt,
@@ -312,7 +386,7 @@ describe("router API", () => {
         charged: false,
         error: "provider timed out after 8000ms with payment header secret_value",
       });
-      await isolatedStore.upsertEndpointStatus({
+      await store.upsertEndpointStatus({
         endpoint_id: "exa.search",
         status: "failing",
         last_checked_at: checkedAt,
@@ -323,15 +397,13 @@ describe("router API", () => {
         last_error: "provider timed out after 8000ms with payment header secret_value",
       });
 
-      const response = await fetch(`${isolatedBaseUrl}/v1/status`);
+      const response = await fetch(`${baseUrl}/v1/status`);
       assert.equal(response.status, 200);
       const body = await response.json();
       const exa = body.endpoints.find((endpoint) => endpoint.id === "exa.search");
       assert.equal(exa.last_error, "Provider timed out");
       assert.doesNotMatch(JSON.stringify(body), /secret_value/);
-    } finally {
-      await isolatedApp.close();
-    }
+    });
   });
 
   it("creates dashboard-owned API keys without an admin token", async () => {
@@ -411,19 +483,15 @@ describe("router API", () => {
     const pendingResponse = await fetch(`${baseUrl}/v1/balance`, { headers: sessionHeaders() });
     const pending = await pendingResponse.json();
     assert.equal(pending.balance.available_usd, "100");
-    assert.equal(pending.balance.pending_usd, "0");
+    assert.equal(pending.balance.pending_usd, undefined);
+    assert.equal(pending.balance.reserved_usd, undefined);
+    assert.equal(pending.balance.limits.max_top_up_usd, "5");
 
-    const webhookBody = {
-      id: "evt_dev_completed_1",
-      type: "checkout.session.completed",
-      data: {
-        object: {
-          id: createdPurchase.provider_checkout_session_id,
-          client_reference_id: topUp.id,
-          payment_status: "paid",
-        },
-      },
-    };
+    const webhookBody = paidCheckoutEvent({
+      eventId: "evt_dev_completed_1",
+      sessionId: createdPurchase.provider_checkout_session_id,
+      purchaseId: topUp.id,
+    });
     const webhookResponse = await fetch(`${baseUrl}/webhooks/stripe`, {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -442,7 +510,7 @@ describe("router API", () => {
     const settledResponse = await fetch(`${baseUrl}/v1/balance`, { headers: sessionHeaders() });
     const settled = await settledResponse.json();
     assert.equal(settled.balance.available_usd, "105");
-    assert.equal(settled.balance.pending_usd, "0");
+    assert.equal(settled.balance.pending_usd, undefined);
 
     const ledgerResponse = await fetch(`${baseUrl}/v1/ledger`, { headers: sessionHeaders() });
     const ledger = await ledgerResponse.json();
@@ -485,8 +553,55 @@ describe("router API", () => {
     assert.match(body.error.message, /Top-ups are capped at \$5 for now\. Enter \$5 or less\./);
   });
 
+  it("rejects unpaid or mismatched Stripe completion webhooks before funding", async () => {
+    const topUpResponse = await fetch(`${baseUrl}/v1/top-ups`, {
+      method: "POST",
+      headers: sessionHeaders(),
+      body: JSON.stringify({ amountUsd: "5" }),
+    });
+    assert.equal(topUpResponse.status, 201);
+    const topUp = (await topUpResponse.json()).top_up;
+    const purchase = await store.getCreditPurchase(topUp.id);
+
+    const validSession = paidCheckoutSession({
+      sessionId: purchase.provider_checkout_session_id,
+      purchaseId: topUp.id,
+    });
+    const invalidSessions = [
+      { ...validSession, payment_status: "unpaid" },
+      { ...validSession, id: "cs_wrong_session" },
+      Object.fromEntries(Object.entries(validSession).filter(([key]) => key !== "id")),
+      { ...validSession, amount_total: 499 },
+      {
+        ...validSession,
+        metadata: {
+          ...validSession.metadata,
+          toolrouter_user_id: "00000000-0000-4000-8000-000000000099",
+        },
+      },
+    ];
+
+    for (const [index, session] of invalidSessions.entries()) {
+      const invalidWebhook = await fetch(`${baseUrl}/webhooks/stripe`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          id: `evt_dev_invalid_${index}`,
+          type: "checkout.session.completed",
+          data: { object: session },
+        }),
+      });
+      assert.equal(invalidWebhook.status, 400);
+      assert.equal((await invalidWebhook.json()).error.code, "invalid_webhook");
+
+      const unchanged = await store.getCreditPurchase(topUp.id);
+      assert.equal(unchanged.status, "checkout_pending");
+      assert.equal(unchanged.funding_provider_reference ?? null, null);
+    }
+  });
+
   it("alerts and retries Stripe settlement when funding fails", async () => {
-    const retryStore = new LocalStore({ path: join(mkdtempSync(join(tmpdir(), "toolrouter-retry-")), "store.json") });
+    const retryStore = newLocalStore("toolrouter-retry-");
     const alerts = [];
     let shouldFailFunding = true;
     const retryApp = createApiApp({
@@ -528,17 +643,11 @@ describe("router API", () => {
       user_id: process.env.TOOLROUTER_DEV_USER_ID,
       limit: 1,
     }))[0];
-    const webhookBody = {
-      id: "evt_retry_completed_1",
-      type: "checkout.session.completed",
-      data: {
-        object: {
-          id: createdPurchase.provider_checkout_session_id,
-          client_reference_id: topUp.id,
-          payment_status: "paid",
-        },
-      },
-    };
+    const webhookBody = paidCheckoutEvent({
+      eventId: "evt_retry_completed_1",
+      sessionId: createdPurchase.provider_checkout_session_id,
+      purchaseId: topUp.id,
+    });
 
     const failedWebhook = await retryApp.inject({
       method: "POST",
@@ -592,6 +701,18 @@ describe("router API", () => {
       body: JSON.stringify({}),
     });
     assert.equal(compatibilityResponse.status, 200);
+    assert.equal(compatibilityResponse.headers.get("deprecation"), "true");
+    assert.match(
+      compatibilityResponse.headers.get("link") || "",
+      /\/v1\/agentkit\/account-verification/u,
+    );
+    assert.ok(
+      datadogMetrics.some(
+        (entry) =>
+          entry.metric === "toolrouter.deprecated_routes.count" &&
+          entry.tags.route === "wallet_agentkit_verification",
+      ),
+    );
   });
 
   it("prepares and completes AgentKit account registration", async () => {
@@ -636,13 +757,7 @@ describe("router API", () => {
   });
 
   it("treats already-registered AgentKit relay responses as a completed verification check", async () => {
-    const isolatedStore = new LocalStore({
-      path: join(mkdtempSync(join(tmpdir(), "toolrouter-agentkit-already-registered-")), "store.json"),
-    });
-    const isolatedApp = createApiApp({
-      logger: false,
-      cache: new MemoryCache(),
-      store: isolatedStore,
+    await withIsolatedApp("toolrouter-agentkit-already-registered-", {
       agentBookVerifier: {
         lookupHuman: async () => "human_already_registered",
       },
@@ -653,11 +768,8 @@ describe("router API", () => {
           message: "This agent address is already registered on World Chain.",
         }),
       },
-    });
-    await isolatedApp.listen({ port: 0, host: "127.0.0.1" });
-    const isolatedBaseUrl = `http://127.0.0.1:${isolatedApp.server.address().port}`;
-    try {
-      const response = await fetch(`${isolatedBaseUrl}/v1/agentkit/registration/complete`, {
+    }, async ({ baseUrl }) => {
+      const response = await fetch(`${baseUrl}/v1/agentkit/registration/complete`, {
         method: "POST",
         headers: sessionHeaders(),
         body: JSON.stringify({
@@ -674,9 +786,7 @@ describe("router API", () => {
       assert.equal(body.registration.tx_hash, null);
       assert.equal(body.registration.already_registered, true);
       assert.equal(body.agentkit_verification.verified, true);
-    } finally {
-      await isolatedApp.close();
-    }
+    });
   });
 
   it("creates and reads request traces", async () => {
@@ -700,7 +810,8 @@ describe("router API", () => {
     const listResponse = await fetch(`${baseUrl}/v1/requests`, { headers: authHeaders() });
     const listed = await listResponse.json();
     assert.equal(listed.requests[0].id, created.id);
-    assert.equal(listed.requests[0].payment_reference, null);
+    assert.equal(listed.requests[0].payment_reference, undefined);
+    assert.equal(listed.requests[0].payment_network, undefined);
     assert.equal(listed.requests[0].credit_reservation_id.startsWith("crr_"), true);
     assert.equal(listed.requests[0].agentkit_value_label, null);
     assert.equal(listed.requests[0].body, undefined);
@@ -715,10 +826,8 @@ describe("router API", () => {
   });
 
   it("ignores caller-supplied api_key_id when listing API-key request traces", async () => {
-    const isolatedStore = new LocalStore({
-      path: join(mkdtempSync(join(tmpdir(), "toolrouter-request-scope-")), "store.json"),
-    });
-    await isolatedStore.insertRequest({
+    const scopedStore = newLocalStore("toolrouter-request-scope-");
+    await scopedStore.insertRequest({
       id: "req_own",
       trace_id: "trace_own",
       user_id: process.env.TOOLROUTER_DEV_USER_ID,
@@ -729,7 +838,7 @@ describe("router API", () => {
       path: "agentkit",
       charged: false,
     });
-    await isolatedStore.insertRequest({
+    await scopedStore.insertRequest({
       id: "req_other",
       trace_id: "trace_other",
       user_id: "00000000-0000-4000-8000-000000000002",
@@ -740,40 +849,21 @@ describe("router API", () => {
       path: "agentkit",
       charged: false,
     });
-    const isolatedApp = createApiApp({
-      logger: false,
-      cache: new MemoryCache(),
-      store: isolatedStore,
-    });
-    await isolatedApp.listen({ port: 0, host: "127.0.0.1" });
-    const isolatedBaseUrl = `http://127.0.0.1:${isolatedApp.server.address().port}`;
-    try {
+    await withIsolatedApp("toolrouter-request-scope-", { store: scopedStore }, async ({ baseUrl }) => {
       const response = await fetch(
-        `${isolatedBaseUrl}/v1/requests?api_key_id=key_other`,
+        `${baseUrl}/v1/requests?api_key_id=key_other`,
         { headers: authHeaders() },
       );
       assert.equal(response.status, 200);
       const body = await response.json();
       assert.deepEqual(body.requests.map((row) => row.id), ["req_own"]);
-    } finally {
-      await isolatedApp.close();
-    }
+    });
   });
 
   it("paginates dashboard request rows with a cursor", async () => {
-    const isolatedStore = new LocalStore({
-      path: join(mkdtempSync(join(tmpdir(), "toolrouter-request-pages-")), "store.json"),
-    });
-    const isolatedApp = createApiApp({
-      logger: false,
-      cache: new MemoryCache(),
-      store: isolatedStore,
-    });
-    await isolatedApp.listen({ port: 0, host: "127.0.0.1" });
-    const isolatedBaseUrl = `http://127.0.0.1:${isolatedApp.server.address().port}`;
-    try {
+    await withIsolatedApp("toolrouter-request-pages-", {}, async ({ baseUrl, store }) => {
       for (const index of [0, 1, 2]) {
-        await isolatedStore.insertRequest({
+        await store.insertRequest({
           id: `req_page_${index}`,
           trace_id: `trace_page_${index}`,
           user_id: process.env.TOOLROUTER_DEV_USER_ID,
@@ -783,11 +873,20 @@ describe("router API", () => {
           status_code: 200,
           path: "agentkit",
           charged: false,
+          ...(index === 2
+            ? {
+                payment_reference: "pay_dashboard_hidden",
+                payment_network: "eip155:8453",
+                payment_error: "raw payment error",
+                error: "raw provider error",
+                body: { secret: "raw provider body" },
+              }
+            : {}),
         });
       }
 
       const firstResponse = await fetch(
-        `${isolatedBaseUrl}/v1/dashboard/requests?limit=2`,
+        `${baseUrl}/v1/dashboard/requests?limit=2`,
         { headers: sessionHeaders() },
       );
       assert.equal(firstResponse.status, 200);
@@ -796,11 +895,17 @@ describe("router API", () => {
         firstPage.requests.map((row) => row.id),
         ["req_page_2", "req_page_1"],
       );
+      assert.equal(firstPage.requests[0].user_id, undefined);
+      assert.equal(firstPage.requests[0].payment_reference, undefined);
+      assert.equal(firstPage.requests[0].payment_network, undefined);
+      assert.equal(firstPage.requests[0].payment_error, undefined);
+      assert.equal(firstPage.requests[0].error, undefined);
+      assert.equal(firstPage.requests[0].body, undefined);
       assert.equal(firstPage.has_more, true);
       assert.ok(firstPage.next_cursor);
 
       const secondResponse = await fetch(
-        `${isolatedBaseUrl}/v1/dashboard/requests?limit=2&cursor=${encodeURIComponent(firstPage.next_cursor)}`,
+        `${baseUrl}/v1/dashboard/requests?limit=2&cursor=${encodeURIComponent(firstPage.next_cursor)}`,
         { headers: sessionHeaders() },
       );
       assert.equal(secondResponse.status, 200);
@@ -811,40 +916,20 @@ describe("router API", () => {
       );
       assert.equal(secondPage.has_more, false);
       assert.equal(secondPage.next_cursor, null);
-    } finally {
-      await isolatedApp.close();
-    }
+    });
   });
 
   it("stores AgentKit value only when the request actually realized it", async () => {
-    const isolatedStore = new LocalStore({
-      path: join(mkdtempSync(join(tmpdir(), "toolrouter-agentkit-value-")), "store.json"),
-    });
-    const isolatedApp = createApiApp({
-      logger: false,
-      cache: new MemoryCache(),
-      store: isolatedStore,
-      executor: async (payload) => ({
-        trace_id: payload.traceId,
-        endpoint_id: payload.endpoint.id,
-        status_code: 200,
-        ok: true,
+    await withIsolatedApp("toolrouter-agentkit-value-", {
+      executor: async (payload) => executorResult(payload, {
         path: "agentkit_to_x402",
         charged: true,
-        estimated_usd: payload.request.estimatedUsd,
         amount_usd: "0.007",
-        currency: "USD",
         payment_reference: "pay_paid_fallback",
         payment_network: "eip155:8453",
-        payment_error: null,
-        latency_ms: 1,
-        body: { ok: true },
       }),
-    });
-    await isolatedApp.listen({ port: 0, host: "127.0.0.1" });
-    const isolatedBaseUrl = `http://127.0.0.1:${isolatedApp.server.address().port}`;
-    try {
-      const response = await fetch(`${isolatedBaseUrl}/v1/requests`, {
+    }, async ({ baseUrl }) => {
+      const response = await fetch(`${baseUrl}/v1/requests`, {
         method: "POST",
         headers: authHeaders(),
         body: JSON.stringify({
@@ -855,57 +940,37 @@ describe("router API", () => {
       });
       assert.equal(response.status, 200);
 
-      const listResponse = await fetch(`${isolatedBaseUrl}/v1/requests`, { headers: authHeaders() });
+      const listResponse = await fetch(`${baseUrl}/v1/requests`, { headers: authHeaders() });
       const listed = await listResponse.json();
       assert.equal(listed.requests[0].path, "agentkit_to_x402");
       assert.equal(listed.requests[0].charged, true);
       assert.equal(listed.requests[0].agentkit_value_type, null);
       assert.equal(listed.requests[0].agentkit_value_label, null);
-    } finally {
-      await isolatedApp.close();
-    }
+    });
   });
 
   it("allows Exa AgentKit free trial requests without available credits", async () => {
     const executorCalls = [];
-    const isolatedStore = new LocalStore({
-      path: join(mkdtempSync(join(tmpdir(), "toolrouter-free-trial-no-credits-")), "store.json"),
-    });
-    await isolatedStore.upsertCreditAccount({
-      user_id: process.env.TOOLROUTER_DEV_USER_ID,
-      available_usd: "0",
-      pending_usd: "0",
-      reserved_usd: "0",
-      currency: "USD",
-    });
-    const isolatedApp = createApiApp({
-      logger: false,
-      cache: new MemoryCache(),
-      store: isolatedStore,
+    await withIsolatedApp("toolrouter-free-trial-no-credits-", {
       executor: async (payload) => {
         executorCalls.push(payload);
-        return {
-          trace_id: payload.traceId,
-          endpoint_id: payload.endpoint.id,
-          status_code: 200,
-          ok: true,
+        return executorResult(payload, {
           path: "agentkit",
           charged: false,
-          estimated_usd: payload.request.estimatedUsd,
           amount_usd: "0",
           currency: null,
-          payment_reference: null,
-          payment_network: null,
-          payment_error: null,
-          latency_ms: 1,
           body: { results: [] },
-        };
+        });
       },
-    });
-    await isolatedApp.listen({ port: 0, host: "127.0.0.1" });
-    const isolatedBaseUrl = `http://127.0.0.1:${isolatedApp.server.address().port}`;
-    try {
-      const response = await fetch(`${isolatedBaseUrl}/v1/requests`, {
+    }, async ({ baseUrl, store }) => {
+      await store.upsertCreditAccount({
+        user_id: process.env.TOOLROUTER_DEV_USER_ID,
+        available_usd: "0",
+        pending_usd: "0",
+        reserved_usd: "0",
+        currency: "USD",
+      });
+      const response = await fetch(`${baseUrl}/v1/requests`, {
         method: "POST",
         headers: authHeaders(),
         body: JSON.stringify({
@@ -924,73 +989,49 @@ describe("router API", () => {
       assert.equal(executorCalls[0].paymentMode, "agentkit_only");
       assert.equal(executorCalls[0].timeoutMs, 10_000);
 
-      const listResponse = await fetch(`${isolatedBaseUrl}/v1/requests`, { headers: authHeaders() });
+      const listResponse = await fetch(`${baseUrl}/v1/requests`, { headers: authHeaders() });
       const listed = await listResponse.json();
       assert.equal(listed.requests[0].agentkit_value_type, "free_trial");
       assert.equal(listed.requests[0].agentkit_value_label, "AgentKit-Free Trial");
-    } finally {
-      await isolatedApp.close();
-    }
+    });
   });
 
   it("falls back to paid x402 when Exa AgentKit preflight does not realize the free trial", async () => {
     const executorCalls = [];
-    const isolatedStore = new LocalStore({
-      path: join(mkdtempSync(join(tmpdir(), "toolrouter-free-trial-fallback-")), "store.json"),
-    });
-    await isolatedStore.upsertCreditAccount({
-      user_id: process.env.TOOLROUTER_DEV_USER_ID,
-      available_usd: "1",
-      pending_usd: "0",
-      reserved_usd: "0",
-      currency: "USD",
-    });
-    const isolatedApp = createApiApp({
-      logger: false,
-      cache: new MemoryCache(),
-      store: isolatedStore,
+    await withIsolatedApp("toolrouter-free-trial-fallback-", {
       executor: async (payload) => {
         executorCalls.push(payload);
         if (executorCalls.length === 1) {
-          return {
-            trace_id: payload.traceId,
-            endpoint_id: payload.endpoint.id,
+          return executorResult(payload, {
             status_code: 402,
             ok: false,
             path: "agentkit",
             charged: false,
-            estimated_usd: payload.request.estimatedUsd,
             amount_usd: null,
             currency: null,
-            payment_reference: null,
-            payment_network: null,
-            payment_error: null,
             latency_ms: payload.timeoutMs,
             body: { error: "Payment required" },
-          };
+          });
         }
-        return {
-          trace_id: payload.traceId,
-          endpoint_id: payload.endpoint.id,
-          status_code: 200,
-          ok: true,
+        return executorResult(payload, {
           path: "x402",
           charged: true,
-          estimated_usd: payload.request.estimatedUsd,
           amount_usd: "0.007",
-          currency: "USD",
           payment_reference: "pay_x402_fallback",
           payment_network: "eip155:8453",
-          payment_error: null,
           latency_ms: 12,
           body: { results: [] },
-        };
+        });
       },
-    });
-    await isolatedApp.listen({ port: 0, host: "127.0.0.1" });
-    const isolatedBaseUrl = `http://127.0.0.1:${isolatedApp.server.address().port}`;
-    try {
-      const response = await fetch(`${isolatedBaseUrl}/v1/requests`, {
+    }, async ({ baseUrl, store }) => {
+      await store.upsertCreditAccount({
+        user_id: process.env.TOOLROUTER_DEV_USER_ID,
+        available_usd: "1",
+        pending_usd: "0",
+        reserved_usd: "0",
+        currency: "USD",
+      });
+      const response = await fetch(`${baseUrl}/v1/requests`, {
         method: "POST",
         headers: authHeaders(),
         body: JSON.stringify({
@@ -1012,76 +1053,52 @@ describe("router API", () => {
       assert.equal(executorCalls[1].paymentMode, "x402_only");
       assert.equal(executorCalls[1].timeoutMs, 8_000);
 
-      const listResponse = await fetch(`${isolatedBaseUrl}/v1/requests`, { headers: authHeaders() });
+      const listResponse = await fetch(`${baseUrl}/v1/requests`, { headers: authHeaders() });
       const listed = await listResponse.json();
       assert.equal(listed.requests[0].agentkit_value_type, null);
       assert.equal(listed.requests[0].agentkit_value_label, null);
-    } finally {
-      await isolatedApp.close();
-    }
+    });
   });
 
   it("proxies Manus through /v1/requests with AgentKit preflight and paid x402 fallback", async () => {
     const executorCalls = [];
-    const isolatedStore = new LocalStore({
-      path: join(mkdtempSync(join(tmpdir(), "toolrouter-manus-proxy-fallback-")), "store.json"),
-    });
-    await isolatedStore.upsertCreditAccount({
-      user_id: process.env.TOOLROUTER_DEV_USER_ID,
-      available_usd: "1",
-      pending_usd: "0",
-      reserved_usd: "0",
-      currency: "USD",
-    });
-    const isolatedApp = createApiApp({
-      logger: false,
-      cache: new MemoryCache(),
-      store: isolatedStore,
+    await withIsolatedApp("toolrouter-manus-proxy-fallback-", {
       executor: async (payload) => {
         executorCalls.push(payload);
         assert.equal(payload.endpoint.id, "manus.research");
         assert.match(payload.request.url, /\/x402\/manus\/research$/u);
         if (executorCalls.length === 1) {
-          return {
-            trace_id: payload.traceId,
-            endpoint_id: payload.endpoint.id,
+          return executorResult(payload, {
             status_code: 402,
             ok: false,
             path: "agentkit",
             charged: false,
-            estimated_usd: payload.request.estimatedUsd,
             amount_usd: null,
             currency: null,
-            payment_reference: null,
-            payment_network: null,
-            payment_error: null,
             latency_ms: payload.timeoutMs,
             body: { error: "Payment required" },
-          };
+          });
         }
         const taskId = `task_proxy_${executorCalls.length}`;
-        return {
-          trace_id: payload.traceId,
-          endpoint_id: payload.endpoint.id,
-          status_code: 200,
-          ok: true,
+        return executorResult(payload, {
           path: "x402",
           charged: true,
-          estimated_usd: payload.request.estimatedUsd,
           amount_usd: "0.03",
-          currency: "USD",
           payment_reference: "pay_manus_x402",
           payment_network: "eip155:8453",
-          payment_error: null,
           latency_ms: 20,
           body: { ok: true, provider: "manus", task: { id: taskId, task_url: `https://manus.im/app/${taskId}` } },
-        };
+        });
       },
-    });
-    await isolatedApp.listen({ port: 0, host: "127.0.0.1" });
-    const isolatedBaseUrl = `http://127.0.0.1:${isolatedApp.server.address().port}`;
-    try {
-      const response = await fetch(`${isolatedBaseUrl}/v1/requests`, {
+    }, async ({ baseUrl, store }) => {
+      await store.upsertCreditAccount({
+        user_id: process.env.TOOLROUTER_DEV_USER_ID,
+        available_usd: "1",
+        pending_usd: "0",
+        reserved_usd: "0",
+        currency: "USD",
+      });
+      const response = await fetch(`${baseUrl}/v1/requests`, {
         method: "POST",
         headers: authHeaders(),
         body: JSON.stringify({
@@ -1115,7 +1132,7 @@ describe("router API", () => {
       assert.equal(executorCalls[0].paymentMode, "agentkit_only");
       assert.equal(executorCalls[1].paymentMode, "x402_only");
 
-      const duplicateResponse = await fetch(`${isolatedBaseUrl}/v1/requests`, {
+      const duplicateResponse = await fetch(`${baseUrl}/v1/requests`, {
         method: "POST",
         headers: authHeaders(),
         body: JSON.stringify({
@@ -1135,7 +1152,7 @@ describe("router API", () => {
       assert.equal(duplicate.task_id, "task_proxy_2");
       assert.equal(executorCalls.length, 2);
 
-      const freshResponse = await fetch(`${isolatedBaseUrl}/v1/requests`, {
+      const freshResponse = await fetch(`${baseUrl}/v1/requests`, {
         method: "POST",
         headers: authHeaders(),
         body: JSON.stringify({
@@ -1157,14 +1174,12 @@ describe("router API", () => {
       assert.equal(fresh.task_id, "task_proxy_3");
       assert.equal(executorCalls.length, 3);
 
-      const listResponse = await fetch(`${isolatedBaseUrl}/v1/requests`, { headers: authHeaders() });
+      const listResponse = await fetch(`${baseUrl}/v1/requests`, { headers: authHeaders() });
       const listed = await listResponse.json();
       assert.equal(listed.requests[0].endpoint_id, "manus.research");
       assert.equal(listed.requests[0].agentkit_value_type, null);
       assert.equal(listed.requests[0].agentkit_value_label, null);
-    } finally {
-      await isolatedApp.close();
-    }
+    });
   });
 
   it("dedupes concurrent Manus starts before a second upstream task is created", async () => {
@@ -1457,44 +1472,28 @@ describe("router API", () => {
 
   it("accepts top-level endpoint input fields for agent-authored Manus requests", async () => {
     const executorCalls = [];
-    const isolatedStore = new LocalStore({
-      path: join(mkdtempSync(join(tmpdir(), "toolrouter-manus-top-level-")), "store.json"),
-    });
-    await isolatedStore.upsertCreditAccount({
-      user_id: process.env.TOOLROUTER_DEV_USER_ID,
-      available_usd: "1",
-      pending_usd: "0",
-      reserved_usd: "0",
-      currency: "USD",
-    });
-    const isolatedApp = createApiApp({
-      logger: false,
-      cache: new MemoryCache(),
-      store: isolatedStore,
+    await withIsolatedApp("toolrouter-manus-top-level-", {
       executor: async (payload) => {
         executorCalls.push(payload);
-        return {
-          trace_id: payload.traceId,
-          endpoint_id: payload.endpoint.id,
-          status_code: 200,
-          ok: true,
+        return executorResult(payload, {
           path: "x402",
           charged: true,
-          estimated_usd: payload.request.estimatedUsd,
           amount_usd: "0.03",
-          currency: "USD",
           payment_reference: "pay_manus_top_level",
           payment_network: "eip155:8453",
-          payment_error: null,
           latency_ms: 20,
           body: { ok: true, provider: "manus", task: { id: "task_top_level" } },
-        };
+        });
       },
-    });
-    await isolatedApp.listen({ port: 0, host: "127.0.0.1" });
-    const isolatedBaseUrl = `http://127.0.0.1:${isolatedApp.server.address().port}`;
-    try {
-      const response = await fetch(`${isolatedBaseUrl}/v1/requests`, {
+    }, async ({ baseUrl, store }) => {
+      await store.upsertCreditAccount({
+        user_id: process.env.TOOLROUTER_DEV_USER_ID,
+        available_usd: "1",
+        pending_usd: "0",
+        reserved_usd: "0",
+        currency: "USD",
+      });
+      const response = await fetch(`${baseUrl}/v1/requests`, {
         method: "POST",
         headers: authHeaders(),
         body: JSON.stringify({
@@ -1520,43 +1519,24 @@ describe("router API", () => {
         images: [],
       });
       assert.equal(executorCalls[0].paymentMode, "x402_only");
-    } finally {
-      await isolatedApp.close();
-    }
+    });
   });
 
   it("keeps realized AgentKit value categories on request rows", async () => {
-    const isolatedStore = new LocalStore({
-      path: join(mkdtempSync(join(tmpdir(), "toolrouter-agentkit-realized-")), "store.json"),
-    });
-    const isolatedApp = createApiApp({
-      logger: false,
-      cache: new MemoryCache(),
-      store: isolatedStore,
+    await withIsolatedApp("toolrouter-agentkit-realized-", {
       executor: async (payload) => {
         const isBrowserbase = payload.endpoint.id === "browserbase.session";
-        return {
-          trace_id: payload.traceId,
-          endpoint_id: payload.endpoint.id,
-          status_code: 200,
-          ok: true,
+        return executorResult(payload, {
           path: isBrowserbase ? "agentkit_to_x402" : "agentkit",
           charged: isBrowserbase,
-          estimated_usd: payload.request.estimatedUsd,
           amount_usd: isBrowserbase ? "0.01" : "0",
           currency: isBrowserbase ? "USD" : null,
           payment_reference: isBrowserbase ? "pay_agentkit_access" : null,
           payment_network: isBrowserbase ? "eip155:8453" : null,
-          payment_error: null,
-          latency_ms: 1,
-          body: { ok: true },
-        };
+        });
       },
-    });
-    await isolatedApp.listen({ port: 0, host: "127.0.0.1" });
-    const isolatedBaseUrl = `http://127.0.0.1:${isolatedApp.server.address().port}`;
-    try {
-      const exaResponse = await fetch(`${isolatedBaseUrl}/v1/requests`, {
+    }, async ({ baseUrl }) => {
+      const exaResponse = await fetch(`${baseUrl}/v1/requests`, {
         method: "POST",
         headers: authHeaders(),
         body: JSON.stringify({
@@ -1567,7 +1547,7 @@ describe("router API", () => {
       });
       assert.equal(exaResponse.status, 200);
 
-      const browserbaseResponse = await fetch(`${isolatedBaseUrl}/v1/requests`, {
+      const browserbaseResponse = await fetch(`${baseUrl}/v1/requests`, {
         method: "POST",
         headers: authHeaders(),
         body: JSON.stringify({
@@ -1578,7 +1558,7 @@ describe("router API", () => {
       });
       assert.equal(browserbaseResponse.status, 200);
 
-      const listResponse = await fetch(`${isolatedBaseUrl}/v1/requests`, { headers: authHeaders() });
+      const listResponse = await fetch(`${baseUrl}/v1/requests`, { headers: authHeaders() });
       const listed = await listResponse.json();
       const exa = listed.requests.find((row) => row.endpoint_id === "exa.search");
       const browserbase = listed.requests.find((row) => row.endpoint_id === "browserbase.session");
@@ -1586,44 +1566,24 @@ describe("router API", () => {
       assert.equal(exa.agentkit_value_label, "AgentKit-Free Trial");
       assert.equal(browserbase.agentkit_value_type, "access");
       assert.equal(browserbase.agentkit_value_label, "AgentKit-Access");
-    } finally {
-      await isolatedApp.close();
-    }
+    });
   });
 
   it("passes explicit payment mode overrides to the request executor", async () => {
     const executorCalls = [];
-    const isolatedStore = new LocalStore({
-      path: join(mkdtempSync(join(tmpdir(), "toolrouter-payment-mode-")), "store.json"),
-    });
-    const isolatedApp = createApiApp({
-      logger: false,
-      cache: new MemoryCache(),
-      store: isolatedStore,
+    await withIsolatedApp("toolrouter-payment-mode-", {
       executor: async (payload) => {
         executorCalls.push(payload);
-        return {
-          trace_id: payload.traceId,
-          endpoint_id: payload.endpoint.id,
-          status_code: 200,
-          ok: true,
+        return executorResult(payload, {
           path: "x402",
           charged: true,
-          estimated_usd: payload.request.estimatedUsd,
           amount_usd: "0.001",
-          currency: "USD",
           payment_reference: "pay_test",
           payment_network: "eip155:8453",
-          payment_error: null,
-          latency_ms: 1,
-          body: { ok: true },
-        };
+        });
       },
-    });
-    await isolatedApp.listen({ port: 0, host: "127.0.0.1" });
-    const isolatedBaseUrl = `http://127.0.0.1:${isolatedApp.server.address().port}`;
-    try {
-      const response = await fetch(`${isolatedBaseUrl}/v1/requests`, {
+    }, async ({ baseUrl }) => {
+      const response = await fetch(`${baseUrl}/v1/requests`, {
         method: "POST",
         headers: authHeaders(),
         body: JSON.stringify({
@@ -1636,20 +1596,12 @@ describe("router API", () => {
       assert.equal(response.status, 200);
       assert.equal((await response.json()).path, "x402");
       assert.equal(executorCalls[0].paymentMode, "x402_only");
-    } finally {
-      await isolatedApp.close();
-    }
+    });
   });
 
   it("tags 402 Datadog request metrics as payment-required instead of failures", async () => {
     const metrics = [];
-    const isolatedStore = new LocalStore({
-      path: join(mkdtempSync(join(tmpdir(), "toolrouter-datadog-402-")), "store.json"),
-    });
-    const isolatedApp = createApiApp({
-      logger: false,
-      cache: new MemoryCache(),
-      store: isolatedStore,
+    await withIsolatedApp("toolrouter-datadog-402-", {
       datadog: {
         increment: async (metric, tags) => {
           metrics.push({ metric, tags });
@@ -1660,27 +1612,17 @@ describe("router API", () => {
           return { sent: true };
         },
       },
-      executor: async (payload) => ({
-        trace_id: payload.traceId,
-        endpoint_id: payload.endpoint.id,
+      executor: async (payload) => executorResult(payload, {
         status_code: 402,
         ok: false,
         path: "x402",
         charged: false,
-        estimated_usd: payload.request.estimatedUsd,
         amount_usd: null,
         currency: null,
-        payment_reference: null,
-        payment_network: null,
-        payment_error: null,
-        latency_ms: 1,
         body: { error: "Payment required" },
       }),
-    });
-    await isolatedApp.listen({ port: 0, host: "127.0.0.1" });
-    const isolatedBaseUrl = `http://127.0.0.1:${isolatedApp.server.address().port}`;
-    try {
-      const response = await fetch(`${isolatedBaseUrl}/v1/requests`, {
+    }, async ({ baseUrl }) => {
+      const response = await fetch(`${baseUrl}/v1/requests`, {
         method: "POST",
         headers: authHeaders(),
         body: JSON.stringify({
@@ -1695,47 +1637,30 @@ describe("router API", () => {
         (entry) => entry.metric === "toolrouter.requests.count",
       );
       assert.equal(requestMetric.tags.status, "payment_required");
-    } finally {
-      await isolatedApp.close();
-    }
+    });
   });
 
   it("passes the default request timeout and records timed-out requests", async () => {
     const previousTimeout = process.env.TOOLROUTER_REQUEST_TIMEOUT_MS;
     delete process.env.TOOLROUTER_REQUEST_TIMEOUT_MS;
     const executorCalls = [];
-    const isolatedStore = new LocalStore({
-      path: join(mkdtempSync(join(tmpdir(), "toolrouter-request-timeout-")), "store.json"),
-    });
-    const isolatedApp = createApiApp({
-      logger: false,
-      cache: new MemoryCache(),
-      store: isolatedStore,
+    await withIsolatedApp("toolrouter-request-timeout-", {
       executor: async (payload) => {
         executorCalls.push(payload);
-        return {
-          trace_id: payload.traceId,
-          endpoint_id: payload.endpoint.id,
+        return executorResult(payload, {
           status_code: 504,
           ok: false,
           path: "agentkit",
           charged: false,
-          estimated_usd: payload.request.estimatedUsd,
           amount_usd: null,
           currency: null,
-          payment_reference: null,
-          payment_network: null,
-          payment_error: null,
           latency_ms: payload.timeoutMs,
           error: `provider timed out after ${payload.timeoutMs}ms`,
           body: null,
-        };
+        });
       },
-    });
-    await isolatedApp.listen({ port: 0, host: "127.0.0.1" });
-    const isolatedBaseUrl = `http://127.0.0.1:${isolatedApp.server.address().port}`;
-    try {
-      const response = await fetch(`${isolatedBaseUrl}/v1/requests`, {
+    }, async ({ baseUrl }) => {
+      const response = await fetch(`${baseUrl}/v1/requests`, {
         method: "POST",
         headers: authHeaders(),
         body: JSON.stringify({
@@ -1756,16 +1681,15 @@ describe("router API", () => {
       assert.equal(executorCalls[1].paymentMode, "x402_only");
       assert.equal(executorCalls[1].timeoutMs, 8_000);
 
-      const listResponse = await fetch(`${isolatedBaseUrl}/v1/requests`, { headers: authHeaders() });
+      const listResponse = await fetch(`${baseUrl}/v1/requests`, { headers: authHeaders() });
       const listed = await listResponse.json();
       assert.equal(listed.requests[0].status_code, 504);
       assert.equal(listed.requests[0].latency_ms, 8_000);
       assert.equal(listed.requests[0].error, "provider timed out after 8000ms");
-    } finally {
-      await isolatedApp.close();
+    }).finally(() => {
       if (previousTimeout === undefined) delete process.env.TOOLROUTER_REQUEST_TIMEOUT_MS;
       else process.env.TOOLROUTER_REQUEST_TIMEOUT_MS = previousTimeout;
-    }
+    });
   });
 
   it("summarizes Supabase-backed monitoring data for dashboard health", async () => {

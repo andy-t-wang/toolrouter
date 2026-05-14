@@ -18,6 +18,10 @@ const endpointTasksNullableMigration = readFileSync(
   new URL("../../../supabase/migrations/0011_endpoint_tasks_nullable_provider_task_id.sql", import.meta.url),
   "utf8",
 );
+const atomicCreditMigration = readFileSync(
+  new URL("../../../supabase/migrations/0012_atomic_credit_accounting.sql", import.meta.url),
+  "utf8",
+);
 
 describe("Supabase RLS migration", () => {
   it("enables RLS on every durable router table", () => {
@@ -128,5 +132,25 @@ describe("Supabase RLS migration", () => {
     assert.doesNotMatch(walletGrant, /address/);
     assert.doesNotMatch(walletGrant, /wallet_locator/);
     assert.doesNotMatch(walletGrant, /metadata/);
+  });
+
+  it("adds atomic credit RPCs for server-side Supabase accounting only", () => {
+    for (const name of [
+      "toolrouter_reserve_credits",
+      "toolrouter_finalize_credit_reservation",
+      "toolrouter_settle_credit_purchase",
+    ]) {
+      assert.match(atomicCreditMigration, new RegExp(`create or replace function ${name}`));
+    }
+    assert.match(atomicCreditMigration, /security definer/g);
+    assert.match(atomicCreditMigration, /for update/g);
+    assert.match(atomicCreditMigration, /on conflict \(id\) do nothing/g);
+    assert.match(atomicCreditMigration, /insert into credit_accounts\(user_id, available_usd, pending_usd, reserved_usd, currency\)/);
+    assert.match(atomicCreditMigration, /on conflict \(user_id\) do nothing;/);
+    assert.match(atomicCreditMigration, /grant execute on function toolrouter_reserve_credits[\s\S]*to service_role;/);
+    assert.match(atomicCreditMigration, /grant execute on function toolrouter_finalize_credit_reservation[\s\S]*to service_role;/);
+    assert.match(atomicCreditMigration, /grant execute on function toolrouter_settle_credit_purchase[\s\S]*to service_role;/);
+    assert.doesNotMatch(atomicCreditMigration, /grant execute[\s\S]*to authenticated;/);
+    assert.doesNotMatch(atomicCreditMigration, /drop table|alter table credit_accounts drop/iu);
   });
 });

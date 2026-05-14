@@ -123,6 +123,21 @@ function readStringArray(input, names, label, { defaultValue = [], max = 10 } = 
   });
 }
 
+function readHttpsUrlArray(input, names, label, options = {}) {
+  return readStringArray(input, names, label, options).map((item, index) => {
+    let url;
+    try {
+      url = new URL(item);
+    } catch {
+      throw new TypeError(`${label}[${index}] must be a valid URL`);
+    }
+    if (url.protocol !== "https:") {
+      throw new TypeError(`${label}[${index}] must use https`);
+    }
+    return url.toString();
+  });
+}
+
 function toUsdString(value) {
   const rounded = Math.round((Number(value) + Number.EPSILON) * 1_000_000) / 1_000_000;
   return String(rounded).replace(/(\.\d*?)0+$/u, "$1").replace(/\.$/u, "");
@@ -162,7 +177,7 @@ export function buildExaSearchRequest(input, endpoint) {
   const data = assertInputRecord(input);
   const query = readString(data, ["query"], "query", { required: true });
   const searchType = readString(data, ["searchType", "search_type", "type"], "searchType", {
-    defaultValue: "auto",
+    defaultValue: "fast",
   });
   if (!Object.hasOwn(EXA_SEARCH_PRICES, searchType)) {
     throw new RangeError(`unsupported Exa searchType: ${searchType}`);
@@ -226,8 +241,8 @@ export function buildManusResearchRequest(input, endpoint) {
     defaultValue: "general_research",
   });
   const title = readString(data, ["title"], "title", { defaultValue: undefined });
-  const urls = readStringArray(data, ["urls"], "urls", { max: 10 });
-  const images = readStringArray(data, ["images", "image_urls"], "images", { max: 5 });
+  const urls = readHttpsUrlArray(data, ["urls"], "urls", { max: 10 });
+  const images = readHttpsUrlArray(data, ["images", "image_urls"], "images", { max: 5 });
   return providerRequest(
     endpoint,
     {
