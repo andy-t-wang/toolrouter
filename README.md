@@ -72,7 +72,7 @@ npm test
 npm --workspace @toolrouter/web run build
 ```
 
-Live provider tests are opt-in and gated by `RUN_LIVE_*` environment flags:
+Live provider tests are opt-in and gated by `RUN_LIVE_*` environment flags. Manus live tests also require `MANUS_API_KEY` because the smoke verifies async task status and messages through the Manus API.
 
 ```bash
 npm run test:live:endpoints
