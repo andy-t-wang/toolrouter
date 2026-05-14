@@ -1259,6 +1259,69 @@ describe("router API", () => {
     }
   });
 
+  it("records safe Manus wrapper auth failures on request traces", async () => {
+    const isolatedStore = new LocalStore({
+      path: join(mkdtempSync(join(tmpdir(), "toolrouter-manus-auth-failure-")), "store.json"),
+    });
+    await isolatedStore.upsertCreditAccount({
+      user_id: process.env.TOOLROUTER_DEV_USER_ID,
+      available_usd: "1",
+      pending_usd: "0",
+      reserved_usd: "0",
+      currency: "USD",
+    });
+    const isolatedApp = createApiApp({
+      logger: false,
+      cache: new MemoryCache(),
+      store: isolatedStore,
+      executor: async (payload) => ({
+        trace_id: payload.traceId,
+        endpoint_id: payload.endpoint.id,
+        status_code: 401,
+        ok: false,
+        path: "x402",
+        charged: false,
+        estimated_usd: payload.request.estimatedUsd,
+        amount_usd: null,
+        currency: null,
+        payment_reference: null,
+        payment_network: null,
+        payment_error: null,
+        latency_ms: 20,
+        body: { ok: false, error: "Manus authentication failed" },
+      }),
+    });
+    await isolatedApp.listen({ port: 0, host: "127.0.0.1" });
+    const isolatedBaseUrl = `http://127.0.0.1:${isolatedApp.server.address().port}`;
+    try {
+      const response = await fetch(`${isolatedBaseUrl}/v1/requests`, {
+        method: "POST",
+        headers: authHeaders(),
+        body: JSON.stringify({
+          endpoint_id: "manus.research",
+          input: {
+            query: "research with expired Manus key",
+            depth: "quick",
+          },
+          maxUsd: "0.03",
+          payment_mode: "x402_only",
+        }),
+      });
+      const created = await response.json();
+      assert.equal(response.status, 200);
+      assert.equal(created.status_code, 401);
+      assert.equal(created.body.error, "Manus authentication failed");
+      assert.equal(created.credit_captured_usd, "0");
+      assert.equal(created.credit_released_usd, "0.03");
+
+      const listResponse = await fetch(`${isolatedBaseUrl}/v1/requests`, { headers: authHeaders() });
+      const listed = await listResponse.json();
+      assert.equal(listed.requests[0].error, "Manus authentication failed");
+    } finally {
+      await isolatedApp.close();
+    }
+  });
+
   it("serves Manus task status and result only to the owning API key", async () => {
     const previousManusApiKey = process.env.MANUS_API_KEY;
     process.env.MANUS_API_KEY = "test_manus_key";

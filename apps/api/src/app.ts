@@ -313,6 +313,13 @@ const CONSTRAINT_ERROR_MESSAGES: Record<
   },
 };
 
+function isEndpointTaskProviderTaskNotNullError(error: any) {
+  const message = error instanceof Error ? error.message : String(error);
+  return /null value in column "provider_task_id" of relation "endpoint_tasks" violates not-null constraint/u.test(
+    message,
+  );
+}
+
 function constraintNameFrom(error: any) {
   const message = error instanceof Error ? error.message : String(error);
   return message.match(/unique constraint "([^"]+)"/)?.[1] || null;
@@ -323,7 +330,10 @@ export function normalizeApiError(error: any) {
   const knownConstraint = constraint
     ? CONSTRAINT_ERROR_MESSAGES[constraint]
     : null;
+  const endpointTaskProviderTaskNotNull =
+    isEndpointTaskProviderTaskNotNullError(error);
   const statusCode =
+    (endpointTaskProviderTaskNotNull ? 500 : null) ||
     knownConstraint?.statusCode ||
     (constraint ? 409 : error.statusCode || error.status || 500);
   const fallbackCode =
@@ -333,9 +343,13 @@ export function normalizeApiError(error: any) {
         ? "conflict"
         : "bad_request";
   const publicCode =
+    (endpointTaskProviderTaskNotNull ? "database_schema_mismatch" : null) ||
     knownConstraint?.code ||
     (constraint ? "conflict" : statusCode >= 500 ? fallbackCode : error.code || fallbackCode);
   const publicMessage =
+    (endpointTaskProviderTaskNotNull
+      ? "Database schema is missing nullable Manus task reservations. Apply Supabase migrations."
+      : null) ||
     knownConstraint?.message ||
     (constraint ? "That value is already in use. Try a different value." : null) ||
     (statusCode >= 500
@@ -698,6 +712,12 @@ function realizedFreeTrial(endpoint: any, result: any) {
   );
 }
 
+function safeResultBodyError(endpoint: any, result: any) {
+  if (result?.ok !== false) return null;
+  if (endpoint?.id !== MANUS_RESEARCH_ENDPOINT_ID) return null;
+  return typeof result.body?.error === "string" ? result.body.error : null;
+}
+
 function createRequestRow({
   traceId,
   endpoint,
@@ -707,6 +727,7 @@ function createRequestRow({
   credit,
 }: any) {
   const agentKitValue = agentKitValueForRequest(endpoint, result);
+  const resultError = result.error || safeResultBodyError(endpoint, result);
   return {
     id: `req_${randomUUID()}`,
     ts: new Date().toISOString(),
@@ -734,7 +755,7 @@ function createRequestRow({
     credit_captured_usd: credit?.credit_captured_usd || null,
     credit_released_usd: credit?.credit_released_usd || null,
     latency_ms: result.latency_ms ?? null,
-    error: result.error || null,
+    error: resultError,
     body: null,
   };
 }
