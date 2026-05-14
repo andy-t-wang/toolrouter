@@ -80,4 +80,22 @@ describe("API error normalization", () => {
       trace_id: null,
     });
   });
+
+  it("turns Manus task schema drift into an operator-actionable error", () => {
+    const raw = Object.assign(
+      new Error('null value in column "provider_task_id" of relation "endpoint_tasks" violates not-null constraint'),
+      {
+        statusCode: 400,
+        code: "supabase_error",
+      },
+    );
+
+    assert.deepEqual(normalizeApiError(raw), {
+      statusCode: 500,
+      code: "database_schema_mismatch",
+      message: "Database schema is missing nullable Manus task reservations. Apply Supabase migrations.",
+      details: undefined,
+      trace_id: null,
+    });
+  });
 });

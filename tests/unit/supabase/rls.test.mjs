@@ -14,6 +14,10 @@ const endpointTasksMigration = readFileSync(
   new URL("../../../supabase/migrations/0010_endpoint_tasks.sql", import.meta.url),
   "utf8",
 );
+const endpointTasksNullableMigration = readFileSync(
+  new URL("../../../supabase/migrations/0011_endpoint_tasks_nullable_provider_task_id.sql", import.meta.url),
+  "utf8",
+);
 
 describe("Supabase RLS migration", () => {
   it("enables RLS on every durable router table", () => {
@@ -96,6 +100,7 @@ describe("Supabase RLS migration", () => {
   });
 
   it("adds async endpoint task constraints without browser grants", () => {
+    assert.match(endpointTasksMigration, /provider_task_id text,/);
     assert.match(
       endpointTasksMigration,
       /create unique index if not exists endpoint_tasks_api_key_provider_task_key[\s\S]*on public\.endpoint_tasks\(api_key_id, endpoint_id, provider_task_id\)[\s\S]*where provider_task_id is not null;/,
@@ -103,6 +108,10 @@ describe("Supabase RLS migration", () => {
     assert.match(
       endpointTasksMigration,
       /create unique index if not exists endpoint_tasks_starting_dedupe_key[\s\S]*on public\.endpoint_tasks\(api_key_id, endpoint_id, dedupe_key\)[\s\S]*where provider_task_id is null and status <> 'error';/,
+    );
+    assert.match(
+      endpointTasksNullableMigration,
+      /alter table public\.endpoint_tasks[\s\S]*alter column provider_task_id drop not null;/,
     );
   });
 
