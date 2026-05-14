@@ -183,6 +183,8 @@ function publicEndpoint(endpoint: any, statusByEndpoint: Map<string, any>) {
   const status = statusByEndpoint.get(endpoint.id);
   return {
     ...endpointDto(endpoint),
+    recommended_mcp_tool: recommendedMcpToolForEndpoint(endpoint.id),
+    mcp_tools: mcpToolsForEndpoint(endpoint.id),
     status: status?.status || "unverified",
     last_checked_at: status?.last_checked_at || null,
     latency_ms: status?.latency_ms || null,
@@ -240,6 +242,14 @@ const DEFAULT_AGENTKIT_PREFLIGHT_TIMEOUT_MS = 10_000;
 const MANUS_RESEARCH_ENDPOINT_ID = "manus.research";
 const MANUS_TASK_TTL_MS = 24 * 60 * 60 * 1000;
 const MANUS_POLL_AFTER_SECONDS = 30;
+const MANUS_NEXT_MCP_TOOLS = Object.freeze({
+  status: "manus_research_status",
+  result: "manus_research_result",
+});
+const MANUS_MCP_TOOLS = Object.freeze({
+  start: "manus_research_start",
+  ...MANUS_NEXT_MCP_TOOLS,
+});
 const STATUS_RANK: Record<string, number> = {
   healthy: 0,
   degraded: 1,
@@ -831,6 +841,30 @@ function recommendedMcpToolForCategory(categoryId: string) {
   return null;
 }
 
+function recommendedMcpToolForEndpoint(endpointId: string) {
+  if (endpointId === MANUS_RESEARCH_ENDPOINT_ID) return MANUS_MCP_TOOLS.start;
+  if (endpointId === "exa.search") return "exa_search";
+  if (endpointId === "browserbase.session") return "browserbase_session_create";
+  return null;
+}
+
+function mcpToolsForEndpoint(endpointId: string) {
+  if (endpointId === MANUS_RESEARCH_ENDPOINT_ID) return MANUS_MCP_TOOLS;
+  if (endpointId === "exa.search") {
+    return {
+      call: "exa_search",
+      category: "toolrouter_search",
+    };
+  }
+  if (endpointId === "browserbase.session") {
+    return {
+      call: "browserbase_session_create",
+      category: "toolrouter_browser_use",
+    };
+  }
+  return null;
+}
+
 async function categoryRows(store: any, includeEmpty = false) {
   const statuses = await store.listEndpointStatus();
   const statusByEndpoint = new Map<string, any>(
@@ -988,21 +1022,50 @@ function taskPublicFields(task: any) {
 }
 
 function nextManusTools() {
+  return MANUS_NEXT_MCP_TOOLS;
+}
+
+function nextManusApiRoutes(taskId: string) {
+  const encodedTaskId = encodeURIComponent(taskId);
   return {
-    status: "manus_research_status",
-    result: "manus_research_result",
+    status: `/v1/manus/tasks/${encodedTaskId}/status`,
+    result: `/v1/manus/tasks/${encodedTaskId}/result`,
+  };
+}
+
+function nextManusToolCalls(taskId: string) {
+  return {
+    status: {
+      type: "mcp_tool",
+      tool_name: MANUS_NEXT_MCP_TOOLS.status,
+      arguments: { task_id: taskId },
+      api_route: nextManusApiRoutes(taskId).status,
+      note: "MCP tool name, not a ToolRouter endpoint_id.",
+    },
+    result: {
+      type: "mcp_tool",
+      tool_name: MANUS_NEXT_MCP_TOOLS.result,
+      arguments: { task_id: taskId },
+      api_route: nextManusApiRoutes(taskId).result,
+      note: "MCP tool name, not a ToolRouter endpoint_id.",
+    },
   };
 }
 
 function manusTaskStartPayload(task: any, { taskCreated, deduped, requestId, traceId }: any) {
+  const publicFields = taskPublicFields(task);
   return {
     task_created: Boolean(taskCreated),
     deduped: Boolean(deduped),
     request_id: requestId || task.request_id || null,
     trace_id: traceId || task.trace_id || null,
-    ...taskPublicFields(task),
+    ...publicFields,
     poll_after_seconds: MANUS_POLL_AFTER_SECONDS,
     next_tools: nextManusTools(),
+    next_mcp_tools: nextManusTools(),
+    next_endpoint_ids: [],
+    next_api_routes: nextManusApiRoutes(publicFields.task_id),
+    next_tool_calls: nextManusToolCalls(publicFields.task_id),
     repeat_for_same_query: false,
   };
 }

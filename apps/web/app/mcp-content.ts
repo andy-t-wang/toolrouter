@@ -15,7 +15,7 @@ export const firstQueryPrompt = `Use ToolRouter through MCP.
 
 First list the available ToolRouter tool categories. Then use the recommended search endpoint to find the top sushi places in San Francisco.
 
-For deep research requests, use manus_research_start once, then check manus_research_status or manus_research_result with the returned task_id instead of starting another task.
+For deep research requests, use manus_research_start once, then check the MCP tools manus_research_status or manus_research_result with the returned task_id instead of starting another task. Status/result are helper tools, not endpoint IDs.
 
 Summarize the best 5 options and include the ToolRouter request id.`;
 

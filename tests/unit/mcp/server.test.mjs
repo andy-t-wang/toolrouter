@@ -61,6 +61,12 @@ describe("ToolRouter MCP server", () => {
     assert.match(startTool.description, /Do not call start again for the same query/u);
     assert.ok(startTool.outputSchema);
     assert.ok(startTool.outputSchema.properties.credit_reserved_usd);
+    assert.ok(startTool.outputSchema.properties.next_mcp_tools);
+    assert.ok(startTool.outputSchema.properties.next_endpoint_ids);
+    assert.ok(startTool.outputSchema.properties.next_tool_calls);
+    const listTool = tools().find((tool) => tool.name === "toolrouter_list_endpoints");
+    assert.match(listTool.description, /endpoint IDs/u);
+    assert.match(listTool.description, /MCP tools/u);
     const genericTool = tools().find((tool) => tool.name === "toolrouter_call_endpoint");
     assert.ok(genericTool.inputSchema.properties.endpointId);
     assert.ok(genericTool.inputSchema.properties.max_usd);
@@ -230,10 +236,27 @@ describe("ToolRouter MCP server", () => {
     assert.equal(result.isError, false);
     assert.match(result.content[0].text, /Do not call start again for the same query/u);
     assert.match(result.content[0].text, /Task id: task_123/u);
+    assert.match(result.content[0].text, /Next MCP tools, not endpoint IDs/u);
     assert.equal(result.structuredContent.task_created, true);
     assert.equal(result.structuredContent.deduped, false);
     assert.equal(result.structuredContent.repeat_for_same_query, false);
     assert.equal(result.structuredContent.task_id, "task_123");
+    assert.deepEqual(result.structuredContent.next_mcp_tools, {
+      status: "manus_research_status",
+      result: "manus_research_result",
+    });
+    assert.deepEqual(result.structuredContent.next_endpoint_ids, []);
+    assert.deepEqual(result.structuredContent.next_api_routes, {
+      status: "/v1/manus/tasks/task_123/status",
+      result: "/v1/manus/tasks/task_123/result",
+    });
+    assert.deepEqual(result.structuredContent.next_tool_calls.result, {
+      type: "mcp_tool",
+      tool_name: "manus_research_result",
+      arguments: { task_id: "task_123" },
+      api_route: "/v1/manus/tasks/task_123/result",
+      note: "MCP tool name, not a ToolRouter endpoint_id.",
+    });
     assert.deepEqual(JSON.parse(calls[0].init.body), {
       endpoint_id: "manus.research",
       input: {

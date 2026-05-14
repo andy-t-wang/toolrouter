@@ -115,6 +115,10 @@ const MANUS_DEFAULT_MAX_USD: Record<string, string> = Object.freeze({
   standard: "0.05",
   deep: "0.10",
 });
+const MANUS_NEXT_MCP_TOOLS = Object.freeze({
+  status: "manus_research_status",
+  result: "manus_research_result",
+});
 
 function defaultManusMaxUsd(depth: any, env: any) {
   const normalized = ["quick", "standard", "deep"].includes(depth) ? depth : "standard";
@@ -133,7 +137,7 @@ const ENDPOINT_TOOL_DEFINITIONS = Object.freeze([
   ["toolrouter_browser_use", "Browser use", "Start a browser session through ToolRouter's recommended browser-use endpoint.", "browser", { category: "browser_usage" }],
   ["exa_search", "Exa search", "Run Exa search through ToolRouter with AgentKit first and x402 fallback.", "search", { endpointId: "exa.search" }],
   ["browserbase_session_create", "Browserbase session", "Create a paid Browserbase browser session through ToolRouter.", "browser", { endpointId: "browserbase.session" }],
-  ["manus_research_start", "Start Manus research", "Use this when the user asks for deep research, multi-source investigation, visual lookup, vendor research, or docs investigation. This starts one async Manus task through endpoint id manus.research and returns a task handle, not the final answer. Do not call start again for the same query; use manus_research_status or manus_research_result with the returned task_id unless the user explicitly asks for a new task.", "research", { endpointId: "manus.research" }],
+  ["manus_research_start", "Start Manus research", "Use this when the user asks for deep research, multi-source investigation, visual lookup, vendor research, or docs investigation. This starts one async Manus task through endpoint id manus.research and returns a task handle, not the final answer. Do not call start again for the same query; call the MCP tools manus_research_status or manus_research_result with the returned task_id unless the user explicitly asks for a new task.", "research", { endpointId: "manus.research" }],
 ]);
 const ENDPOINT_TOOL_SPECS = Object.freeze(ENDPOINT_TOOL_DEFINITIONS.map(([name, title, description, inputKind, target]: any) => {
   const input = TOOL_INPUTS[inputKind];
@@ -185,7 +189,7 @@ export function tools(): McpTool[] {
     {
       name: "toolrouter_list_endpoints",
       title: "List ToolRouter endpoints",
-      description: "List verified ToolRouter endpoints available to this API key.",
+      description: "List verified ToolRouter endpoint IDs available to this API key. Manus status/result helpers are MCP tools, not endpoint IDs; use the endpoint mcp_tools metadata or tools/list for those helper names.",
       inputSchema: jsonSchema({
         category: { type: "string", description: "Optional endpoint category filter, such as search or browser_usage." },
       }),
@@ -258,8 +262,12 @@ export function tools(): McpTool[] {
           status: { type: "string" },
           poll_after_seconds: { type: "integer" },
           next_tools: { type: "object" },
+          next_mcp_tools: { type: "object" },
+          next_endpoint_ids: { type: "array", items: { type: "string" } },
+          next_api_routes: { type: "object" },
+          next_tool_calls: { type: "object" },
           repeat_for_same_query: { type: "boolean" },
-        }, ["task_created", "deduped", "task_id", "status", "poll_after_seconds", "next_tools", "repeat_for_same_query"]);
+        }, ["task_created", "deduped", "task_id", "status", "poll_after_seconds", "next_tools", "next_mcp_tools", "next_endpoint_ids", "next_tool_calls", "repeat_for_same_query"]);
         tool.annotations = { readOnlyHint: false, idempotentHint: true, openWorldHint: true };
       }
       return tool;
@@ -320,7 +328,40 @@ function valueFrom(data: any, key: string) {
   return data?.[key] ?? data?.body?.[key] ?? null;
 }
 
+function manusNextApiRoutes(taskId: string) {
+  const encodedTaskId = encodeURIComponent(taskId);
+  return {
+    status: `/v1/manus/tasks/${encodedTaskId}/status`,
+    result: `/v1/manus/tasks/${encodedTaskId}/result`,
+  };
+}
+
+function manusNextToolCalls(taskId: string, nextMcpTools: any, nextApiRoutes: any) {
+  return {
+    status: {
+      type: "mcp_tool",
+      tool_name: nextMcpTools.status,
+      arguments: { task_id: taskId },
+      api_route: nextApiRoutes.status,
+      note: "MCP tool name, not a ToolRouter endpoint_id.",
+    },
+    result: {
+      type: "mcp_tool",
+      tool_name: nextMcpTools.result,
+      arguments: { task_id: taskId },
+      api_route: nextApiRoutes.result,
+      note: "MCP tool name, not a ToolRouter endpoint_id.",
+    },
+  };
+}
+
 function manusResearchStartResult(data: any) {
+  const taskId = valueFrom(data, "task_id");
+  const nextMcpTools = valueFrom(data, "next_mcp_tools") || valueFrom(data, "next_tools") || MANUS_NEXT_MCP_TOOLS;
+  const nextApiRoutes = valueFrom(data, "next_api_routes") || (taskId ? manusNextApiRoutes(taskId) : null);
+  const nextToolCalls =
+    valueFrom(data, "next_tool_calls") ||
+    (taskId && nextApiRoutes ? manusNextToolCalls(taskId, nextMcpTools, nextApiRoutes) : null);
   const structuredContent = {
     id: data?.id || valueFrom(data, "request_id") || null,
     endpoint_id: data?.endpoint_id || "manus.research",
@@ -334,14 +375,15 @@ function manusResearchStartResult(data: any) {
     deduped: Boolean(valueFrom(data, "deduped")),
     request_id: valueFrom(data, "request_id") || data?.id || null,
     trace_id: valueFrom(data, "trace_id") || data?.trace_id || null,
-    task_id: valueFrom(data, "task_id"),
+    task_id: taskId,
     task_url: valueFrom(data, "task_url"),
     status: valueFrom(data, "status") || "running",
     poll_after_seconds: valueFrom(data, "poll_after_seconds") || 30,
-    next_tools: valueFrom(data, "next_tools") || {
-      status: "manus_research_status",
-      result: "manus_research_result",
-    },
+    next_tools: nextMcpTools,
+    next_mcp_tools: nextMcpTools,
+    next_endpoint_ids: valueFrom(data, "next_endpoint_ids") || [],
+    next_api_routes: nextApiRoutes,
+    next_tool_calls: nextToolCalls,
     repeat_for_same_query: false,
   };
   const missingTask = !structuredContent.task_id;
@@ -355,7 +397,7 @@ function manusResearchStartResult(data: any) {
         structuredContent.deduped ? "Existing Manus research task returned." : "Manus research task started.",
         `Task id: ${structuredContent.task_id}`,
         `Status: ${structuredContent.status}`,
-        `Next: call ${structuredContent.next_tools.status} or ${structuredContent.next_tools.result} after ${structuredContent.poll_after_seconds} seconds.`,
+        `Next MCP tools, not endpoint IDs: call ${structuredContent.next_mcp_tools.status} or ${structuredContent.next_mcp_tools.result} after ${structuredContent.poll_after_seconds} seconds.`,
         "Do not call start again for the same query unless the user explicitly asks for a new task.",
       ].join("\n");
   return textResult(text, structuredContent, missingTask);

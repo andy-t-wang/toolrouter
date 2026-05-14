@@ -77,4 +77,4 @@ Exposed tools include:
 - `exa_search`
 - `browserbase_session_create`
 
-Use `toolrouter_search` or `exa_search` for quick synchronous lookup. Use `manus_research_start` for deep research, then poll `manus_research_status` or `manus_research_result` with the returned `task_id`; do not start another task for the same query unless the user explicitly asks for a fresh run.
+Use `toolrouter_search` or `exa_search` for quick synchronous lookup. Use `manus_research_start` for deep research, then poll the MCP tools `manus_research_status` or `manus_research_result` with the returned `task_id`; those helper names are not ToolRouter endpoint IDs. Do not start another task for the same query unless the user explicitly asks for a fresh run.
