@@ -280,6 +280,20 @@ describe("router API", () => {
     );
     assert.ok(body.endpoints.every((endpoint) => endpoint.status));
 
+    const researchResponse = await fetch(`${baseUrl}/v1/endpoints?category=research`, { headers: authHeaders() });
+    assert.equal(researchResponse.status, 200);
+    const researchBody = await researchResponse.json();
+    assert.deepEqual(
+      researchBody.endpoints.map((endpoint) => endpoint.id),
+      ["manus.research"],
+    );
+    assert.equal(researchBody.endpoints[0].recommended_mcp_tool, "manus_research_start");
+    assert.deepEqual(researchBody.endpoints[0].mcp_tools, {
+      start: "manus_research_start",
+      status: "manus_research_status",
+      result: "manus_research_result",
+    });
+
     const dashboardResponse = await fetch(`${baseUrl}/v1/dashboard/endpoints`, { headers: sessionHeaders() });
     assert.equal(dashboardResponse.status, 200);
     assert.deepEqual(
@@ -1127,6 +1141,19 @@ describe("router API", () => {
       assert.equal(created.task_id, "task_proxy_2");
       assert.equal(created.body.task_id, "task_proxy_2");
       assert.equal(created.next_tools.status, "manus_research_status");
+      assert.deepEqual(created.next_mcp_tools, created.next_tools);
+      assert.deepEqual(created.next_endpoint_ids, []);
+      assert.deepEqual(created.next_api_routes, {
+        status: "/v1/manus/tasks/task_proxy_2/status",
+        result: "/v1/manus/tasks/task_proxy_2/result",
+      });
+      assert.deepEqual(created.next_tool_calls.status, {
+        type: "mcp_tool",
+        tool_name: "manus_research_status",
+        arguments: { task_id: "task_proxy_2" },
+        api_route: "/v1/manus/tasks/task_proxy_2/status",
+        note: "MCP tool name, not a ToolRouter endpoint_id.",
+      });
       assert.equal(created.repeat_for_same_query, false);
       assert.equal(executorCalls.length, 2);
       assert.equal(executorCalls[0].paymentMode, "agentkit_only");
