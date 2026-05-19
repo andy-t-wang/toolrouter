@@ -7,21 +7,14 @@ function createDb(requestRows = []) {
   const insertedHealthChecks = [];
   const upsertedStatuses = [];
   const endpointStatuses = [];
-  const healthChecks = [];
   return {
     insertedHealthChecks,
     upsertedStatuses,
     endpointStatuses,
-    healthChecks,
     listRequestFilters: [],
-    listHealthCheckFilters: [],
     async listRequests(filters) {
       this.listRequestFilters.push(filters);
       return requestRows;
-    },
-    async listHealthChecks(filters) {
-      this.listHealthCheckFilters.push(filters);
-      return healthChecks.filter((row) => !filters.endpoint_id || row.endpoint_id === filters.endpoint_id);
     },
     async listEndpointStatus() {
       return endpointStatuses;
@@ -102,7 +95,7 @@ describe("endpoint health worker", () => {
     assert.equal(db.insertedHealthChecks.length, 1);
   });
 
-  it("retries failed endpoints on the first backoff interval instead of waiting for the healthy cadence", async () => {
+  it("retries failing endpoints on the shorter retry interval instead of waiting for the healthy cadence", async () => {
     const endpoint = getEndpoint("browserbase.session");
     const db = createDb();
     db.endpointStatuses.push({
@@ -110,11 +103,6 @@ describe("endpoint health worker", () => {
       status: "failing",
       last_checked_at: "2026-05-09T10:00:00.000Z",
       status_code: 500,
-    });
-    db.healthChecks.push({
-      endpoint_id: "browserbase.session",
-      status: "failing",
-      checked_at: "2026-05-09T10:00:00.000Z",
     });
     let executed = false;
 
@@ -133,8 +121,7 @@ describe("endpoint health worker", () => {
       },
       now: () => new Date("2026-05-09T10:16:00.000Z"),
       minCheckIntervalMs: 12 * 60 * 60 * 1000,
-      failureRetryBaseMs: 15 * 60 * 1000,
-      failureRetryMaxMs: 12 * 60 * 60 * 1000,
+      failureRetryIntervalMs: 15 * 60 * 1000,
     });
 
     assert.equal(executed, true);
@@ -142,27 +129,15 @@ describe("endpoint health worker", () => {
     assert.equal(db.insertedHealthChecks.length, 1);
   });
 
-  it("skips failed endpoints until their exponential backoff interval elapses", async () => {
+  it("skips degraded endpoints until the fixed retry interval elapses, without backing off further", async () => {
     const endpoint = getEndpoint("browserbase.session");
     const db = createDb();
     db.endpointStatuses.push({
       endpoint_id: "browserbase.session",
-      status: "failing",
+      status: "degraded",
       last_checked_at: "2026-05-09T10:00:00.000Z",
-      status_code: 500,
+      status_code: 402,
     });
-    db.healthChecks.push(
-      {
-        endpoint_id: "browserbase.session",
-        status: "failing",
-        checked_at: "2026-05-09T10:00:00.000Z",
-      },
-      {
-        endpoint_id: "browserbase.session",
-        status: "failing",
-        checked_at: "2026-05-09T09:44:00.000Z",
-      },
-    );
     let executed = false;
 
     const result = await runEndpointHealthCheck({
@@ -172,17 +147,15 @@ describe("endpoint health worker", () => {
         executed = true;
         return { ok: true, status_code: 200, path: "agentkit_to_x402", charged: true };
       },
-      now: () => new Date("2026-05-09T10:20:00.000Z"),
+      now: () => new Date("2026-05-09T10:10:00.000Z"),
       minCheckIntervalMs: 12 * 60 * 60 * 1000,
-      failureRetryBaseMs: 15 * 60 * 1000,
-      failureRetryMaxMs: 12 * 60 * 60 * 1000,
+      failureRetryIntervalMs: 15 * 60 * 1000,
     });
 
     assert.equal(executed, false);
     assert.equal(result.skipped, true);
-    assert.equal(result.skip_reason, "failure_backoff");
-    assert.equal(result.consecutive_failures, 2);
-    assert.equal(result.next_check_after_ms, 30 * 60 * 1000);
+    assert.equal(result.skip_reason, "failure_retry");
+    assert.equal(result.next_check_after_ms, 15 * 60 * 1000);
   });
 
   it("allows forced probes to bypass the cadence guard", async () => {
