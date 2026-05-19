@@ -5,8 +5,7 @@ import { endpointRegistry } from "../endpoints/registry.ts";
 
 export const DEFAULT_HEALTH_CHECK_INTERVAL_MS = 12 * 60 * 60 * 1000;
 export const DEFAULT_HEALTH_PROBE_TIMEOUT_MS = 5_000;
-export const DEFAULT_HEALTH_FAILURE_RETRY_BASE_MS = 15 * 60 * 1000;
-export const DEFAULT_HEALTH_FAILURE_RETRY_MAX_MS = DEFAULT_HEALTH_CHECK_INTERVAL_MS;
+export const DEFAULT_HEALTH_RETRY_INTERVAL_MS = 15 * 60 * 1000;
 
 export const HEALTH_STATUSES = Object.freeze(["healthy", "degraded", "failing", "unverified"]);
 
@@ -38,18 +37,11 @@ function checkIntervalMs(value) {
   return intervalMs && intervalMs > 0 ? Math.floor(intervalMs) : DEFAULT_HEALTH_CHECK_INTERVAL_MS;
 }
 
-function failureRetryBaseMs(value) {
+function retryIntervalMs(value) {
   const intervalMs = maybeNumber(value);
   return intervalMs && intervalMs > 0
     ? Math.floor(intervalMs)
-    : envMs("TOOLROUTER_HEALTH_FAILURE_RETRY_BASE_MS", DEFAULT_HEALTH_FAILURE_RETRY_BASE_MS);
-}
-
-function failureRetryMaxMs(value) {
-  const intervalMs = maybeNumber(value);
-  return intervalMs && intervalMs > 0
-    ? Math.floor(intervalMs)
-    : envMs("TOOLROUTER_HEALTH_FAILURE_RETRY_MAX_MS", DEFAULT_HEALTH_FAILURE_RETRY_MAX_MS);
+    : envMs("TOOLROUTER_HEALTH_RETRY_INTERVAL_MS", DEFAULT_HEALTH_RETRY_INTERVAL_MS);
 }
 
 function workerTickMs(value, fallback) {
@@ -164,64 +156,29 @@ async function currentEndpointStatus(db, endpointId) {
   }
 }
 
-async function recentHealthChecks(db, endpointId, limit = 25) {
-  if (!db || typeof db.listHealthChecks !== "function") return [];
-  try {
-    const rows = await db.listHealthChecks({ endpoint_id: endpointId, limit });
-    return (rows || []).slice().sort((a, b) => {
-      const aTime = Date.parse(a?.checked_at || a?.last_checked_at || "");
-      const bTime = Date.parse(b?.checked_at || b?.last_checked_at || "");
-      return (Number.isFinite(bTime) ? bTime : 0) - (Number.isFinite(aTime) ? aTime : 0);
-    });
-  } catch {
-    return [];
-  }
-}
-
 function isRecoveryStatus(status) {
   return status === "failing" || status === "degraded";
 }
 
-function consecutiveRecoveryChecks(rows) {
-  let count = 0;
-  for (const row of rows || []) {
-    if (!isRecoveryStatus(row?.status)) break;
-    count += 1;
-  }
-  return Math.max(1, count);
-}
-
-function recoveryBackoffMs(attemptCount, baseMs, maxMs) {
-  const base = failureRetryBaseMs(baseMs);
-  const max = failureRetryMaxMs(maxMs);
-  const multiplier = 2 ** Math.max(0, Number(attemptCount || 1) - 1);
-  return Math.min(max, base * multiplier);
-}
-
-async function endpointProbeCadence({ db, endpointId, statusRow, now, healthyIntervalMs, retryBaseMs, retryMaxMs }) {
-  const status = statusRow?.status;
+// Healthy endpoints probe on the standard cadence. A degraded/failing endpoint
+// retries on a fixed shorter interval (never longer than the standard cadence)
+// so recovery is detected quickly — no exponential backoff, which used to delay
+// recovery detection for exactly the endpoints that needed probing most.
+function endpointProbeCadence({ statusRow, now, intervalMs, failureRetryIntervalMs }) {
   const checkedAt = statusRow?.last_checked_at || statusRow?.checked_at;
   if (!checkedAt) return { due: true, intervalMs: 0, reason: null };
   const checkedAtMs = Date.parse(checkedAt);
   if (!Number.isFinite(checkedAtMs)) return { due: true, intervalMs: 0, reason: null };
 
-  if (!isRecoveryStatus(status)) {
-    const intervalMs = checkIntervalMs(healthyIntervalMs);
-    return {
-      due: now.getTime() - checkedAtMs >= intervalMs,
-      intervalMs,
-      reason: "recent_health_check",
-    };
-  }
-
-  const checks = await recentHealthChecks(db, endpointId);
-  const failures = consecutiveRecoveryChecks(checks);
-  const intervalMs = recoveryBackoffMs(failures, retryBaseMs, retryMaxMs);
+  const healthyMs = checkIntervalMs(intervalMs);
+  const recovering = isRecoveryStatus(statusRow?.status);
+  const cadenceMs = recovering
+    ? Math.min(healthyMs, retryIntervalMs(failureRetryIntervalMs))
+    : healthyMs;
   return {
-    due: now.getTime() - checkedAtMs >= intervalMs,
-    intervalMs,
-    reason: "failure_backoff",
-    consecutive_failures: failures,
+    due: now.getTime() - checkedAtMs >= cadenceMs,
+    intervalMs: cadenceMs,
+    reason: recovering ? "failure_retry" : "recent_health_check",
   };
 }
 
@@ -352,8 +309,7 @@ export async function runEndpointHealthCheck({
   useRecentRequests = true,
   timeoutMs,
   minCheckIntervalMs = null,
-  failureRetryBaseMs = null,
-  failureRetryMaxMs = null,
+  failureRetryIntervalMs = null,
   probeKind = "availability",
   updateEndpointStatus = true,
   force = false,
@@ -364,14 +320,11 @@ export async function runEndpointHealthCheck({
 
   if (!force && minCheckIntervalMs) {
     const currentStatus = await currentEndpointStatus(db, endpoint.id);
-    const cadence = await endpointProbeCadence({
-      db,
-      endpointId: endpoint.id,
+    const cadence = endpointProbeCadence({
       statusRow: currentStatus,
       now: checkedAt,
-      healthyIntervalMs: minCheckIntervalMs,
-      retryBaseMs: failureRetryBaseMs,
-      retryMaxMs: failureRetryMaxMs,
+      intervalMs: minCheckIntervalMs,
+      failureRetryIntervalMs,
     });
     if (currentStatus && !cadence.due) {
       return {
@@ -380,7 +333,6 @@ export async function runEndpointHealthCheck({
         skipped: true,
         skip_reason: cadence.reason,
         next_check_after_ms: cadence.intervalMs,
-        consecutive_failures: cadence.consecutive_failures ?? null,
         healthCheck: null,
         endpointStatus: currentStatus,
       };
@@ -477,8 +429,7 @@ export async function runEndpointHealthChecks({
   useRecentRequests = true,
   timeoutMs,
   minCheckIntervalMs = null,
-  failureRetryBaseMs = null,
-  failureRetryMaxMs = null,
+  failureRetryIntervalMs = null,
   probeKind = "availability",
   updateEndpointStatus = true,
   force = false,
@@ -495,8 +446,7 @@ export async function runEndpointHealthChecks({
       useRecentRequests,
       timeoutMs,
       minCheckIntervalMs,
-      failureRetryBaseMs,
-      failureRetryMaxMs,
+      failureRetryIntervalMs,
       probeKind,
       updateEndpointStatus,
       force,
@@ -514,7 +464,6 @@ export async function runEndpointHealthChecks({
       skipped: Boolean(result.skipped),
       skip_reason: result.skip_reason ?? null,
       next_check_after_ms: result.next_check_after_ms ?? null,
-      consecutive_failures: result.consecutive_failures ?? null,
       error: result.healthCheck?.error ?? null,
     });
   }
@@ -524,17 +473,15 @@ export async function runEndpointHealthChecks({
 export function createHealthWorker(options) {
   let timer = null;
   const intervalMs = options?.intervalMs ?? DEFAULT_HEALTH_CHECK_INTERVAL_MS;
-  const retryBaseMs = failureRetryBaseMs(options?.failureRetryBaseMs);
-  const retryMaxMs = failureRetryMaxMs(options?.failureRetryMaxMs);
+  const failureRetryIntervalMs = retryIntervalMs(options?.failureRetryIntervalMs);
   const tickMs = workerTickMs(
     options?.tickMs ?? process.env.TOOLROUTER_HEALTH_WORKER_TICK_MS,
-    Math.min(intervalMs, retryBaseMs),
+    Math.min(intervalMs, failureRetryIntervalMs),
   );
   const runOptions = {
     ...options,
     minCheckIntervalMs: options?.minCheckIntervalMs ?? intervalMs,
-    failureRetryBaseMs: retryBaseMs,
-    failureRetryMaxMs: retryMaxMs,
+    failureRetryIntervalMs,
   };
   return {
     runOnce: (overrides = {}) => runEndpointHealthChecks({ ...runOptions, ...overrides }),

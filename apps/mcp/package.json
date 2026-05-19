@@ -1,6 +1,6 @@
 {
   "name": "@worldcoin/toolrouter",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "private": false,
   "license": "Apache-2.0",
   "description": "ToolRouter MCP adapter for AgentKit-first x402 tools.",
@@ -42,7 +42,8 @@
     "dev": "node --env-file-if-exists=../../.env --import tsx src/server.ts",
     "start": "node --env-file-if-exists=../../.env --import tsx src/server.ts",
     "check": "tsc -p ../../tsconfig.json --noEmit",
-    "prepack": "npm run build"
+    "verify-dist": "node scripts/verify-dist.mjs",
+    "prepack": "npm run build && npm run verify-dist"
   },
   "dependencies": {}
 }
