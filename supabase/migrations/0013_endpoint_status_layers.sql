@@ -30,4 +30,17 @@ comment on column endpoint_status.layer_upstream_status is
 comment on column endpoint_status.layer_transport_status is
   'Per-layer status for the network/transport reach (DNS, TCP, TLS, timeouts before any application response). One of healthy | degraded | failing | unknown.';
 
+-- Grant the same column-explicit select that the original 0002 migration
+-- applied to `endpoint_status` — these new columns are layer enums + their
+-- update timestamps, same disclosure tier as the existing public-status fields.
+-- Authenticated reads are additive (the API server still uses the service-role
+-- connection); this keeps the policy aligned for any future direct dashboard
+-- reads against the table.
+grant select (
+  layer_facilitator_status, layer_facilitator_updated_at,
+  layer_agentkit_status, layer_agentkit_updated_at,
+  layer_upstream_status, layer_upstream_updated_at,
+  layer_transport_status, layer_transport_updated_at
+) on table endpoint_status to authenticated;
+
 select pg_notify('pgrst', 'reload schema');

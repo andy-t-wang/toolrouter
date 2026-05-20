@@ -32,6 +32,16 @@ export interface SellerRoutesOpts {
   manusWrapper?: any;
   /** Custom factory matching `registerManusSellerService` signature. */
   createManusWrapper?: typeof registerManusSellerService;
+  /**
+   * When true (production), default Manus registration runs eagerly at boot
+   * so misconfigured deploys (missing `MANUS_API_KEY`, bad CDP credentials)
+   * fail synchronously. The plan's R7 + seller-secrets convention promise
+   * boot-time validation; this flag is how server.ts opts in without
+   * breaking local-dev workflows that start the API without a Manus key.
+   * Defaults to false so tests and bare `createApiApp({})` calls keep the
+   * existing lazy-first-request behavior.
+   */
+  eagerSellerInit?: boolean;
 }
 
 function manusWrapperToService(wrapper: any): SellerService {
@@ -89,6 +99,19 @@ export async function sellersRoutes(app: any, opts: SellerRoutesOpts = {}) {
     await registerSellerServices(app, [manusWrapperToService(opts.manusWrapper)]);
     return;
   }
+  const factory = opts.createManusWrapper || registerManusSellerService;
+  if (opts.eagerSellerInit && !opts.createManusWrapper) {
+    // Production path: boot-time secret + facilitator validation per the
+    // plan's R7 promise. Throws on missing MANUS_API_KEY / bad CDP creds
+    // before the API starts listening, so a misconfigured deploy fails
+    // synchronously rather than 503ing on first traffic.
+    const wrapper = await factory({
+      cache: app.cache,
+      agentBook: app.agentBookVerifier || (await loadAgentBookVerifier()),
+    });
+    await registerSellerServices(app, [manusWrapperToService(wrapper)]);
+    return;
+  }
   // Default + legacy `createManusWrapper`: lazy first-request construction.
   //
   // Rationale: a) the integration suite's "retries Manus wrapper
@@ -96,8 +119,7 @@ export async function sellersRoutes(app: any, opts: SellerRoutesOpts = {}) {
   // to error and a subsequent one to succeed, b) several unit tests construct
   // `createApiApp` without setting MANUS_API_KEY and only exercise non-Manus
   // routes — eager construction would break them. Boot-time validation is
-  // available to callers via `services: [...]` or `manusWrapper: ...` paths,
-  // which are the production-recommended shapes.
-  const factory = opts.createManusWrapper || registerManusSellerService;
+  // available to callers via `services: [...]`, `manusWrapper: ...`, or the
+  // `eagerSellerInit: true` opt-in used by server.ts in production.
   registerLazyManusProxy(app, factory);
 }

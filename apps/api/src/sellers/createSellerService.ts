@@ -202,9 +202,10 @@ export async function createSellerService(
   registerExactEvmScheme(resourceServer, { networks: [network] });
   resourceServer.registerExtension(agentkitResourceServerExtension);
 
+  const agentkitMode = mapAgentkitMode(manifest);
   const hooks = createAgentkitHooks({
     agentBook: deps.agentBook,
-    mode: mapAgentkitMode(manifest),
+    mode: agentkitMode,
     storage: deps.storage,
     rpcUrl: process.env.AGENTKIT_WORLDCHAIN_RPC_URL || undefined,
   });
@@ -228,7 +229,7 @@ export async function createSellerService(
         resourceUri: routeUrl,
         statement: `Verify your agent for free uses of ${manifest.id}.`,
         network: agentkitNetwork,
-        mode: mapAgentkitMode(manifest),
+        mode: agentkitMode,
       }),
       unpaidResponseBody: () => ({
         contentType: manifest.mime_type,

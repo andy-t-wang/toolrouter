@@ -56,6 +56,12 @@ export interface CreateApiAppDeps {
   /** Pre-built seller list. Overrides both `manusWrapper` and
    *  `createManusWrapper`. */
   sellerServices?: SellerRoutesOpts["services"];
+  /**
+   * When true, register the default Manus seller eagerly at boot so missing
+   * `MANUS_API_KEY` / bad CDP credentials fail synchronously. server.ts opts
+   * in for production; tests + bare `createApiApp({})` keep the lazy default.
+   */
+  eagerSellerInit?: SellerRoutesOpts["eagerSellerInit"];
   manusFetch?: typeof fetch;
   logger?: any;
 }
@@ -75,6 +81,7 @@ export function createApiApp(deps: CreateApiAppDeps = {}) {
     manusWrapper = null,
     createManusWrapper = registerManusSellerService,
     sellerServices,
+    eagerSellerInit = false,
     manusFetch = fetch,
     logger = true,
   } = deps;
@@ -144,6 +151,7 @@ export function createApiApp(deps: CreateApiAppDeps = {}) {
     services: sellerServices,
     manusWrapper,
     createManusWrapper,
+    eagerSellerInit,
   });
 
   return app;
