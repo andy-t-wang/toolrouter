@@ -32,17 +32,9 @@ import {
   shouldPreflightAgentKitFreeTrial,
 } from "./preflight.ts";
 import { MANUS_RESEARCH_ENDPOINT_ID } from "../manus-tasks.ts";
+import { envMs, requireObject, timedOut } from "../util.ts";
 
 const DEFAULT_REQUEST_TIMEOUT_MS = 8_000;
-
-function envMs(name: string, fallback: number) {
-  const value = Number(process.env[name]);
-  return Number.isFinite(value) && value > 0 ? Math.floor(value) : fallback;
-}
-
-function timedOut(result: any) {
-  return String(result?.error || "").includes("timed out after");
-}
 
 function logEndpointRequest(logger: any, endpoint: any, result: any) {
   logger?.info?.(
@@ -172,16 +164,6 @@ const REQUEST_CONTROL_FIELDS = new Set([
   "force_new",
   "forceNew",
 ]);
-
-function requireObject(value: any, label: string) {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw Object.assign(new Error(`${label} must be an object`), {
-      statusCode: 400,
-      code: "invalid_request",
-    });
-  }
-  return value;
-}
 
 export function endpointInputFromRequestBody(body: any) {
   if (body.input !== undefined) return requireObject(body.input, "input");

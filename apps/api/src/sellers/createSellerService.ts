@@ -163,9 +163,6 @@ export interface SellerServiceDeps {
     reply: any;
     secrets: Record<string, string>;
   }) => Promise<unknown>;
-  /** Fetch implementation override (unused by the primitive itself — passed
-   *  through to `forwardUpstream` callers that close over it). */
-  fetchImpl?: typeof fetch;
 }
 
 export interface SellerService {

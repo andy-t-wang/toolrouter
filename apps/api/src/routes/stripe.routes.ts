@@ -5,6 +5,7 @@
 // `request.rawBody` (set by the parser) and re-derives the HMAC from the
 // original bytes. Registering before the parser breaks signature verification.
 
+import { recordStripeSessionMetric } from "../services/stripe-checkout.ts";
 import {
   checkoutSessionFromEvent,
   processStripeCheckoutCompleted,
@@ -15,12 +16,6 @@ function rawBodyFrom(request: any) {
   if (typeof request.rawBody === "string") return request.rawBody;
   if (request.body === undefined) return "";
   return JSON.stringify(request.body);
-}
-
-function recordStripeSessionMetric(datadog: any, status: string) {
-  datadog?.increment?.("toolrouter.stripe.sessions.count", {
-    status,
-  }).catch(() => undefined);
 }
 
 export async function stripeRoutes(app: any) {

@@ -17,25 +17,11 @@ import {
   publicLedgerEntry,
   publicTopUp,
 } from "../services/monitoring.ts";
-
-function requireObject(value: any, label: string) {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw Object.assign(new Error(`${label} must be an object`), {
-      statusCode: 400,
-      code: "invalid_request",
-    });
-  }
-  return value;
-}
+import { recordStripeSessionMetric } from "../services/stripe-checkout.ts";
+import { requireObject } from "../services/util.ts";
 
 function topUpLimitUsd() {
   return assertTopUpAmount(process.env.TOOLROUTER_MAX_TOP_UP_USD || "5");
-}
-
-function recordStripeSessionMetric(datadog: any, status: string) {
-  datadog?.increment?.("toolrouter.stripe.sessions.count", {
-    status,
-  }).catch(() => undefined);
 }
 
 export async function ledgerRoutes(app: any) {

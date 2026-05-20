@@ -88,7 +88,7 @@ function buildResearchPrompt(input: any) {
     "",
     "Return concise findings with sources when possible. If the answer is uncertain, say what remains unverified.",
   );
-  return lines.filter((line, index) => index === 0 || line !== undefined).join("\n");
+  return lines.join("\n");
 }
 
 export function buildManusTaskBody(input: any) {

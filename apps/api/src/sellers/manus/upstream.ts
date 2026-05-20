@@ -107,14 +107,19 @@ export class MonthlyAgentKitStorage {
   }
 }
 
-function safeUpstreamError(status: number) {
+/**
+ * HTTP error → user-facing label. Shared with the buyer-side task-detail
+ * helpers in `./tasks.ts` so the label stays consistent across the
+ * settlement-side forwarder and the read-only task lookups.
+ */
+export function safeUpstreamError(status: number) {
   if (status === 401 || status === 403) return "Manus authentication failed";
   if (status === 429) return "Manus rate limited";
   if (status >= 500) return "Manus provider error";
   return "Manus request failed";
 }
 
-async function readJsonResponse(response: Response) {
+export async function readJsonResponse(response: Response) {
   const text = await response.text();
   if (!text) return null;
   try {

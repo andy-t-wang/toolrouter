@@ -3,6 +3,8 @@
 // seller route registration — so they live alongside the seller module but are
 // consumed directly from the gateway routes that own those endpoints.
 
+import { readJsonResponse, safeUpstreamError } from "./upstream.ts";
+
 function manusApiKey() {
   const key = process.env.MANUS_API_KEY;
   if (!key) {
@@ -12,23 +14,6 @@ function manusApiKey() {
     });
   }
   return key;
-}
-
-function safeUpstreamError(status: number) {
-  if (status === 401 || status === 403) return "Manus authentication failed";
-  if (status === 429) return "Manus rate limited";
-  if (status >= 500) return "Manus provider error";
-  return "Manus request failed";
-}
-
-async function readJsonResponse(response: Response) {
-  const text = await response.text();
-  if (!text) return null;
-  try {
-    return JSON.parse(text);
-  } catch {
-    return { text };
-  }
 }
 
 async function fetchManusJson({

@@ -6,12 +6,9 @@
 
 import { realizedAgentKitValue } from "@toolrouter/router-core";
 
-const DEFAULT_AGENTKIT_PREFLIGHT_TIMEOUT_MS = 10_000;
+import { envMs, timedOut } from "../util.ts";
 
-function envMs(name: string, fallback: number) {
-  const value = Number(process.env[name]);
-  return Number.isFinite(value) && value > 0 ? Math.floor(value) : fallback;
-}
+const DEFAULT_AGENTKIT_PREFLIGHT_TIMEOUT_MS = 10_000;
 
 export function agentKitPreflightTimeoutMs() {
   const configured = envMs(
@@ -30,10 +27,6 @@ export function realizedFreeTrial(endpoint: any, result: any) {
     result?.ok === true &&
     realizedAgentKitValue(endpoint, result).agentkit_value_type === "free_trial"
   );
-}
-
-function timedOut(result: any) {
-  return String(result?.error || "").includes("timed out after");
 }
 
 export function logAgentKitPreflight(

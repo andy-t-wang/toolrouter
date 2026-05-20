@@ -86,6 +86,5 @@ export async function registerManusSellerService({
     storage,
     forwardUpstream: async ({ request, reply, secrets }) =>
       forwardManusUpstream({ request, reply, secrets, fetchImpl }),
-    fetchImpl,
   });
 }

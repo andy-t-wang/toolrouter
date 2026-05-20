@@ -5,15 +5,7 @@
 
 import { authenticateSupabaseUser } from "@toolrouter/auth";
 
-function requireObject(value: any, label: string) {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw Object.assign(new Error(`${label} must be an object`), {
-      statusCode: 400,
-      code: "invalid_request",
-    });
-  }
-  return value;
-}
+import { requireObject } from "../services/util.ts";
 
 export async function authKeysRoutes(app: any) {
   const { store } = app;

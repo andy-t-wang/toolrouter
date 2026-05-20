@@ -191,3 +191,12 @@ export class StripeClient {
 export function createStripeClient(config: StripeConfig = {}) {
   return new StripeClient(config);
 }
+
+/**
+ * Datadog increment for Stripe Checkout session lifecycle events. Used by
+ * both `ledgerRoutes` (top-up creation) and `stripeRoutes` (webhook
+ * completion/failure) so the metric name + tag shape stays in one place.
+ */
+export function recordStripeSessionMetric(datadog: any, status: string) {
+  datadog?.increment?.("toolrouter.stripe.sessions.count", { status }).catch(() => undefined);
+}

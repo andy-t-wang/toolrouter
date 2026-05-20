@@ -8,14 +8,10 @@
 import { countsAsAgentKitEvidence, listCategories, listEndpoints } from "@toolrouter/router-core";
 
 import { agentRequestLabel, attributeFailure } from "./attribution.ts";
+import { MANUS_NEXT_MCP_TOOLS, MANUS_RESEARCH_ENDPOINT_ID } from "./manus-tasks.ts";
 
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
-const MANUS_RESEARCH_ENDPOINT_ID = "manus.research";
 
-const MANUS_NEXT_MCP_TOOLS = Object.freeze({
-  status: "manus_research_status",
-  result: "manus_research_result",
-});
 const MANUS_MCP_TOOLS = Object.freeze({
   start: "manus_research_start",
   ...MANUS_NEXT_MCP_TOOLS,
