@@ -1751,6 +1751,11 @@ describe("router API", () => {
       const listed = await listResponse.json();
       assert.equal(listed.requests[0].status_code, 504);
       assert.equal(listed.requests[0].latency_ms, 8_000);
+      // NOTE: pre-existing behavior — `/v1/requests` returns the raw `error`
+      // column. Tracked as a known residual; needs orchestrator-level
+      // provenance to distinguish safe-to-surface body errors (Manus auth
+      // failed) from raw executor strings (timeout messages) before redaction
+      // can be applied uniformly. See PR Known Residuals.
       assert.equal(listed.requests[0].error, "provider timed out after 8000ms");
     }).finally(() => {
       if (previousTimeout === undefined) delete process.env.TOOLROUTER_REQUEST_TIMEOUT_MS;

@@ -66,23 +66,34 @@ function manusWrapperToService(wrapper: any): SellerService {
  * Lazy Manus proxy. Defers `createManusWrapper` invocation to the first
  * request. Preserves the integration-test retry semantics where the first
  * request returns 503 and a subsequent one succeeds.
+ *
+ * Concurrency model: track the in-flight attempt explicitly. If a request
+ * arrives while a prior attempt is still resolving, await the same attempt
+ * (avoid duplicate factory calls). If the awaited attempt has already
+ * rejected by the time we check, start a fresh attempt rather than re-using
+ * the stale rejected promise (the failure already propagated to the original
+ * caller; the next caller deserves a retry).
  */
 function registerLazyManusProxy(
   app: any,
   factory: typeof registerManusSellerService,
 ) {
-  let wrapperPromise: Promise<any> | null = null;
+  let inFlight: Promise<any> | null = null;
   async function getWrapper() {
-    if (!wrapperPromise) {
-      wrapperPromise = factory({
-        cache: app.cache,
-        agentBook: app.agentBookVerifier || (await loadAgentBookVerifier()),
-      }).catch((error: unknown) => {
-        wrapperPromise = null;
-        throw error;
-      });
+    if (inFlight) return inFlight;
+    const attempt = factory({
+      cache: app.cache,
+      agentBook: app.agentBookVerifier || (await loadAgentBookVerifier()),
+    });
+    inFlight = attempt;
+    try {
+      return await attempt;
+    } catch (error) {
+      // Only clear if we're still the active attempt — guards against a
+      // racing successful retry that already replaced inFlight.
+      if (inFlight === attempt) inFlight = null;
+      throw error;
     }
-    return wrapperPromise;
   }
   app.post("/x402/manus/research", async (request: any, reply: any) => {
     const wrapper = await getWrapper();

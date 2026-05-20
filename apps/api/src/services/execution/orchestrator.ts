@@ -108,6 +108,11 @@ function normalizePayment(result: any) {
   };
 }
 
+// TODO(N=2-async-sellers): Manus is currently the only async-task endpoint,
+// so the body-error fallback is hard-keyed to its id. When a second async
+// seller lands (was U9 in the plan, deferred), generalize this via an
+// endpoint-manifest `async_task` field exposing a body-error extractor —
+// same pattern the U9 deferral plans for the whole async-task lifecycle.
 function safeResultBodyError(endpoint: any, result: any) {
   if (result?.ok !== false) return null;
   if (endpoint?.id !== MANUS_RESEARCH_ENDPOINT_ID) return null;

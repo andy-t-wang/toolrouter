@@ -210,7 +210,10 @@ function freshLayerStatus(value: any, updatedAt: any, now: Date) {
   if (!value) return "unknown";
   const updatedAtMs = typeof updatedAt === "string" ? Date.parse(updatedAt) : NaN;
   if (!Number.isFinite(updatedAtMs)) return "unknown";
-  if (now.getTime() - updatedAtMs > LAYER_FRESHNESS_WINDOW_MS) return "unknown";
+  // Bound staleness symmetrically so writer/reader clock skew in either
+  // direction collapses to "unknown" instead of trusting a future timestamp
+  // as fresh forever.
+  if (Math.abs(now.getTime() - updatedAtMs) > LAYER_FRESHNESS_WINDOW_MS) return "unknown";
   return String(value);
 }
 
@@ -534,6 +537,14 @@ export function apiTraceDto(row: any) {
     agentkit_value_type: row.agentkit_value_type || null,
     agentkit_value_label: row.agentkit_value_label || null,
     latency_ms: row.latency_ms ?? null,
+    // NOTE: `error` is the raw column. Pre-existing behavior: surfaces
+    // upstream body errors (e.g., "Manus authentication failed") to API
+    // consumers because operators rely on them. Code review flagged that
+    // raw executor errors (timeout strings, payment headers) could also
+    // leak here — tracked as a known residual; the fix needs to distinguish
+    // structured body errors (safe to surface) from raw executor errors
+    // (need redaction), and the row column doesn't currently carry that
+    // provenance. Defer until the orchestrator splits the columns.
     error: row.error || null,
   };
 }

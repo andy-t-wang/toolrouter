@@ -259,6 +259,13 @@ export async function createSellerService(
     if (replyStatus >= 400) return body;
 
     if (processResult.type === "payment-verified") {
+      // Serialize the response body ONCE and reply with the exact same bytes
+      // we HMAC for settlement. Returning `body` would let Fastify re-serialize
+      // with its own JSON.stringify (key order, replacer plugins, BigInt
+      // handling), which would diverge from the settlement receipt and break
+      // buyer-side verification. The bytes that get HMAC'd must equal the
+      // bytes Fastify writes — capture once, ship the buffer.
+      const responseBuffer = Buffer.from(JSON.stringify(body));
       const settleResult = await server.processSettlement(
         processResult.paymentPayload,
         processResult.paymentRequirements,
@@ -269,7 +276,7 @@ export async function createSellerService(
             path: adapter.getPath(),
             method: adapter.getMethod(),
           },
-          responseBody: Buffer.from(JSON.stringify(body)),
+          responseBody: responseBuffer,
           responseHeaders: { "content-type": manifest.mime_type },
         },
       );
@@ -279,6 +286,9 @@ export async function createSellerService(
       for (const [key, value] of Object.entries(settleResult.headers || {})) {
         reply.header(key, value as any);
       }
+      reply.type(manifest.mime_type);
+      reply.send(responseBuffer);
+      return reply;
     }
     return body;
   }
