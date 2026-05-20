@@ -111,11 +111,17 @@ export async function sellersRoutes(app: any, opts: SellerRoutesOpts = {}) {
     return;
   }
   const factory = opts.createManusWrapper || registerManusSellerService;
-  if (opts.eagerSellerInit && !opts.createManusWrapper) {
+  if (opts.eagerSellerInit) {
     // Production path: boot-time secret + facilitator validation per the
     // plan's R7 promise. Throws on missing MANUS_API_KEY / bad CDP creds
     // before the API starts listening, so a misconfigured deploy fails
     // synchronously rather than 503ing on first traffic.
+    //
+    // Gated on `eagerSellerInit` alone, NOT also on `!opts.createManusWrapper`
+    // — `createApiApp` always defaults `createManusWrapper` to
+    // `registerManusSellerService` so a `!createManusWrapper` gate would
+    // never fire in production. Tests that exercise the lazy-retry path
+    // simply omit `eagerSellerInit`, so they stay on the lazy proxy below.
     const wrapper = await factory({
       cache: app.cache,
       agentBook: app.agentBookVerifier || (await loadAgentBookVerifier()),
@@ -123,14 +129,12 @@ export async function sellersRoutes(app: any, opts: SellerRoutesOpts = {}) {
     await registerSellerServices(app, [manusWrapperToService(wrapper)]);
     return;
   }
-  // Default + legacy `createManusWrapper`: lazy first-request construction.
+  // Default (no eager opt-in): lazy first-request construction.
   //
   // Rationale: a) the integration suite's "retries Manus wrapper
   // initialization after a transient failure" test expects the first request
   // to error and a subsequent one to succeed, b) several unit tests construct
   // `createApiApp` without setting MANUS_API_KEY and only exercise non-Manus
-  // routes — eager construction would break them. Boot-time validation is
-  // available to callers via `services: [...]`, `manusWrapper: ...`, or the
-  // `eagerSellerInit: true` opt-in used by server.ts in production.
+  // routes — eager construction would break them.
   registerLazyManusProxy(app, factory);
 }

@@ -286,7 +286,28 @@ function layerStatusForSuccessfulProbe(probeKind, probePaymentMode, path) {
   return layers;
 }
 
-function layerStatusForAttributedFailure(attribution, statusCode): Record<string, string> {
+function probeExercisedFacilitator(probeKind, probePaymentMode, path) {
+  // Did this probe actually exercise the x402 facilitator? Only then can we
+  // make any claim about the facilitator layer (healthy or otherwise) —
+  // claiming healthy when the AgentKit path served the response would
+  // overwrite a previously-degraded facilitator with a false recovery.
+  //
+  // Path takes precedence over probe config: a paid probe that returned
+  // path:"agentkit" was served from the AgentKit cache and never hit the
+  // facilitator, even though the probe was configured as x402_only.
+  const pathName = typeof path === "string" ? path.toLowerCase() : "";
+  if (pathName === "x402" || pathName === "agentkit_to_x402") return true;
+  if (pathName === "agentkit") return false;
+  // Path missing / unknown: fall back to probe config.
+  if (probeKind === "availability" && probePaymentMode === "x402_only") return true;
+  return false;
+}
+
+function layerStatusForAttributedFailure(
+  attribution,
+  statusCode,
+  { probeKind = "availability", probePaymentMode = null, path = null } = {},
+): Record<string, string> {
   // A failure was attributed. The attribution layer is downgraded; all other
   // layers are left untouched (the store merges with the previous row).
   const severity = statusCode === null || (Number.isFinite(statusCode) && statusCode >= 500)
@@ -296,7 +317,16 @@ function layerStatusForAttributedFailure(attribution, statusCode): Record<string
   if (layer === "facilitator") return { facilitator: severity, transport: "healthy" };
   if (layer === "router_payment") return { facilitator: severity, transport: "healthy" };
   if (layer === "agentkit") return { agentkit: severity, transport: "healthy" };
-  if (layer === "upstream") return { upstream: severity, facilitator: "healthy", transport: "healthy" };
+  if (layer === "upstream") {
+    // Only mark facilitator healthy when the probe actually settled. An
+    // `agentkit_first` probe that took the AgentKit path and saw an upstream
+    // 4xx/5xx never exercised the facilitator — leaving it untouched preserves
+    // the previously-known facilitator status instead of falsely recovering it.
+    if (probeExercisedFacilitator(probeKind, probePaymentMode, path)) {
+      return { upstream: severity, facilitator: "healthy", transport: "healthy" };
+    }
+    return { upstream: severity, transport: "healthy" };
+  }
   if (layer === "rate_limit") return { upstream: severity, transport: "healthy" };
   if (layer === "timeout") return { transport: severity };
   if (layer === "transport") return { transport: severity };
@@ -327,9 +357,20 @@ function endpointStatusRow(healthCheckRow, { attribution = null, probeKind = "av
   if (healthCheckRow.status === "unverified") return base;
 
   const layerUpdates = attribution
-    ? layerStatusForAttributedFailure(attribution, healthCheckRow.status_code)
+    ? layerStatusForAttributedFailure(attribution, healthCheckRow.status_code, {
+        probeKind,
+        probePaymentMode,
+        path: healthCheckRow.path,
+      })
     : layerStatusForSuccessfulProbe(probeKind, probePaymentMode, healthCheckRow.path);
 
+  // Only include layer columns this probe actually touched in the upsert
+  // payload. PostgREST's `resolution=merge-duplicates` updates only the
+  // columns present in the INSERT, so omitted columns keep their previous
+  // value — exactly what we want for the per-layer attribution history.
+  // Sending an explicit null for an untouched layer (e.g. `layer_x: null`)
+  // would clear the column, so we deliberately leave the key off the object
+  // rather than assigning undefined.
   for (const layer of HEALTH_LAYERS) {
     const value = layerUpdates[layer];
     if (value) {
