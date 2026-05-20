@@ -112,11 +112,13 @@ export function attributeFailure(input: AttributionInput | null | undefined): At
   const bodyMessage = bodyText(body);
   const combined = `${errorText} ${paymentError} ${bodyMessage}`.trim();
 
-  // Successful HTTP response — not a failure.
-  if (statusCode !== null && statusCode >= 200 && statusCode < 400 && !combined) {
+  // Successful HTTP response — not a failure. A 2xx body legitimately carries
+  // descriptive `message`/`details` strings (and may even contain the word
+  // "timeout" in human-readable copy), so success must not depend on body text.
+  if (statusCode !== null && statusCode >= 200 && statusCode < 300) {
     return null;
   }
-  if (input.ok === true && !combined) return null;
+  if (input.ok === true) return null;
 
   if (statusCode === 402) {
     if (anyMatch(bodyMessage, SETTLEMENT_FAILURE_PATTERNS)) {
