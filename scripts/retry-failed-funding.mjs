@@ -2,8 +2,8 @@
 import { randomUUID } from "node:crypto";
 
 import { createStore } from "../packages/db/src/index.ts";
-import { CrossmintClient } from "../apps/api/src/crossmint.ts";
-import { settleFundedCreditPurchase } from "../apps/api/src/billing.ts";
+import { CrossmintClient } from "../apps/api/src/services/crossmint.ts";
+import { settleFundedCreditPurchase } from "../apps/api/src/services/billing.ts";
 
 const dryRun = process.argv.includes("--dry-run");
 const limit = Number(process.env.TOOLROUTER_FUNDING_RETRY_LIMIT || "50");

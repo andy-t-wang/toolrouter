@@ -1,3 +1,10 @@
+import {
+  HEALTH_LAYER_NAMES,
+  landingEndpointFallbacks,
+  type EndpointLayerStatuses,
+} from "../lib/endpoint-manifest.ts";
+import { providerLogoPath } from "../lib/provider-logos.ts";
+
 export const dynamic = "force-dynamic";
 
 type LandingEndpoint = {
@@ -23,6 +30,7 @@ type LandingEndpoint = {
   charged?: boolean;
   amount_usd?: number | string | null;
   last_error?: string | null;
+  layers?: EndpointLayerStatuses;
 };
 
 type LandingStatus = {
@@ -36,61 +44,17 @@ type LandingStatus = {
   endpoints: LandingEndpoint[];
 };
 
+const fallbackEndpoints: LandingEndpoint[] = landingEndpointFallbacks();
+
 const fallbackStatus: LandingStatus = {
   status: "unverified",
   summary: {
-    endpoint_count: 3,
+    endpoint_count: fallbackEndpoints.length,
     operational_count: 0,
     uptime_30d: null,
     last_checked_at: null,
   },
-  endpoints: [
-    {
-      id: "browserbase.session",
-      provider: "browserbase",
-      category: "browser_usage",
-      name: "Browserbase Session",
-      agentkit_value_type: "access",
-      agentkit_value_label: "AgentKit-Access",
-      status: "unverified",
-      last_checked_at: null,
-      latency_ms: null,
-      p50_latency_ms: null,
-      uptime_30d: null,
-      sparkline_30d: [],
-      health_check_count_30d: 0,
-    },
-    {
-      id: "exa.search",
-      provider: "exa",
-      category: "search",
-      name: "Exa Search",
-      agentkit_value_type: "free_trial",
-      agentkit_value_label: "AgentKit-Free Trial",
-      status: "unverified",
-      last_checked_at: null,
-      latency_ms: null,
-      p50_latency_ms: null,
-      uptime_30d: null,
-      sparkline_30d: [],
-      health_check_count_30d: 0,
-    },
-    {
-      id: "manus.research",
-      provider: "manus",
-      category: "research",
-      name: "Manus Research",
-      agentkit_value_type: "free_trial",
-      agentkit_value_label: "AgentKit-Free Trial",
-      status: "unverified",
-      last_checked_at: null,
-      latency_ms: null,
-      p50_latency_ms: null,
-      uptime_30d: null,
-      sparkline_30d: [],
-      health_check_count_30d: 0,
-    },
-  ],
+  endpoints: fallbackEndpoints,
 };
 
 function statusRank(status: string) {
@@ -229,10 +193,7 @@ function StatusDot({ status }: { status: string }) {
 }
 
 function providerLogoSrc(provider: string) {
-  if (provider === "exa") return "/exa-logomark.svg";
-  if (provider === "browserbase") return "/browserbase-logomark.svg";
-  if (provider === "manus") return "/manus-logomark.svg";
-  return null;
+  return providerLogoPath(provider) || null;
 }
 
 function displayEndpointId(provider: LandingEndpoint) {
@@ -302,6 +263,41 @@ function AgentKitBenefit({ provider }: { provider: LandingEndpoint }) {
   );
 }
 
+function layerChipDot(status: string) {
+  if (status === "healthy") return "good";
+  if (status === "degraded") return "warn";
+  if (status === "failing") return "bad";
+  return "";
+}
+
+function layerChipTitle(name: string, status: string) {
+  const label = name.slice(0, 1).toUpperCase() + name.slice(1);
+  return `${label}: ${status}`;
+}
+
+function LayerChips({ provider }: { provider: LandingEndpoint }) {
+  const layers = provider.layers;
+  if (!layers) return null;
+  return (
+    <div className="row layer-chips" role="list" aria-label="Layer health">
+      {HEALTH_LAYER_NAMES.map((name) => {
+        const status = layers[name]?.status || "unknown";
+        return (
+          <span
+            key={name}
+            role="listitem"
+            className={`layer-chip layer-chip-${status}`}
+            title={layerChipTitle(name, status)}
+          >
+            <span className={`dot ${layerChipDot(status)}`} />
+            <span className="layer-chip-label">{name.slice(0, 1).toUpperCase() + name.slice(1)}</span>
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
 function UptimeRow({ provider }: { provider: LandingEndpoint }) {
   return (
     <div className="mkt-uptime-grid mkt-uptime-row">
@@ -322,6 +318,7 @@ function UptimeRow({ provider }: { provider: LandingEndpoint }) {
       <div>
         <StatusDot status={publicEndpointStatus(provider)} />
         <span className="status-reason">{statusReason(provider)}</span>
+        <LayerChips provider={provider} />
       </div>
       <div className="mono muted check-age">
         {formatProbeAge(provider.last_checked_at)}

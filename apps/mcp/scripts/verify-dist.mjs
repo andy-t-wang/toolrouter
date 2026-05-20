@@ -37,9 +37,27 @@ if (versionMatch[1] !== pkg.version) {
   throw new Error(`verify-dist: SERVER_INFO.version is "${versionMatch[1]}" but package.json is "${pkg.version}". Bump SERVER_INFO in src/server.ts before publishing.`);
 }
 
-const missing = REQUIRED_TOOL_NAMES.filter((name) => !dist.includes(`"${name}"`));
-if (missing.length) {
-  throw new Error(`verify-dist: dist/server.js is missing tools: ${missing.join(", ")}. Did you forget to rebuild?`);
+// Per-endpoint tool names now live in dist/endpoints.json (the sibling
+// manifest the MCP server reads at startup), not in dist/server.js. The
+// always-static tool surface (the toolrouter_* helpers and manus_research_*
+// helpers) remains string-embedded in dist/server.js.
+const endpointsPath = join(pkgDir, "dist/endpoints.json");
+const endpointsManifest = JSON.parse(readFileSync(endpointsPath, "utf8"));
+if (!endpointsManifest?.endpoints?.length) {
+  throw new Error("verify-dist: dist/endpoints.json is empty or malformed. Did codegen run?");
 }
 
-process.stdout.write(`verify-dist: dist/server.js OK — ${REQUIRED_TOOL_NAMES.length} tools present, SERVER_INFO.version=${pkg.version}\n`);
+const manifestToolNames = new Set([
+  ...endpointsManifest.category_tools.map((tool) => tool.tool_name),
+  ...endpointsManifest.endpoints.map((endpoint) => endpoint.mcp.tool_name),
+]);
+
+const missing = REQUIRED_TOOL_NAMES.filter((name) => {
+  if (manifestToolNames.has(name)) return false;
+  return !dist.includes(`"${name}"`);
+});
+if (missing.length) {
+  throw new Error(`verify-dist: tool missing from both dist/server.js and dist/endpoints.json: ${missing.join(", ")}. Did you forget to rebuild?`);
+}
+
+process.stdout.write(`verify-dist: dist OK — ${REQUIRED_TOOL_NAMES.length} tools present (${manifestToolNames.size} from endpoints.json), SERVER_INFO.version=${pkg.version}\n`);

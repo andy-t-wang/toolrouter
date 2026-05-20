@@ -496,7 +496,7 @@ describe("endpoint health worker", () => {
     assert.equal(db.insertedHealthChecks[0].charged, true);
   });
 
-  it("sanitizes provider body errors for failed health probes", async () => {
+  it("attributes a 5xx upstream failure to the upstream layer, not the payment layer", async () => {
     const endpoint = getEndpoint("browserbase.session");
     const db = createDb();
 
@@ -519,10 +519,250 @@ describe("endpoint health worker", () => {
     });
 
     assert.equal(result.status, "failing");
-    assert.equal(
-      db.insertedHealthChecks[0].error,
-      "Provider payment error",
-    );
+    assert.equal(db.insertedHealthChecks[0].error, "Provider service error");
     assert.equal(db.upsertedStatuses[0].last_error, db.insertedHealthChecks[0].error);
+  });
+
+  it("attributes a 402 'Settlement failed' body to the facilitator layer with the canonical label", async () => {
+    const endpoint = getEndpoint("exa.search");
+    const db = createDb();
+
+    const result = await runEndpointHealthCheck({
+      endpoint,
+      db,
+      executor: async () => ({
+        ok: false,
+        status_code: 402,
+        path: "agentkit_to_x402",
+        charged: false,
+        latency_ms: 900,
+        body: { error: "Settlement failed: 402", transaction: "" },
+      }),
+      now: () => new Date("2026-05-19T16:13:00.000Z"),
+      useRecentRequests: false,
+    });
+
+    assert.equal(result.status, "degraded");
+    assert.equal(db.insertedHealthChecks[0].error, "Settlement failed at facilitator");
+    assert.equal(db.insertedHealthChecks[0].payment_error, "Settlement failed at facilitator");
+    assert.equal(db.upsertedStatuses[0].last_error, "Settlement failed at facilitator");
+  });
+
+  it("does NOT degrade a clean unresolved x402 challenge envelope (protocol working, not a failure)", async () => {
+    const endpoint = getEndpoint("browserbase.session");
+    const db = createDb();
+
+    const result = await runEndpointHealthCheck({
+      endpoint,
+      db,
+      executor: async () => ({
+        ok: true,
+        status_code: 200,
+        path: "agentkit_to_x402",
+        charged: true,
+        latency_ms: 1_200,
+      }),
+      now: () => new Date("2026-05-19T17:00:00.000Z"),
+      useRecentRequests: false,
+    });
+
+    assert.equal(result.status, "healthy");
+    assert.equal(db.insertedHealthChecks[0].error, null);
+    assert.equal(db.insertedHealthChecks[0].payment_error, null);
+  });
+
+  it("writes per-layer health for a paid probe that settled and reached the upstream (U6)", async () => {
+    const endpoint = getEndpoint("browserbase.session");
+    const db = createDb();
+
+    await runEndpointHealthCheck({
+      endpoint,
+      db,
+      executor: async () => ({
+        ok: true,
+        status_code: 200,
+        path: "agentkit_to_x402",
+        charged: true,
+        latency_ms: 40,
+        amount_usd: "0.01",
+      }),
+      now: () => new Date("2026-05-20T10:00:00.000Z"),
+      useRecentRequests: false,
+    });
+
+    const status = db.upsertedStatuses[0];
+    assert.equal(status.layer_facilitator_status, "healthy");
+    assert.equal(status.layer_upstream_status, "healthy");
+    assert.equal(status.layer_transport_status, "healthy");
+    assert.ok(status.layer_facilitator_updated_at);
+    assert.ok(status.layer_upstream_updated_at);
+    assert.ok(status.layer_transport_updated_at);
+    // agentkit layer is NOT touched by a paid probe that served via agentkit_to_x402 fallback.
+    // (Free trial wasn't realized — charged=true means we paid.) The plan keeps agentkit
+    // untouched and lets the agentkit probe own that signal.
+    assert.equal(status.layer_agentkit_status, undefined);
+  });
+
+  it("writes per-layer health for an agentkit probe served from the AgentKit path (U6)", async () => {
+    const endpoint = getEndpoint("exa.search");
+    const db = createDb();
+
+    await runEndpointHealthCheck({
+      endpoint,
+      db,
+      executor: async () => ({
+        ok: true,
+        status_code: 200,
+        path: "agentkit",
+        charged: false,
+        latency_ms: 40,
+      }),
+      now: () => new Date("2026-05-20T10:00:00.000Z"),
+      useRecentRequests: false,
+      probeKind: "agentkit",
+      updateEndpointStatus: true,
+    });
+
+    const status = db.upsertedStatuses[0];
+    assert.equal(status.layer_agentkit_status, "healthy");
+    assert.equal(status.layer_transport_status, "healthy");
+    // Paid layers untouched on the agentkit probe.
+    assert.equal(status.layer_facilitator_status, undefined);
+    assert.equal(status.layer_upstream_status, undefined);
+  });
+
+  it("attributes a Settlement failed 402 to the facilitator layer in per-layer columns (U6)", async () => {
+    const endpoint = getEndpoint("exa.search");
+    const db = createDb();
+
+    await runEndpointHealthCheck({
+      endpoint,
+      db,
+      executor: async () => ({
+        ok: false,
+        status_code: 402,
+        path: "agentkit_to_x402",
+        charged: false,
+        latency_ms: 900,
+        body: { error: "Settlement failed: 402" },
+      }),
+      now: () => new Date("2026-05-20T10:00:00.000Z"),
+      useRecentRequests: false,
+    });
+
+    const status = db.upsertedStatuses[0];
+    assert.equal(status.layer_facilitator_status, "degraded");
+    assert.equal(status.layer_transport_status, "healthy");
+    // upstream was never reached because settlement failed before forward.
+    assert.equal(status.layer_upstream_status, undefined);
+  });
+
+  it("attributes a 503 upstream failure to the upstream layer in per-layer columns (U6)", async () => {
+    const endpoint = getEndpoint("browserbase.session");
+    const db = createDb();
+
+    await runEndpointHealthCheck({
+      endpoint,
+      db,
+      executor: async () => ({
+        ok: false,
+        status_code: 503,
+        path: "agentkit_to_x402",
+        charged: true,
+        latency_ms: 800,
+        body: { error: "service unavailable" },
+      }),
+      now: () => new Date("2026-05-20T10:00:00.000Z"),
+      useRecentRequests: false,
+    });
+
+    const status = db.upsertedStatuses[0];
+    assert.equal(status.layer_upstream_status, "failing");
+    assert.equal(status.layer_facilitator_status, "healthy");
+    assert.equal(status.layer_transport_status, "healthy");
+  });
+
+  it("does NOT claim facilitator healthy on an upstream failure that took the AgentKit path", async () => {
+    // Regression: when an agentkit_first probe served from AgentKit and the
+    // upstream returned 4xx/5xx, the facilitator was never exercised. The
+    // status row must omit `layer_facilitator_status` so the prior value is
+    // preserved by the store's merge, NOT overwritten with a false recovery.
+    const endpoint = getEndpoint("exa.search");
+    const db = createDb();
+
+    await runEndpointHealthCheck({
+      endpoint,
+      db,
+      executor: async () => ({
+        ok: false,
+        status_code: 500,
+        path: "agentkit",
+        charged: false,
+        latency_ms: 600,
+        body: { error: "upstream busy" },
+      }),
+      now: () => new Date("2026-05-20T10:30:00.000Z"),
+      useRecentRequests: false,
+      probeKind: "availability",
+    });
+
+    const status = db.upsertedStatuses[0];
+    assert.equal(status.layer_upstream_status, "failing");
+    assert.equal(status.layer_transport_status, "healthy");
+    // Critical: facilitator key must be ABSENT (undefined), not "healthy".
+    // Storage layers that respect "omitted = preserve" (PostgREST merge-
+    // duplicates, LocalStore.upsertEndpointStatus) keep the prior value;
+    // including `layer_facilitator_status: "healthy"` would falsely recover.
+    assert.equal(status.layer_facilitator_status, undefined);
+    assert.equal(status.layer_facilitator_updated_at, undefined);
+  });
+
+  it("preserves untouched layer columns across successive probes (LocalStore merge contract)", async () => {
+    // U6 + this PR's defensive fix depend on the store preserving omitted
+    // `layer_*` columns. LocalStore.upsertEndpointStatus merges; PostgREST's
+    // resolution=merge-duplicates only updates columns present in the INSERT.
+    // This test pins the contract end-to-end against LocalStore (Supabase's
+    // behavior is documented in the migration; this is the in-memory mirror).
+    const endpoint = getEndpoint("exa.search");
+    const db = createDb();
+    // Seed a prior status row with all four layers populated.
+    db.endpointStatuses.push({
+      endpoint_id: "exa.search",
+      status: "degraded",
+      last_checked_at: "2026-05-19T22:00:00.000Z",
+      layer_facilitator_status: "degraded",
+      layer_facilitator_updated_at: "2026-05-19T22:00:00.000Z",
+      layer_agentkit_status: "healthy",
+      layer_agentkit_updated_at: "2026-05-19T22:00:00.000Z",
+      layer_upstream_status: "healthy",
+      layer_upstream_updated_at: "2026-05-19T22:00:00.000Z",
+      layer_transport_status: "healthy",
+      layer_transport_updated_at: "2026-05-19T22:00:00.000Z",
+    });
+
+    // Run a successful AgentKit-only probe — touches only agentkit + transport.
+    await runEndpointHealthCheck({
+      endpoint,
+      db,
+      executor: async () => ({
+        ok: true,
+        status_code: 200,
+        path: "agentkit",
+        charged: false,
+        latency_ms: 300,
+      }),
+      now: () => new Date("2026-05-20T10:00:00.000Z"),
+      useRecentRequests: false,
+      probeKind: "agentkit",
+      force: true,
+    });
+
+    const written = db.upsertedStatuses[0];
+    // The status row should NOT contain keys for facilitator/upstream (so the
+    // store's merge preserves the prior values).
+    assert.equal(written.layer_agentkit_status, "healthy");
+    assert.equal(written.layer_transport_status, "healthy");
+    assert.equal(written.layer_facilitator_status, undefined);
+    assert.equal(written.layer_upstream_status, undefined);
   });
 });

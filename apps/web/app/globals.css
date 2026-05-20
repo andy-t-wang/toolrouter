@@ -1934,6 +1934,52 @@ code {
   margin-top: 4px;
 }
 
+.layer-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.layer-chip {
+  align-items: center;
+  background: var(--bone-2);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--mute);
+  display: inline-flex;
+  font-size: 10px;
+  font-weight: 500;
+  gap: 4px;
+  letter-spacing: 0.02em;
+  line-height: 1;
+  padding: 3px 7px;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.layer-chip .dot {
+  flex: none;
+  height: 6px;
+  width: 6px;
+}
+
+.layer-chip-healthy {
+  color: var(--ink);
+}
+
+.layer-chip-degraded {
+  color: var(--ink);
+}
+
+.layer-chip-failing {
+  color: var(--ink);
+}
+
+.layer-chip-unknown .layer-chip-label {
+  opacity: 0.7;
+}
+
 .agentkit-status-benefit {
   align-items: flex-start;
   display: flex;

@@ -1,3 +1,4 @@
+import type { EndpointManifest } from "../../../manifest/endpoint.ts";
 import { buildManusResearchRequest, manusResearchPriceForDepth } from "../../builders.ts";
 
 function wrapperBaseUrl() {
@@ -72,4 +73,4 @@ export const manusResearchEndpointDefinition = Object.freeze({
     },
   },
   builder: buildManusResearchRequest,
-});
+}) satisfies EndpointManifest;

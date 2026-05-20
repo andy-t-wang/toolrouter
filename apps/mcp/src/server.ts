@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 
-import { realpathSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { existsSync, mkdirSync, readFileSync, realpathSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
 import { stdin, stdout } from "node:process";
 import { fileURLToPath } from "node:url";
 
@@ -26,6 +28,94 @@ type McpTool = {
   outputSchema?: any;
   annotations?: any;
 };
+
+type EndpointsManifest = {
+  schema_version: number;
+  endpoints: Array<{
+    id: string;
+    provider: string;
+    category: string;
+    name: string;
+    description: string;
+    fixture_input: Record<string, unknown>;
+    mcp: {
+      tool_name: string;
+      title: string;
+      description: string;
+      input_kind: string;
+      default_max_usd: string | null;
+    };
+  }>;
+  category_tools: Array<{
+    tool_name: string;
+    title: string;
+    description: string;
+    input_kind: string;
+    category: string;
+  }>;
+  enums: {
+    search_type: string[];
+    manus_depth: string[];
+  };
+  manus_pricing: {
+    default_usd_by_depth: Record<string, number>;
+    env_var_template: string;
+  };
+};
+
+let cachedManifest: EndpointsManifest | null = null;
+
+function resolveManifestPath() {
+  // Walk up from this file's location to find dist/endpoints.json. The
+  // published artifact ships both dist/server.js and dist/endpoints.json,
+  // so the sibling lookup works the same in dev (compiled .ts) and prod.
+  const here = fileURLToPath(import.meta.url);
+  // dist/server.js → dist/endpoints.json
+  // src/server.ts (tsx) → dist/endpoints.json (sibling of src/)
+  const distSibling = join(dirname(here), "endpoints.json");
+  if (existsSync(distSibling)) return distSibling;
+  const distFromSrc = resolve(dirname(here), "..", "dist", "endpoints.json");
+  if (existsSync(distFromSrc)) return distFromSrc;
+  // Fall back to the canonical path even if missing — loader will regenerate.
+  return distFromSrc;
+}
+
+function regenerateManifest(targetPath: string) {
+  // Fresh-clone / pretest fallback. The codegen script lives next to dist/;
+  // invoke it synchronously through a child process so the rest of the
+  // module can stay sync (sync IO simplifies callers and matches the
+  // file-shipped-with-the-package case for the published artifact).
+  const scriptPath = resolve(dirname(fileURLToPath(import.meta.url)), "..", "scripts", "build-endpoints.mjs");
+  if (!existsSync(scriptPath)) {
+    throw new Error(
+      "ToolRouter MCP: dist/endpoints.json missing and the codegen script is not available. " +
+        "Run `npm --workspace @worldcoin/toolrouter run build-endpoints` to regenerate.",
+    );
+  }
+  mkdirSync(dirname(targetPath), { recursive: true });
+  const result = spawnSync(
+    process.execPath,
+    ["--import", "tsx", scriptPath],
+    { stdio: ["ignore", "pipe", "pipe"], encoding: "utf8" },
+  );
+  if (result.status !== 0) {
+    throw new Error(
+      `ToolRouter MCP: failed to regenerate dist/endpoints.json (exit ${result.status}). ` +
+        `${result.stderr || result.stdout || ""}`.trim(),
+    );
+  }
+}
+
+export function loadEndpointsManifest(): EndpointsManifest {
+  if (cachedManifest) return cachedManifest;
+  const manifestPath = resolveManifestPath();
+  if (!existsSync(manifestPath)) {
+    regenerateManifest(manifestPath);
+  }
+  const raw = readFileSync(manifestPath, "utf8");
+  cachedManifest = JSON.parse(raw) as EndpointsManifest;
+  return cachedManifest;
+}
 
 function envValue(env: any, names: string[]) {
   for (const name of names) {
@@ -87,71 +177,119 @@ const PAYMENT_PROPERTIES = Object.freeze({
     description: "Compatibility alias for payment_mode.",
   },
 });
-const SEARCH_TYPE_VALUES = Object.freeze(["fast", "auto", "instant", "deep-lite", "deep", "deep-reasoning", "deep-max"]);
-const MANUS_DEPTH_VALUES = Object.freeze(["quick", "standard", "deep"]);
-const SEARCH_PROPERTIES = Object.freeze({
-  query: { type: "string" },
-  search_type: { type: "string", enum: SEARCH_TYPE_VALUES },
-  num_results: { type: "integer", minimum: 1, maximum: 10 },
-  include_summary: { type: "boolean" },
-  ...PAYMENT_PROPERTIES,
-});
-const BROWSER_PROPERTIES = Object.freeze({
-  estimated_minutes: { type: "integer", minimum: 5, maximum: 120 },
-  ...PAYMENT_PROPERTIES,
-});
-const RESEARCH_PROPERTIES = Object.freeze({
-  query: { type: "string" },
-  prompt: { type: "string", description: "Alias for query." },
-  task_type: { type: "string" },
-  depth: { type: "string", enum: MANUS_DEPTH_VALUES },
-  urls: { type: "array", items: { type: "string" }, maxItems: 10 },
-  images: { type: "array", items: { type: "string" }, maxItems: 5 },
-  force_new: { type: "boolean", description: "Set true only when the user explicitly wants a fresh Manus task for the same query." },
-  ...PAYMENT_PROPERTIES,
-});
-const MANUS_DEFAULT_MAX_USD: Record<string, string> = Object.freeze({
-  quick: "0.03",
-  standard: "0.05",
-  deep: "0.10",
-});
+
+function inputPropertiesForKind(kind: string) {
+  const manifest = loadEndpointsManifest();
+  if (kind === "search") {
+    return {
+      properties: {
+        query: { type: "string" },
+        search_type: { type: "string", enum: [...manifest.enums.search_type] },
+        num_results: { type: "integer", minimum: 1, maximum: 10 },
+        include_summary: { type: "boolean" },
+        ...PAYMENT_PROPERTIES,
+      },
+      required: ["query"] as string[],
+      requiredAlternatives: undefined as string[][] | undefined,
+    };
+  }
+  if (kind === "browser") {
+    return {
+      properties: {
+        estimated_minutes: { type: "integer", minimum: 5, maximum: 120 },
+        ...PAYMENT_PROPERTIES,
+      },
+      required: [] as string[],
+      requiredAlternatives: undefined as string[][] | undefined,
+    };
+  }
+  if (kind === "research") {
+    return {
+      properties: {
+        query: { type: "string" },
+        prompt: { type: "string", description: "Alias for query." },
+        task_type: { type: "string" },
+        depth: { type: "string", enum: [...manifest.enums.manus_depth] },
+        urls: { type: "array", items: { type: "string" }, maxItems: 10 },
+        images: { type: "array", items: { type: "string" }, maxItems: 5 },
+        force_new: {
+          type: "boolean",
+          description: "Set true only when the user explicitly wants a fresh Manus task for the same query.",
+        },
+        ...PAYMENT_PROPERTIES,
+      },
+      required: [] as string[],
+      requiredAlternatives: [["query"], ["prompt"]] as string[][],
+    };
+  }
+  throw new Error(`unknown MCP input_kind: ${kind}`);
+}
+
+function schemaForKind(kind: string) {
+  const spec = inputPropertiesForKind(kind);
+  return spec.requiredAlternatives
+    ? jsonSchemaAnyOf(spec.properties, spec.requiredAlternatives)
+    : jsonSchema(spec.properties, spec.required);
+}
+
+type EndpointToolSpec = {
+  name: string;
+  title: string;
+  description: string;
+  category?: string;
+  endpointId?: string;
+  inputKind: string;
+  inputSchema: any;
+};
+
+function endpointToolSpecs(): EndpointToolSpec[] {
+  const manifest = loadEndpointsManifest();
+  const specs: EndpointToolSpec[] = [];
+  for (const tool of manifest.category_tools) {
+    specs.push({
+      name: tool.tool_name,
+      title: tool.title,
+      description: tool.description,
+      category: tool.category,
+      inputKind: tool.input_kind,
+      inputSchema: schemaForKind(tool.input_kind),
+    });
+  }
+  for (const endpoint of manifest.endpoints) {
+    specs.push({
+      name: endpoint.mcp.tool_name,
+      title: endpoint.mcp.title,
+      description: endpoint.mcp.description,
+      endpointId: endpoint.id,
+      inputKind: endpoint.mcp.input_kind,
+      inputSchema: schemaForKind(endpoint.mcp.input_kind),
+    });
+  }
+  return specs;
+}
+
+function endpointToolByName() {
+  const map = new Map<string, EndpointToolSpec>();
+  for (const spec of endpointToolSpecs()) map.set(spec.name, spec);
+  return map;
+}
+
+function defaultManusMaxUsd(depth: any, env: any) {
+  const manifest = loadEndpointsManifest();
+  const validDepths = manifest.enums.manus_depth;
+  const fallbackDepth = validDepths.includes("standard") ? "standard" : validDepths[0];
+  const normalized = validDepths.includes(depth) ? depth : fallbackDepth;
+  const envKey = manifest.manus_pricing.env_var_template.replace("<DEPTH>", String(normalized).toUpperCase());
+  const fallbackUsd = manifest.manus_pricing.default_usd_by_depth[normalized];
+  const fallbackUsdStr = fallbackUsd === undefined ? "" : String(fallbackUsd);
+  const raw = String(env[envKey] || fallbackUsdStr).trim();
+  return /^\d+(\.\d+)?$/u.test(raw) ? raw : fallbackUsdStr;
+}
+
 const MANUS_NEXT_MCP_TOOLS = Object.freeze({
   status: "manus_research_status",
   result: "manus_research_result",
 });
-
-function defaultManusMaxUsd(depth: any, env: any) {
-  const normalized = ["quick", "standard", "deep"].includes(depth) ? depth : "standard";
-  const envKey = `TOOLROUTER_MANUS_RESEARCH_PRICE_${normalized.toUpperCase()}_USD`;
-  const raw = String(env[envKey] || MANUS_DEFAULT_MAX_USD[normalized]).trim();
-  return /^\d+(\.\d+)?$/u.test(raw) ? raw : MANUS_DEFAULT_MAX_USD[normalized];
-}
-
-const TOOL_INPUTS: Record<string, any> = Object.freeze({
-  browser: { properties: BROWSER_PROPERTIES },
-  research: { properties: RESEARCH_PROPERTIES, requiredAlternatives: [["query"], ["prompt"]] },
-  search: { properties: SEARCH_PROPERTIES, required: ["query"] },
-});
-const ENDPOINT_TOOL_DEFINITIONS = Object.freeze([
-  ["toolrouter_search", "Search", "Run a search through ToolRouter's recommended search endpoint.", "search", { category: "search" }],
-  ["toolrouter_browser_use", "Browser use", "Start a browser session through ToolRouter's recommended browser-use endpoint.", "browser", { category: "browser_usage" }],
-  ["exa_search", "Exa search", "Run Exa search through ToolRouter with AgentKit first and x402 fallback.", "search", { endpointId: "exa.search" }],
-  ["browserbase_session_create", "Browserbase session", "Create a paid Browserbase browser session through ToolRouter.", "browser", { endpointId: "browserbase.session" }],
-  ["manus_research_start", "Start Manus research", "Use this when the user asks for deep research, multi-source investigation, visual lookup, vendor research, or docs investigation. This starts one async Manus task through endpoint id manus.research and returns a task handle, not the final answer. Do not call start again for the same query; call the MCP tools manus_research_status or manus_research_result with the returned task_id unless the user explicitly asks for a new task.", "research", { endpointId: "manus.research" }],
-]);
-const ENDPOINT_TOOL_SPECS = Object.freeze(ENDPOINT_TOOL_DEFINITIONS.map(([name, title, description, inputKind, target]: any) => {
-  const input = TOOL_INPUTS[inputKind];
-  return {
-    name,
-    title,
-    description,
-    ...target,
-    inputSchema: input.requiredAlternatives
-      ? jsonSchemaAnyOf(input.properties, input.requiredAlternatives)
-      : jsonSchema(input.properties, input.required || []),
-  };
-}));
-const ENDPOINT_TOOL_BY_NAME = new Map(ENDPOINT_TOOL_SPECS.map((tool) => [tool.name, tool]));
 
 const GENERIC_ENDPOINT_CONTROL_FIELDS = new Set([
   "endpoint_id",
@@ -185,6 +323,7 @@ function genericEndpointPayload(args: any) {
 }
 
 export function tools(): McpTool[] {
+  const manifest = loadEndpointsManifest();
   return [
     {
       name: "toolrouter_list_endpoints",
@@ -221,10 +360,10 @@ export function tools(): McpTool[] {
         query: { type: "string", description: "Shortcut input field for endpoints that take a query." },
         prompt: { type: "string", description: "Alias for query on research endpoints." },
         task_type: { type: "string", description: "Shortcut Manus research task type." },
-        depth: { type: "string", enum: MANUS_DEPTH_VALUES, description: "Shortcut Manus research depth." },
+        depth: { type: "string", enum: [...manifest.enums.manus_depth], description: "Shortcut Manus research depth." },
         urls: { type: "array", items: { type: "string" }, maxItems: 10 },
         images: { type: "array", items: { type: "string" }, maxItems: 5 },
-        search_type: { type: "string", enum: SEARCH_TYPE_VALUES },
+        search_type: { type: "string", enum: [...manifest.enums.search_type] },
         num_results: { type: "integer", minimum: 1, maximum: 10 },
         include_summary: { type: "boolean" },
         estimated_minutes: { type: "integer", minimum: 5, maximum: 120 },
@@ -241,7 +380,7 @@ export function tools(): McpTool[] {
         id: { type: "string", description: "ToolRouter request id." },
       }, ["id"]),
     },
-    ...ENDPOINT_TOOL_SPECS.map(({ name, title, description, inputSchema }) => {
+    ...endpointToolSpecs().map(({ name, title, description, inputSchema }) => {
       const tool: McpTool = { name, title, description, inputSchema };
       if (name === "manus_research_start") {
         tool.outputSchema = jsonSchema({
@@ -476,16 +615,17 @@ function requestedManusDepth(args: any) {
 }
 
 function defaultMaxUsd(endpointId: string, args: any, env: any) {
+  const manifest = loadEndpointsManifest();
   if (endpointId === "manus.research") return defaultManusMaxUsd(requestedManusDepth(args), env);
-  if (endpointId === "exa.search") return "0.01";
-  if (endpointId === "browserbase.session") return "0.02";
+  const endpoint = manifest.endpoints.find((candidate) => candidate.id === endpointId);
+  if (endpoint && endpoint.mcp.default_max_usd) return endpoint.mcp.default_max_usd;
   return undefined;
 }
 
 async function endpointPayload(name: string, args: any, { env, fetchImpl }: any) {
-  const spec: any = ENDPOINT_TOOL_BY_NAME.get(name);
+  const spec = endpointToolByName().get(name);
   if (!spec) return null;
-  const endpointId = spec.endpointId || await recommendedEndpointId(spec.category, { env, fetchImpl });
+  const endpointId = spec.endpointId || await recommendedEndpointId(spec.category as string, { env, fetchImpl });
   const paymentMode = args.payment_mode ?? args.paymentMode;
   const maxUsd = args.maxUsd ?? args.max_usd ?? defaultMaxUsd(endpointId, args, env);
   const forceNew = args.force_new ?? args.forceNew;

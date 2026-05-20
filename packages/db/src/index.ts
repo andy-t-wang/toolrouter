@@ -399,10 +399,14 @@ export class LocalStore implements ToolRouterStore {
   async upsertEndpointStatus(row: any) {
     const data = this.read();
     const index = data.endpoint_status.findIndex((item: any) => item.endpoint_id === row.endpoint_id);
-    if (index >= 0) data.endpoint_status[index] = row;
+    // Merge with the existing row so per-layer columns the worker did NOT
+    // touch this probe keep their last value (U6). Layer columns the worker
+    // does include in `row` (e.g., `layer_facilitator_status`) override the
+    // existing values.
+    if (index >= 0) data.endpoint_status[index] = { ...data.endpoint_status[index], ...row };
     else data.endpoint_status.push(row);
     this.write(data);
-    return row;
+    return data.endpoint_status[index >= 0 ? index : data.endpoint_status.length - 1];
   }
 
   async getWalletAccount({ user_id }: { user_id: string }) {

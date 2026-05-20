@@ -1,7 +1,7 @@
 import { afterEach, describe, it } from "node:test";
 import assert from "node:assert/strict";
 
-import { CrossmintClient } from "../../../apps/api/src/crossmint.ts";
+import { CrossmintClient } from "../../../apps/api/src/services/crossmint.ts";
 
 afterEach(() => {
   delete process.env.CROSSMINT_TREASURY_WALLET_LOCATOR;

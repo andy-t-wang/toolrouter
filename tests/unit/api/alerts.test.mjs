@@ -1,7 +1,7 @@
 import { afterEach, describe, it } from "node:test";
 import assert from "node:assert/strict";
 
-import { createAlertClient } from "../../../apps/api/src/alerts.ts";
+import { createAlertClient } from "../../../apps/api/src/services/alerts.ts";
 
 afterEach(() => {
   delete process.env.RESEND_API_KEY;

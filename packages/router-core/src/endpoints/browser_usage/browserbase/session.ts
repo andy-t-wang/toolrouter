@@ -1,3 +1,4 @@
+import type { EndpointManifest } from "../../../manifest/endpoint.ts";
 import { buildBrowserbaseSessionRequest } from "../../builders.ts";
 
 export const browserbaseSessionEndpointDefinition = Object.freeze({
@@ -59,4 +60,4 @@ export const browserbaseSessionEndpointDefinition = Object.freeze({
     },
   },
   builder: buildBrowserbaseSessionRequest,
-});
+}) satisfies EndpointManifest;

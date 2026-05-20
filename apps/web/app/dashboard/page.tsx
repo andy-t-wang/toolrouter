@@ -13,6 +13,7 @@ import {
 import { computeDashboardMetrics, paidAmount } from "../dashboard-metrics.ts";
 import { McpClientTabs } from "../mcp-client-tabs.tsx";
 import { firstQueryPrompt } from "../mcp-content.ts";
+import { providerLogoPath } from "../../lib/provider-logos.ts";
 
 const apiBase = process.env.NEXT_PUBLIC_TOOLROUTER_API_URL || "";
 const appBase = (process.env.NEXT_PUBLIC_TOOLROUTER_APP_URL || "").replace(/\/$/u, "");
@@ -183,13 +184,8 @@ function titleCase(value: string) {
 
 function endpointMeta(endpointId: unknown) {
   const [provider = "", rawName = ""] = String(endpointId || "").split(".");
-  const logos: Record<string, string> = {
-    browserbase: "/browserbase-logomark.svg",
-    exa: "/exa-logomark.svg",
-    manus: "/manus-logomark.svg",
-  };
   return {
-    logo: logos[provider] || "",
+    logo: providerLogoPath(provider),
     name: titleCase(rawName || provider || "Endpoint"),
   };
 }

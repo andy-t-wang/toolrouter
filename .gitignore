@@ -8,6 +8,7 @@
 .agentkit-router/
 .mcp.json
 .codex/
+.compound-engineering/*.local.yaml
 
 # Dependencies
 node_modules/

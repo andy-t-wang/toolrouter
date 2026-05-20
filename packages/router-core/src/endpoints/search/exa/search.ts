@@ -1,3 +1,4 @@
+import type { EndpointManifest } from "../../../manifest/endpoint.ts";
 import { buildExaSearchRequest } from "../../builders.ts";
 
 export const exaSearchEndpointDefinition = Object.freeze({
@@ -66,4 +67,4 @@ export const exaSearchEndpointDefinition = Object.freeze({
     },
   },
   builder: buildExaSearchRequest,
-});
+}) satisfies EndpointManifest;

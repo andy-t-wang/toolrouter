@@ -1,7 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
-import { createCrossmintClient } from "../../../apps/api/src/crossmint.ts";
+import { createCrossmintClient } from "../../../apps/api/src/services/crossmint.ts";
 import { executeEndpoint, getEndpoint } from "../../../packages/router-core/src/index.ts";
 
 const hasCrossmintSigner = Boolean(

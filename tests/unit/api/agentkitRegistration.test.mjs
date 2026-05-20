@@ -8,7 +8,7 @@ import {
   buildAgentKitVerificationRequest,
   parseAgentKitRelayResponse,
   registrationPayloadFromBody,
-} from "../../../apps/api/src/agentkitRegistration.ts";
+} from "../../../apps/api/src/services/agentkit-registration.ts";
 
 describe("AgentKit registration helpers", () => {
   it("builds the same IDKit signal shape as the AgentKit CLI", () => {
