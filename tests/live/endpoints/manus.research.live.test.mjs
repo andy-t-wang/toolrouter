@@ -4,7 +4,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { createCrossmintClient } from "../../../apps/api/src/crossmint.ts";
+import { createCrossmintClient } from "../../../apps/api/src/services/crossmint.ts";
 import { createApiApp } from "../../../apps/api/src/app.ts";
 import { getManusTaskDetail, listManusTaskMessages } from "../../../apps/api/src/sellers/manus/tasks.ts";
 import { MemoryCache } from "../../../packages/cache/src/index.ts";

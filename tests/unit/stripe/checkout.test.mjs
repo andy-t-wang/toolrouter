@@ -2,7 +2,7 @@ import { afterEach, describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { createHmac } from "node:crypto";
 
-import { StripeClient } from "../../../apps/api/src/stripe.ts";
+import { StripeClient } from "../../../apps/api/src/services/stripe-checkout.ts";
 
 const originalFetch = globalThis.fetch;
 

@@ -3,7 +3,7 @@
 // dumps the X-PAYMENT we sent + browserbase's full response.
 // Run: node scripts/with-root-env.mjs node --import tsx scripts/probe-x402-browserbase.mjs
 
-import { createCrossmintClient } from "../apps/api/src/crossmint.ts";
+import { createCrossmintClient } from "../apps/api/src/services/crossmint.ts";
 import { executeEndpoint, getEndpoint } from "../packages/router-core/src/index.ts";
 import { createAgentBookVerifier } from "@worldcoin/agentkit-core";
 import { privateKeyToAccount } from "viem/accounts";

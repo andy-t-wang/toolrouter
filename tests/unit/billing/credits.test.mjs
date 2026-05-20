@@ -14,7 +14,7 @@ import {
   markCreditPurchaseFailed,
   reserveCredits,
   settleFundedCreditPurchase,
-} from "../../../apps/api/src/billing.ts";
+} from "../../../apps/api/src/services/billing.ts";
 import { LocalStore } from "../../../packages/db/src/index.ts";
 
 function store() {

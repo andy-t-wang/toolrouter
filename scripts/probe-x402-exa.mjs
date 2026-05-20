@@ -1,7 +1,7 @@
 // One-off probe to diagnose exa.search x402 failure.
 // Run with: node scripts/with-root-env.mjs node --import tsx scripts/probe-x402-exa.mjs
 
-import { createCrossmintClient } from "../apps/api/src/crossmint.ts";
+import { createCrossmintClient } from "../apps/api/src/services/crossmint.ts";
 import { executeEndpoint, getEndpoint } from "../packages/router-core/src/index.ts";
 
 process.env.ROUTER_DEV_MODE = "false";

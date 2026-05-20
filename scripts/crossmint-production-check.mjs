@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { CrossmintClient } from "../apps/api/src/crossmint.ts";
+import { CrossmintClient } from "../apps/api/src/services/crossmint.ts";
 
 const originalInfo = console.info;
 const originalWarn = console.warn;

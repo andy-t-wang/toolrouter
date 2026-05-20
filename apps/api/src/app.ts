@@ -27,16 +27,16 @@ import {
   releaseCreditReservation,
   reserveCredits,
   settleFundedCreditPurchase,
-} from "./billing.ts";
-import { createCrossmintClient } from "./crossmint.ts";
-import { createStripeClient } from "./stripe.ts";
+} from "./services/billing.ts";
+import { createCrossmintClient } from "./services/crossmint.ts";
+import { createStripeClient } from "./services/stripe-checkout.ts";
 import { createAlertClient } from "./alerts.ts";
 import { createDatadogClient } from "./datadog.ts";
 import {
   agentBookRegistrationService,
   buildAgentKitVerificationRequest,
   registrationPayloadFromBody,
-} from "./agentkitRegistration.ts";
+} from "./services/agentkit-registration.ts";
 import { registerManusSellerService } from "./sellers/manus/index.ts";
 import {
   getManusTaskDetail,
