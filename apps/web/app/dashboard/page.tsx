@@ -476,15 +476,6 @@ export default function DashboardPage() {
     return () => window.clearTimeout(timer);
   }, [copiedPrompt]);
 
-  const keyStats = useMemo(() => {
-    const byKey = new Map<string, any[]>();
-    for (const row of requests) {
-      if (row.api_key_id)
-        byKey.set(row.api_key_id, [...(byKey.get(row.api_key_id) || []), row]);
-    }
-    return byKey;
-  }, [requests]);
-
   const dashboardMetrics = useMemo(() => {
     const rows = monthRequests.length ? monthRequests : requests;
     return computeDashboardMetrics(rows);
@@ -1377,8 +1368,8 @@ export default function DashboardPage() {
                       <tbody>
                         {keys.length ? (
                           keys.map((key) => {
-                            const rows = keyStats.get(key.id) || [];
                             const active = !key.disabled_at;
+                            const requestCount = Number(key.request_count) || 0;
                             return (
                               <tr key={key.id}>
                                 <td className="mono">{maskKeyId(key.id)}</td>
@@ -1387,10 +1378,10 @@ export default function DashboardPage() {
                                   {formatDate(key.created_at)}
                                 </td>
                                 <td className="muted">
-                                  {formatDate(rows[0]?.ts)}
+                                  {formatDate(key.last_used_at)}
                                 </td>
                                 <td className="mono num">
-                                  {rows.length.toLocaleString()}
+                                  {requestCount.toLocaleString()}
                                 </td>
                                 <td>{keyStatus(active)}</td>
                                 <td className="row-action">
