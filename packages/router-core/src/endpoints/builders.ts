@@ -302,7 +302,10 @@ export function buildManusResearchRequest(input, endpoint) {
   );
 }
 
-function readStringMatrix(input, names, label, { min = 1, max = 8 }) {
+// Parallel's Search and Extract APIs cap each search query at 200 chars.
+const PARALLEL_SEARCH_QUERY_MAX_CHARS = 200;
+
+function readStringMatrix(input, names, label, { min = 1, max = 5, itemMaxChars }) {
   const value = firstDefined(input, names);
   if (value === undefined || value === null) {
     throw new TypeError(`${label} is required`);
@@ -314,6 +317,9 @@ function readStringMatrix(input, names, label, { min = 1, max = 8 }) {
     if (typeof item !== "string") throw new TypeError(`${label}[${index}] must be a string`);
     const trimmed = item.trim();
     if (!trimmed) throw new TypeError(`${label}[${index}] must be non-empty`);
+    if (itemMaxChars && trimmed.length > itemMaxChars) {
+      throw new RangeError(`${label}[${index}] must be at most ${itemMaxChars} characters`);
+    }
     return trimmed;
   });
 }
@@ -331,7 +337,7 @@ export function buildParallelSearchRequest(input, endpoint) {
     data,
     ["search_queries", "searchQueries", "queries"],
     "search_queries",
-    { min: 1, max: 8 },
+    { min: 1, max: 5, itemMaxChars: PARALLEL_SEARCH_QUERY_MAX_CHARS },
   );
   const objective = readString(data, ["objective"], "objective", { defaultValue: undefined });
   const mode = readString(data, ["mode"], "mode", { defaultValue: "advanced" });
@@ -364,10 +370,18 @@ export function buildParallelExtractRequest(input, endpoint) {
   let validatedQueries: string[] | undefined;
   if (searchQueries !== undefined) {
     if (!Array.isArray(searchQueries)) throw new TypeError("search_queries must be an array");
+    if (searchQueries.length > 5) {
+      throw new RangeError("search_queries must include at most 5 items");
+    }
     validatedQueries = searchQueries.map((item, index) => {
       if (typeof item !== "string") throw new TypeError(`search_queries[${index}] must be a string`);
       const trimmed = item.trim();
       if (!trimmed) throw new TypeError(`search_queries[${index}] must be non-empty`);
+      if (trimmed.length > PARALLEL_SEARCH_QUERY_MAX_CHARS) {
+        throw new RangeError(
+          `search_queries[${index}] must be at most ${PARALLEL_SEARCH_QUERY_MAX_CHARS} characters`,
+        );
+      }
       return trimmed;
     });
   }
