@@ -30,6 +30,9 @@ Current launch endpoints:
 - `exa.search`
 - `browserbase.session`
 - `manus.research`
+- `parallel.search` (Parallel.ai keyword search)
+- `parallel.extract` (Parallel.ai URL extraction; the recommended endpoint for the new `extract` category)
+- `parallel.task` (Parallel.ai asynchronous deep-research task; same start/status/result pattern as `manus.research`)
 
 Endpoint discovery is available through `GET /v1/endpoints`, `GET /v1/categories`, and MCP category tools.
 
@@ -72,7 +75,7 @@ npm test
 npm --workspace @toolrouter/web run build
 ```
 
-Live provider tests are opt-in and gated by `RUN_LIVE_*` environment flags. Manus live tests also require `MANUS_API_KEY` because the smoke verifies async task status and messages through the Manus API.
+Live provider tests are opt-in and gated by `RUN_LIVE_*` environment flags. Manus live tests also require `MANUS_API_KEY` because the smoke verifies async task status and messages through the Manus API. Parallel live tests are gated on `RUN_LIVE_PARALLEL_TESTS=true` and require `PARALLEL_API_KEY`.
 
 ```bash
 npm run test:live:endpoints

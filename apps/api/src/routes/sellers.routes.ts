@@ -20,6 +20,11 @@
 import { loadAgentBookVerifier } from "../services/agentkit-account.ts";
 import { registerSellerServices, type SellerService } from "../sellers/createSellerService.ts";
 import { registerManusSellerService } from "../sellers/manus/index.ts";
+import {
+  registerParallelExtractSellerService,
+  registerParallelSearchSellerService,
+  registerParallelTaskSellerService,
+} from "../sellers/parallel/index.ts";
 
 export interface SellerRoutesOpts {
   /** Override seller list (tests inject pre-built `SellerService` stubs). */
@@ -42,6 +47,14 @@ export interface SellerRoutesOpts {
    * existing lazy-first-request behavior.
    */
   eagerSellerInit?: boolean;
+  /** Optional Parallel seller factories — `createApiApp` passes the defaults. */
+  registerParallelSearchSeller?: typeof registerParallelSearchSellerService;
+  registerParallelExtractSeller?: typeof registerParallelExtractSellerService;
+  registerParallelTaskSeller?: typeof registerParallelTaskSellerService;
+  /** Mirror of `manusFetch` for the Parallel sellers' upstream forwarders. */
+  parallelFetch?: typeof fetch;
+  /** Skip Parallel seller registration (tests + local dev without a key). */
+  disableParallelSellers?: boolean;
 }
 
 function manusWrapperToService(wrapper: any): SellerService {
@@ -101,13 +114,42 @@ function registerLazyManusProxy(
   });
 }
 
+async function parallelSellerServices(
+  app: any,
+  opts: SellerRoutesOpts,
+): Promise<SellerService[]> {
+  if (opts.disableParallelSellers) return [];
+  const cache = app.cache;
+  const agentBook = app.agentBookVerifier || (await loadAgentBookVerifier());
+  const fetchImpl = opts.parallelFetch || fetch;
+  const search = (opts.registerParallelSearchSeller || registerParallelSearchSellerService)({
+    cache,
+    agentBook,
+    fetchImpl,
+  });
+  const extract = (opts.registerParallelExtractSeller || registerParallelExtractSellerService)({
+    cache,
+    agentBook,
+    fetchImpl,
+  });
+  const task = (opts.registerParallelTaskSeller || registerParallelTaskSellerService)({
+    cache,
+    agentBook,
+    fetchImpl,
+  });
+  return Promise.all([search, extract, task]);
+}
+
 export async function sellersRoutes(app: any, opts: SellerRoutesOpts = {}) {
   if (opts.services) {
     await registerSellerServices(app, opts.services);
     return;
   }
   if (opts.manusWrapper) {
+    // Test/integration path: Manus wrapper injected explicitly, Parallel
+    // stays lazy so tests that don't set `PARALLEL_API_KEY` keep working.
     await registerSellerServices(app, [manusWrapperToService(opts.manusWrapper)]);
+    registerLazyParallelProxies(app, opts);
     return;
   }
   const factory = opts.createManusWrapper || registerManusSellerService;
@@ -116,17 +158,17 @@ export async function sellersRoutes(app: any, opts: SellerRoutesOpts = {}) {
     // plan's R7 promise. Throws on missing MANUS_API_KEY / bad CDP creds
     // before the API starts listening, so a misconfigured deploy fails
     // synchronously rather than 503ing on first traffic.
-    //
-    // Gated on `eagerSellerInit` alone, NOT also on `!opts.createManusWrapper`
-    // — `createApiApp` always defaults `createManusWrapper` to
-    // `registerManusSellerService` so a `!createManusWrapper` gate would
-    // never fire in production. Tests that exercise the lazy-retry path
-    // simply omit `eagerSellerInit`, so they stay on the lazy proxy below.
     const wrapper = await factory({
       cache: app.cache,
       agentBook: app.agentBookVerifier || (await loadAgentBookVerifier()),
     });
-    await registerSellerServices(app, [manusWrapperToService(wrapper)]);
+    const sellers: Array<Promise<SellerService> | SellerService> = [
+      manusWrapperToService(wrapper),
+    ];
+    if (!opts.disableParallelSellers) {
+      sellers.push(...(await parallelSellerServices(app, opts)));
+    }
+    await registerSellerServices(app, sellers);
     return;
   }
   // Default (no eager opt-in): lazy first-request construction.
@@ -137,4 +179,52 @@ export async function sellersRoutes(app: any, opts: SellerRoutesOpts = {}) {
   // `createApiApp` without setting MANUS_API_KEY and only exercise non-Manus
   // routes — eager construction would break them.
   registerLazyManusProxy(app, factory);
+  // Parallel sellers also follow a lazy proxy when not eagerly initialized
+  // so apps that don't set PARALLEL_API_KEY can still boot. Each request
+  // builds the seller on first hit and reuses it after that.
+  registerLazyParallelProxies(app, opts);
+}
+
+function registerLazyParallelProxies(app: any, opts: SellerRoutesOpts) {
+  if (opts.disableParallelSellers) return;
+  const fetchImpl = opts.parallelFetch || fetch;
+  const factories: Array<{
+    path: string;
+    factory: (deps: any) => Promise<SellerService>;
+  }> = [
+    {
+      path: "/x402/parallel/search",
+      factory: opts.registerParallelSearchSeller || registerParallelSearchSellerService,
+    },
+    {
+      path: "/x402/parallel/extract",
+      factory: opts.registerParallelExtractSeller || registerParallelExtractSellerService,
+    },
+    {
+      path: "/x402/parallel/task",
+      factory: opts.registerParallelTaskSeller || registerParallelTaskSellerService,
+    },
+  ];
+  for (const { path, factory } of factories) {
+    let inFlight: Promise<SellerService> | null = null;
+    async function getSeller() {
+      if (inFlight) return inFlight;
+      const attempt = factory({
+        cache: app.cache,
+        agentBook: app.agentBookVerifier || (await loadAgentBookVerifier()),
+        fetchImpl,
+      });
+      inFlight = attempt;
+      try {
+        return await attempt;
+      } catch (error) {
+        if (inFlight === attempt) inFlight = null;
+        throw error;
+      }
+    }
+    app.post(path, async (request: any, reply: any) => {
+      const seller = await getSeller();
+      return seller.handle(request, reply);
+    });
+  }
 }

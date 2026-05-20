@@ -10,7 +10,12 @@ import {
   recommendEndpoint,
   validateRegistry,
 } from "../../../packages/router-core/src/endpoints/index.ts";
-import { manusResearchPriceForDepth } from "../../../packages/router-core/src/endpoints/builders.ts";
+import {
+  manusResearchPriceForDepth,
+  parallelExtractPriceUsd,
+  parallelSearchPriceUsd,
+  parallelTaskPriceForProcessor,
+} from "../../../packages/router-core/src/endpoints/builders.ts";
 import {
   assertEndpointFixtureBuilds,
   assertEndpointHealthProbeBuilds,
@@ -22,7 +27,14 @@ describe("endpoint registry", () => {
     assert.equal(validateRegistry(), true);
     assert.deepEqual(
       listEndpoints().map((endpoint) => endpoint.id),
-      ["browserbase.session", "exa.search", "manus.research"],
+      [
+        "browserbase.session",
+        "exa.search",
+        "parallel.search",
+        "parallel.extract",
+        "manus.research",
+        "parallel.task",
+      ],
     );
     assertValidEndpointRegistry(endpointRegistry);
     for (const endpoint of endpointRegistry) {
@@ -35,19 +47,139 @@ describe("endpoint registry", () => {
     const categories = listCategories();
     assert.deepEqual(
       categories.map((category) => category.id),
-      ["search", "research", "browser_usage"],
+      ["search", "research", "extract", "browser_usage"],
     );
 
     const search = categories.find((category) => category.id === "search");
     assert.equal(search.name, "Search");
     assert.equal(search.recommended_endpoint_id, "exa.search");
-    assert.deepEqual(search.endpoints.map((endpoint) => endpoint.id), ["exa.search"]);
+    assert.deepEqual(
+      search.endpoints.map((endpoint) => endpoint.id),
+      ["exa.search", "parallel.search"],
+    );
 
     const browserUse = recommendEndpoint("browser_usage");
     assert.equal(browserUse.id, "browserbase.session");
 
     const research = recommendEndpoint("research");
     assert.equal(research.id, "manus.research");
+
+    const extract = recommendEndpoint("extract");
+    assert.equal(extract.id, "parallel.extract");
+  });
+
+  it("builds Parallel Search requests with the per-call markup price", () => {
+    assert.throws(
+      () => buildEndpointRequest("parallel.search", { search_queries: [] }),
+      /search_queries must include at least 1 item/u,
+    );
+    assert.throws(
+      () => buildEndpointRequest("parallel.search", { search_queries: ["x"], mode: "bogus" }),
+      /unsupported Parallel search mode/u,
+    );
+
+    const request = buildEndpointRequest("parallel.search", {
+      search_queries: ["top sushi places in San Francisco"],
+      objective: "Find the highest-rated sushi restaurants",
+      mode: "advanced",
+    });
+    assert.equal(request.method, "POST");
+    assert.ok(request.url.endsWith("/x402/parallel/search"));
+    assert.equal(request.headers["x-api-key"], undefined);
+    assert.deepEqual(request.json, {
+      search_queries: ["top sushi places in San Francisco"],
+      mode: "advanced",
+      objective: "Find the highest-rated sushi restaurants",
+    });
+    assert.equal(request.estimatedUsd, "0.02");
+    assert.equal(parallelSearchPriceUsd(), "0.02");
+
+    const probe = buildEndpointHealthProbeRequest("parallel.search");
+    assert.equal(probe.paymentMode, "x402_only");
+    assert.equal(probe.maxUsd, "0.02");
+  });
+
+  it("builds Parallel Extract requests priced per URL plus markup", () => {
+    assert.throws(
+      () => buildEndpointRequest("parallel.extract", { urls: [] }),
+      /urls must include at least 1 item/u,
+    );
+    assert.throws(
+      () => buildEndpointRequest("parallel.extract", { urls: ["http://example.com"] }),
+      /urls\[0\] must use https/u,
+    );
+
+    const single = buildEndpointRequest("parallel.extract", {
+      urls: ["https://example.com"],
+    });
+    assert.equal(single.method, "POST");
+    assert.ok(single.url.endsWith("/x402/parallel/extract"));
+    assert.deepEqual(single.json, { urls: ["https://example.com/"] });
+    assert.equal(single.estimatedUsd, "0.02");
+    assert.equal(parallelExtractPriceUsd(1), "0.02");
+
+    const five = buildEndpointRequest("parallel.extract", {
+      urls: [
+        "https://a.example.com",
+        "https://b.example.com",
+        "https://c.example.com",
+        "https://d.example.com",
+        "https://e.example.com",
+      ],
+      objective: "Compare landing pages",
+      full_content: true,
+    });
+    assert.equal(five.estimatedUsd, "0.06");
+    assert.deepEqual(five.json.advanced_settings, { full_content: true });
+    assert.equal(parallelExtractPriceUsd(5), "0.06");
+  });
+
+  it("builds Parallel Task requests with processor pricing", () => {
+    assert.throws(
+      () => buildEndpointRequest("parallel.task", { input: "x", processor: "mega" }),
+      /unsupported Parallel task processor/u,
+    );
+    assert.throws(
+      () => buildEndpointRequest("parallel.task", { processor: "core" }),
+      /input is required/u,
+    );
+
+    const core = buildEndpointRequest("parallel.task", {
+      input: "Find the best MCP browser automation tools",
+      processor: "core",
+    });
+    assert.equal(core.method, "POST");
+    assert.ok(core.url.endsWith("/x402/parallel/task"));
+    assert.equal(core.json.processor, "core");
+    assert.equal(core.estimatedUsd, "0.035");
+    assert.equal(parallelTaskPriceForProcessor("core"), "0.035");
+
+    const ultra = buildEndpointRequest("parallel.task", {
+      input: "Deep research brief",
+      processor: "ultra",
+    });
+    assert.equal(ultra.estimatedUsd, "0.31");
+    assert.equal(parallelTaskPriceForProcessor("ultra"), "0.31");
+
+    const probe = buildEndpointHealthProbeRequest("parallel.task");
+    assert.equal(probe.paymentMode, "x402_only");
+    assert.equal(probe.timeoutMs, 30_000);
+  });
+
+  it("uses configured Parallel task prices via env override", () => {
+    const previous = process.env.TOOLROUTER_PARALLEL_TASK_PRICE_CORE_USD;
+    process.env.TOOLROUTER_PARALLEL_TASK_PRICE_CORE_USD = "0.05";
+    try {
+      assert.equal(parallelTaskPriceForProcessor("core"), "0.06");
+      const request = buildEndpointRequest("parallel.task", {
+        input: "Configured price check",
+        processor: "core",
+      });
+      assert.equal(request.estimatedUsd, "0.06");
+    } finally {
+      if (previous === undefined) delete process.env.TOOLROUTER_PARALLEL_TASK_PRICE_CORE_USD;
+      else process.env.TOOLROUTER_PARALLEL_TASK_PRICE_CORE_USD = previous;
+    }
   });
 
   it("builds Exa search requests from typed input", () => {

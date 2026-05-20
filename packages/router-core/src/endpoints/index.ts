@@ -8,9 +8,21 @@ export {
 export {
   EXA_SEARCH_PRICES,
   MANUS_RESEARCH_DEPTHS,
+  PARALLEL_EXTRACT_PER_URL_USD,
+  PARALLEL_MARKUP_USD,
+  PARALLEL_SEARCH_BASE_USD,
+  PARALLEL_TASK_PROCESSORS,
   buildBrowserbaseSessionRequest,
   buildExaSearchRequest,
   buildManusResearchRequest,
+  buildParallelExtractRequest,
+  buildParallelSearchRequest,
+  buildParallelTaskRequest,
+  manusResearchPriceForDepth,
+  parallelExtractPriceUsd,
+  parallelSearchPriceUsd,
+  parallelTaskBasePriceForProcessor,
+  parallelTaskPriceForProcessor,
 } from "./builders.ts";
 export {
   buildEndpointFixtureRequest,

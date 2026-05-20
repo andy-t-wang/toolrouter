@@ -1,30 +1,15 @@
-// Manus-specific async-task lifecycle hooks for the execution orchestrator.
+// Async-task lifecycle hooks for the execution orchestrator.
 //
-// Lift-and-shift from app.ts:2187-2338 keeping the Manus-specific shape. U9
-// (async-task generalization) was explicitly deferred — generalizing off N=1
-// would bake the wrong abstraction. When a second async endpoint joins the
-// roadmap, replace this with a `runAsyncTaskFlow(strategy, ...)` and validate
-// against both concrete cases.
-//
-// Flow:
-// - `prepareManusAsyncTask`: called before executor. If the request has a
-//   dedupe key and isn't `force_new`, looks up an existing task — returns
-//   `{ dedupedResponse }` for the orchestrator to short-circuit on. Otherwise
-//   reserves a task row with a null `provider_task_id` so duplicate concurrent
-//   requests are blocked by the partial unique index.
-// - `finalizeManusAsyncTask`: called after a successful executor run. Extracts
-//   the upstream Manus task fields from the response body and either updates
-//   the reserved row or inserts a fresh one. Returns the `manusStart` payload
-//   to merge into the orchestrator's response.
-// - `abandonManusAsyncTask`: cleanup path called on executor failure or
-//   uncaught error so the reserved row doesn't permanently block the dedupe
-//   key.
+// Originally Manus-only; generalized for sprint-2 when Parallel's task
+// endpoint became the second async surface. Each provider supplies a small
+// `AsyncTaskStrategy` describing how to derive the dedupe key, extract the
+// upstream task row, and shape the orchestrator's start payload.
 
 import {
   MANUS_RESEARCH_ENDPOINT_ID,
   MANUS_TASK_TTL_MS,
   dedupedManusStartResponse,
-  endpointTaskBase,
+  endpointTaskBase as manusEndpointTaskBase,
   expireManusDedupeTask,
   forceNewTask,
   manusCreatedTaskFromBody,
@@ -33,21 +18,100 @@ import {
   normalizeManusStatus,
   reserveManusDedupeTask,
 } from "../manus-tasks.ts";
+import {
+  PARALLEL_TASK_ENDPOINT_ID,
+  PARALLEL_TASK_TTL_MS,
+  dedupedParallelStartResponse,
+  endpointTaskBase as parallelEndpointTaskBase,
+  expireParallelDedupeTask,
+  normalizeParallelStatus,
+  parallelCreatedTaskFromBody,
+  parallelDedupeKey,
+  parallelTaskStartPayload,
+  reserveParallelDedupeTask,
+} from "../parallel-tasks.ts";
 
-export { MANUS_RESEARCH_ENDPOINT_ID };
+export { MANUS_RESEARCH_ENDPOINT_ID, PARALLEL_TASK_ENDPOINT_ID };
 
-export type ManusAsyncPrepareResult =
-  | { type: "passthrough"; dedupeKey: string | null }
-  | { type: "deduped"; response: any }
-  | { type: "reserved"; reservedTask: any; dedupeKey: string };
+export interface AsyncTaskStrategy {
+  /** Stable endpoint id the strategy is responsible for. */
+  readonly endpointId: string;
+  /** Provider id (e.g. `manus`, `parallel`). */
+  readonly provider: string;
+  /** TTL for reserved/created task rows, in milliseconds. */
+  readonly taskTtlMs: number;
+  /** Build the dedupe key for an incoming request. Returns null when the
+   *  input is not eligible for dedupe. */
+  dedupeKey(auth: any, input: any): string | null;
+  /** Pull `{ provider_task_id, status, task_url, title }` out of an upstream
+   *  response body. Returns null when the upstream did not actually create a
+   *  task. */
+  extractCreatedTask(body: any): {
+    provider_task_id: string;
+    status: string;
+    task_url: string | null;
+    title: string | null;
+  } | null;
+  /** Build the base `endpoint_task` row for reservation. */
+  endpointTaskBase(args: any): any;
+  /** Persist a reservation row, returning whether it was newly reserved or
+   *  matched an existing one. */
+  reserveDedupeTask(store: any, taskRow: any): Promise<{ reserved: boolean; task: any }>;
+  /** Best-effort cleanup for a reserved row on the error path. */
+  expireDedupeTask(store: any, task: any): Promise<any>;
+  /** Normalize an upstream status string into ToolRouter's lifecycle enum. */
+  normalizeStatus(value: any, fallback?: string): string;
+  /** Build the response body merged into the orchestrator output. */
+  startPayload(task: any, ctx: any): any;
+  /** Build the short-circuit response when an existing task matches the
+   *  dedupe key. */
+  dedupedResponse(endpoint: any, existingTask: any, traceId: string): any;
+}
 
-/**
- * Inspect the incoming request. If the endpoint is Manus research and not a
- * force-new, either return a `deduped` response (caller should short-circuit
- * and return it directly) or reserve a row that the executor will later
- * resolve via `finalizeManusAsyncTask`.
- */
-export async function prepareManusAsyncTask({
+const manusStrategy: AsyncTaskStrategy = Object.freeze({
+  endpointId: MANUS_RESEARCH_ENDPOINT_ID,
+  provider: "manus",
+  taskTtlMs: MANUS_TASK_TTL_MS,
+  dedupeKey: (auth: any, input: any) => manusDedupeKey(auth, MANUS_RESEARCH_ENDPOINT_ID, input),
+  extractCreatedTask: manusCreatedTaskFromBody,
+  endpointTaskBase: manusEndpointTaskBase,
+  reserveDedupeTask: reserveManusDedupeTask,
+  expireDedupeTask: expireManusDedupeTask,
+  normalizeStatus: normalizeManusStatus,
+  startPayload: manusTaskStartPayload,
+  dedupedResponse: dedupedManusStartResponse,
+});
+
+const parallelStrategy: AsyncTaskStrategy = Object.freeze({
+  endpointId: PARALLEL_TASK_ENDPOINT_ID,
+  provider: "parallel",
+  taskTtlMs: PARALLEL_TASK_TTL_MS,
+  dedupeKey: parallelDedupeKey,
+  extractCreatedTask: parallelCreatedTaskFromBody,
+  endpointTaskBase: parallelEndpointTaskBase,
+  reserveDedupeTask: reserveParallelDedupeTask,
+  expireDedupeTask: expireParallelDedupeTask,
+  normalizeStatus: normalizeParallelStatus,
+  startPayload: parallelTaskStartPayload,
+  dedupedResponse: dedupedParallelStartResponse,
+});
+
+const STRATEGIES: Readonly<Record<string, AsyncTaskStrategy>> = Object.freeze({
+  [MANUS_RESEARCH_ENDPOINT_ID]: manusStrategy,
+  [PARALLEL_TASK_ENDPOINT_ID]: parallelStrategy,
+});
+
+export function getAsyncTaskStrategyForEndpoint(endpoint: any): AsyncTaskStrategy | null {
+  if (!endpoint || !endpoint.id) return null;
+  return STRATEGIES[endpoint.id] || null;
+}
+
+export type AsyncTaskPrepareResult =
+  | { type: "passthrough"; dedupeKey: string | null; strategy: AsyncTaskStrategy | null }
+  | { type: "deduped"; response: any; strategy: AsyncTaskStrategy }
+  | { type: "reserved"; reservedTask: any; dedupeKey: string; strategy: AsyncTaskStrategy };
+
+export async function prepareAsyncTask({
   store,
   endpoint,
   endpointInput,
@@ -61,16 +125,12 @@ export async function prepareManusAsyncTask({
   body: any;
   auth: any;
   traceId: string;
-}): Promise<ManusAsyncPrepareResult> {
-  if (endpoint.id !== MANUS_RESEARCH_ENDPOINT_ID) {
-    return { type: "passthrough", dedupeKey: null };
-  }
-  const dedupeKey = manusDedupeKey(auth, endpoint.id, endpointInput);
-  // Even on force_new, the dedupeKey is computed so the eventual task row
-  // carries it and a later non-force_new call can dedupe against it. The
-  // dedupe LOOKUP is skipped — but the key flows through.
+}): Promise<AsyncTaskPrepareResult> {
+  const strategy = getAsyncTaskStrategyForEndpoint(endpoint);
+  if (!strategy) return { type: "passthrough", dedupeKey: null, strategy: null };
+  const dedupeKey = strategy.dedupeKey(auth, endpointInput);
   if (!dedupeKey || forceNewTask(body, endpointInput)) {
-    return { type: "passthrough", dedupeKey };
+    return { type: "passthrough", dedupeKey, strategy };
   }
   const existingTask = await store.findEndpointTaskByDedupeKey({
     api_key_id: auth.api_key_id,
@@ -80,40 +140,32 @@ export async function prepareManusAsyncTask({
   if (existingTask) {
     return {
       type: "deduped",
-      response: dedupedManusStartResponse(endpoint, existingTask, traceId),
+      response: strategy.dedupedResponse(endpoint, existingTask, traceId),
+      strategy,
     };
   }
-  const reserved = await reserveManusDedupeTask(
+  const reserved = await strategy.reserveDedupeTask(
     store,
-    endpointTaskBase({
-      endpoint,
-      auth,
-      dedupeKey,
-      traceId,
-    }),
+    strategy.endpointTaskBase({ endpoint, auth, dedupeKey, traceId }),
   );
   if (!reserved.reserved) {
     return {
       type: "deduped",
-      response: dedupedManusStartResponse(endpoint, reserved.task, traceId),
+      response: strategy.dedupedResponse(endpoint, reserved.task, traceId),
+      strategy,
     };
   }
   return {
     type: "reserved",
     reservedTask: reserved.task,
     dedupeKey,
+    strategy,
   };
 }
 
-/**
- * Called after a successful executor run for a Manus-research endpoint when
- * the orchestrator has a `prepareManusAsyncTask` reservation outstanding (or
- * a `passthrough` for a force-new request that still produced a task body).
- * Returns the `manusStart` payload to merge into the response (or `null` if
- * the upstream body didn't include a task id).
- */
-export async function finalizeManusAsyncTask({
+export async function finalizeAsyncTask({
   store,
+  strategy,
   endpoint,
   auth,
   result,
@@ -124,6 +176,7 @@ export async function finalizeManusAsyncTask({
   createdAt,
 }: {
   store: any;
+  strategy: AsyncTaskStrategy | null;
   endpoint: any;
   auth: any;
   result: any;
@@ -133,30 +186,30 @@ export async function finalizeManusAsyncTask({
   traceId: string;
   createdAt: string;
 }): Promise<any | null> {
-  if (endpoint.id !== MANUS_RESEARCH_ENDPOINT_ID) return null;
-  const createdManusTask =
-    result?.ok === true ? manusCreatedTaskFromBody(result.body) : null;
-  if (!createdManusTask || !dedupeKey) {
+  if (!strategy) return null;
+  if (endpoint.id !== strategy.endpointId) return null;
+  const createdTask = result?.ok === true ? strategy.extractCreatedTask(result.body) : null;
+  if (!createdTask || !dedupeKey) {
     if (reservedTask) {
-      await expireManusDedupeTask(store, reservedTask).catch(() => undefined);
+      await strategy.expireDedupeTask(store, reservedTask).catch(() => undefined);
     }
     return null;
   }
   const taskRow = {
-    ...(reservedTask || endpointTaskBase({ endpoint, auth, dedupeKey, createdAt })),
-    provider_task_id: createdManusTask.provider_task_id,
+    ...(reservedTask || strategy.endpointTaskBase({ endpoint, auth, dedupeKey, createdAt })),
+    provider_task_id: createdTask.provider_task_id,
     request_id: requestId,
     trace_id: traceId,
-    status: normalizeManusStatus(createdManusTask.status, "running"),
-    task_url: createdManusTask.task_url || null,
-    title: createdManusTask.title || null,
+    status: strategy.normalizeStatus(createdTask.status, "running"),
+    task_url: createdTask.task_url || null,
+    title: createdTask.title || null,
     updated_at: createdAt,
-    expires_at: new Date(Date.parse(createdAt) + MANUS_TASK_TTL_MS).toISOString(),
+    expires_at: new Date(Date.parse(createdAt) + strategy.taskTtlMs).toISOString(),
   };
   const task = reservedTask
     ? await store.updateEndpointTask(taskRow)
     : await store.insertEndpointTask(taskRow);
-  return manusTaskStartPayload(task, {
+  return strategy.startPayload(task, {
     taskCreated: true,
     deduped: false,
     requestId,
@@ -164,11 +217,12 @@ export async function finalizeManusAsyncTask({
   });
 }
 
-/**
- * Best-effort cleanup of a reserved Manus task row on the error path. Never
- * throws — the caller is already propagating the original error.
- */
-export async function abandonManusAsyncTask(store: any, reservedTask: any) {
-  if (!reservedTask) return;
-  await expireManusDedupeTask(store, reservedTask).catch(() => undefined);
+export async function abandonAsyncTask(
+  store: any,
+  strategy: AsyncTaskStrategy | null,
+  reservedTask: any,
+) {
+  if (!strategy || !reservedTask) return;
+  await strategy.expireDedupeTask(store, reservedTask).catch(() => undefined);
 }
+
