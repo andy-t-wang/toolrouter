@@ -106,6 +106,20 @@ function qs(params: Record<string, any>) {
   return search.toString();
 }
 
+function rollupApiKeyStats(rows: Iterable<{ api_key_id?: string | null; ts?: string | null }>) {
+  const stats = new Map<string, { request_count: number; last_used_at: string | null }>();
+  for (const row of rows) {
+    const keyId = row.api_key_id;
+    if (!keyId) continue;
+    const cur = stats.get(keyId) || { request_count: 0, last_used_at: null };
+    cur.request_count += 1;
+    const ts = String(row.ts || "");
+    if (ts && (!cur.last_used_at || ts > cur.last_used_at)) cur.last_used_at = ts;
+    stats.set(keyId, cur);
+  }
+  return Array.from(stats, ([api_key_id, value]) => ({ api_key_id, ...value }));
+}
+
 function ensureDevKey(data: any) {
   if (process.env.ROUTER_DEV_MODE !== "true") return null;
   const rawKey = process.env.AGENTKIT_ROUTER_DEV_API_KEY || "dev_agentkit_router_key";
@@ -256,18 +270,9 @@ export class LocalStore implements ToolRouterStore {
   }
 
   async listApiKeyStats({ user_id }: { user_id: string }) {
-    const stats = new Map<string, { request_count: number; last_used_at: string | null }>();
-    for (const row of this.read().requests) {
-      if (row.user_id !== user_id) continue;
-      const keyId = row.api_key_id;
-      if (!keyId) continue;
-      const cur = stats.get(keyId) || { request_count: 0, last_used_at: null };
-      cur.request_count += 1;
-      const ts = String(row.ts || "");
-      if (ts && (!cur.last_used_at || ts > cur.last_used_at)) cur.last_used_at = ts;
-      stats.set(keyId, cur);
-    }
-    return Array.from(stats, ([api_key_id, value]) => ({ api_key_id, ...value }));
+    return rollupApiKeyStats(
+      this.read().requests.filter((row: any) => row.user_id === user_id),
+    );
   }
 
   async disableApiKey({ id, user_id }: { id: string; user_id?: string }) {
@@ -621,25 +626,13 @@ export class SupabaseStore implements ToolRouterStore {
   async listApiKeyStats({ user_id }: { user_id: string }) {
     // PostgREST `db-aggregates-enabled` is off by default on Supabase, so we
     // pull (api_key_id, ts) rows and roll up client-side instead of using
-    // count()/max() — same shape as LocalStore.listApiKeyStats.
+    // count()/max().
     const params = qs({
       user_id: `eq.${user_id}`,
       api_key_id: "not.is.null",
       select: "api_key_id,ts",
-      order: "ts.desc",
     });
-    const rows: any[] = (await this.request(`/requests?${params}`)) || [];
-    const stats = new Map<string, { request_count: number; last_used_at: string | null }>();
-    for (const row of rows) {
-      const keyId = row.api_key_id;
-      if (!keyId) continue;
-      const cur = stats.get(keyId) || { request_count: 0, last_used_at: null };
-      cur.request_count += 1;
-      const ts = String(row.ts || "");
-      if (ts && (!cur.last_used_at || ts > cur.last_used_at)) cur.last_used_at = ts;
-      stats.set(keyId, cur);
-    }
-    return Array.from(stats, ([api_key_id, value]) => ({ api_key_id, ...value }));
+    return rollupApiKeyStats((await this.request(`/requests?${params}`)) || []);
   }
 
   async disableApiKey({ id, user_id }: { id: string; user_id?: string }) {

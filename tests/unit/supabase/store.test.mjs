@@ -97,9 +97,9 @@ describe("Supabase store RPC accounting", () => {
     });
 
     assert.equal(calls.length, 1);
-    const [requestPath] = calls[0].path.split("?");
+    const [requestPath, queryString] = calls[0].path.split("?");
     assert.equal(requestPath, "/requests");
-    const params = new URLSearchParams(calls[0].path.split("?")[1]);
+    const params = new URLSearchParams(queryString);
     assert.equal(params.get("user_id"), "eq.00000000-0000-4000-8000-000000000001");
     assert.equal(params.get("api_key_id"), "not.is.null");
     const select = params.get("select") || "";
