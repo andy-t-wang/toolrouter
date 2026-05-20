@@ -19,6 +19,40 @@ describe("attributeFailure — successful responses", () => {
     assert.equal(attributeFailure(null), null);
     assert.equal(attributeFailure(undefined), null);
   });
+
+  it("returns null for a 200 with a descriptive body.message", () => {
+    // Regression: a successful 2xx response with body text used to fall through
+    // the success guard and be misclassified as transport.
+    assert.equal(
+      attributeFailure({
+        status_code: 200,
+        body: { status: "ok", message: "Created successfully" },
+      }),
+      null,
+    );
+  });
+
+  it("returns null for a 200 whose body.message contains the word 'timeout'", () => {
+    // Regression: success body text matching TIMEOUT_PATTERNS used to escalate
+    // to a `timeout` attribution.
+    assert.equal(
+      attributeFailure({
+        status_code: 200,
+        body: { message: "Configured request timeout: 30s" },
+      }),
+      null,
+    );
+  });
+
+  it("returns null for ok=true with a descriptive body", () => {
+    assert.equal(
+      attributeFailure({
+        ok: true,
+        body: { details: "operation completed in 12ms" },
+      }),
+      null,
+    );
+  });
 });
 
 describe("attributeFailure — x402 challenge envelopes", () => {
