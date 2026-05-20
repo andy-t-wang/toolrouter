@@ -21,9 +21,10 @@ import {
   reserveCredits,
 } from "../billing.ts";
 import {
-  abandonManusAsyncTask,
-  finalizeManusAsyncTask,
-  prepareManusAsyncTask,
+  abandonAsyncTask,
+  finalizeAsyncTask,
+  prepareAsyncTask,
+  type AsyncTaskStrategy,
 } from "./async-task.ts";
 import {
   agentKitPreflightTimeoutMs,
@@ -32,6 +33,7 @@ import {
   shouldPreflightAgentKitFreeTrial,
 } from "./preflight.ts";
 import { MANUS_RESEARCH_ENDPOINT_ID } from "../manus-tasks.ts";
+import { PARALLEL_TASK_ENDPOINT_ID } from "../parallel-tasks.ts";
 import { envMs, requireObject, timedOut } from "../util.ts";
 
 const DEFAULT_REQUEST_TIMEOUT_MS = 8_000;
@@ -100,14 +102,16 @@ function normalizePayment(result: any) {
   };
 }
 
-// TODO(N=2-async-sellers): Manus is currently the only async-task endpoint,
-// so the body-error fallback is hard-keyed to its id. When a second async
-// seller lands (was U9 in the plan, deferred), generalize this via an
-// endpoint-manifest `async_task` field exposing a body-error extractor —
-// same pattern the U9 deferral plans for the whole async-task lifecycle.
+// Surface the `error` field from upstream async-task responses (Manus and
+// Parallel) so the request row carries a useful message when the provider
+// rejects the call after settlement.
+const ASYNC_TASK_BODY_ERROR_ENDPOINTS = new Set([
+  MANUS_RESEARCH_ENDPOINT_ID,
+  PARALLEL_TASK_ENDPOINT_ID,
+]);
 function safeResultBodyError(endpoint: any, result: any) {
   if (result?.ok !== false) return null;
-  if (endpoint?.id !== MANUS_RESEARCH_ENDPOINT_ID) return null;
+  if (!ASYNC_TASK_BODY_ERROR_ENDPOINTS.has(endpoint?.id)) return null;
   return typeof result.body?.error === "string" ? result.body.error : null;
 }
 
@@ -204,7 +208,8 @@ export async function runExecution(
   const body = requireObject(rawBody || {}, "request body");
   const traceId = ctx.traceId || `trace_${randomUUID()}`;
   let reservation: any = null;
-  let reservedManusTask: any = null;
+  let reservedAsyncTask: any = null;
+  let asyncStrategy: AsyncTaskStrategy | null = null;
   let dedupeKey: string | null = null;
   try {
     const endpointId = body.endpoint_id || body.endpointId;
@@ -220,7 +225,7 @@ export async function runExecution(
     const maxUsd = body.maxUsd || body.max_usd;
     const paymentMode = body.paymentMode || body.payment_mode;
 
-    const manusPrep = await prepareManusAsyncTask({
+    const asyncPrep = await prepareAsyncTask({
       store,
       endpoint,
       endpointInput,
@@ -228,16 +233,17 @@ export async function runExecution(
       auth,
       traceId,
     });
-    if (manusPrep.type === "deduped") {
-      return manusPrep.response;
+    asyncStrategy = asyncPrep.strategy;
+    if (asyncPrep.type === "deduped") {
+      return asyncPrep.response;
     }
-    if (manusPrep.type === "reserved") {
-      reservedManusTask = manusPrep.reservedTask;
-      dedupeKey = manusPrep.dedupeKey;
-    } else if (manusPrep.type === "passthrough") {
+    if (asyncPrep.type === "reserved") {
+      reservedAsyncTask = asyncPrep.reservedTask;
+      dedupeKey = asyncPrep.dedupeKey;
+    } else if (asyncPrep.type === "passthrough") {
       // Even on force_new the dedupe key flows through so a future
       // non-force_new request can match against it.
-      dedupeKey = manusPrep.dedupeKey;
+      dedupeKey = asyncPrep.dedupeKey;
     }
 
     await enforceRequestPolicy({
@@ -334,20 +340,21 @@ export async function runExecution(
     });
     await store.insertRequest(row);
 
-    const manusStart = await finalizeManusAsyncTask({
+    const asyncStart = await finalizeAsyncTask({
       store,
+      strategy: asyncStrategy,
       endpoint,
       auth,
       result,
-      reservedTask: reservedManusTask,
+      reservedTask: reservedAsyncTask,
       dedupeKey,
       requestId: row.id,
       traceId,
       createdAt: row.ts || new Date().toISOString(),
     });
-    // finalizeManusAsyncTask already cleaned up the reserved row if the run
+    // finalizeAsyncTask already cleaned up the reserved row if the run
     // produced no task — clear our local handle either way.
-    reservedManusTask = null;
+    reservedAsyncTask = null;
 
     recordRequestMetrics(datadog, row);
     return {
@@ -360,11 +367,11 @@ export async function runExecution(
       credit_reserved_usd: row.credit_reserved_usd,
       credit_captured_usd: row.credit_captured_usd,
       credit_released_usd: row.credit_released_usd,
-      ...(manusStart || {}),
-      body: manusStart ? { ...(result.body || {}), ...manusStart } : result.body ?? null,
+      ...(asyncStart || {}),
+      body: asyncStart ? { ...(result.body || {}), ...asyncStart } : result.body ?? null,
     };
   } catch (error: any) {
-    await abandonManusAsyncTask(store, reservedManusTask);
+    await abandonAsyncTask(store, asyncStrategy, reservedAsyncTask);
     if (reservation) {
       await releaseCreditReservation({
         store,

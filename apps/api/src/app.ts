@@ -35,6 +35,11 @@ import { createCrossmintClient } from "./services/crossmint.ts";
 import { createDatadogClient } from "./services/datadog.ts";
 import { createStripeClient } from "./services/stripe-checkout.ts";
 import { registerManusSellerService } from "./sellers/manus/index.ts";
+import {
+  registerParallelExtractSellerService,
+  registerParallelSearchSellerService,
+  registerParallelTaskSellerService,
+} from "./sellers/parallel/index.ts";
 
 // Re-export for code paths that import the normalizer directly (tests, etc.).
 export { normalizeApiError };
@@ -63,6 +68,20 @@ export interface CreateApiAppDeps {
    */
   eagerSellerInit?: SellerRoutesOpts["eagerSellerInit"];
   manusFetch?: typeof fetch;
+  /**
+   * Override fetch implementation used by the Parallel seller wrappers and
+   * `/v1/parallel/tasks/...` polling routes. Mirrors `manusFetch` for tests.
+   */
+  parallelFetch?: typeof fetch;
+  /** Optional override for the Parallel seller factories (test injection). */
+  registerParallelSearchSeller?: typeof registerParallelSearchSellerService;
+  registerParallelExtractSeller?: typeof registerParallelExtractSellerService;
+  registerParallelTaskSeller?: typeof registerParallelTaskSellerService;
+  /**
+   * Skip Parallel seller registration entirely. Tests that don't set
+   * `PARALLEL_API_KEY` use this to keep the API app bootable.
+   */
+  disableParallelSellers?: boolean;
   logger?: any;
 }
 
@@ -83,6 +102,11 @@ export function createApiApp(deps: CreateApiAppDeps = {}) {
     sellerServices,
     eagerSellerInit = false,
     manusFetch = fetch,
+    parallelFetch = fetch,
+    registerParallelSearchSeller = registerParallelSearchSellerService,
+    registerParallelExtractSeller = registerParallelExtractSellerService,
+    registerParallelTaskSeller = registerParallelTaskSellerService,
+    disableParallelSellers = false,
     logger = true,
   } = deps;
 
@@ -119,6 +143,7 @@ export function createApiApp(deps: CreateApiAppDeps = {}) {
   app.decorate("agentBookVerifier", agentBookVerifier);
   app.decorate("agentBookRegistration", agentBookRegistration);
   app.decorate("manusFetch", manusFetch);
+  app.decorate("parallelFetch", parallelFetch);
 
   // 3. CORS — onRequest hook + OPTIONS short-circuit. Inline so the hook
   //    propagates to sibling plugins (Fastify plugins are encapsulated by
@@ -152,6 +177,11 @@ export function createApiApp(deps: CreateApiAppDeps = {}) {
     manusWrapper,
     createManusWrapper,
     eagerSellerInit,
+    parallelFetch,
+    registerParallelSearchSeller,
+    registerParallelExtractSeller,
+    registerParallelTaskSeller,
+    disableParallelSellers,
   });
 
   return app;

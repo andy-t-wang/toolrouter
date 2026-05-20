@@ -276,7 +276,7 @@ describe("router API", () => {
     const body = await response.json();
     assert.deepEqual(
       body.endpoints.map((endpoint) => endpoint.id),
-      ["exa.search"],
+      ["exa.search", "parallel.search"],
     );
     assert.ok(body.endpoints.every((endpoint) => endpoint.status));
 
@@ -285,10 +285,11 @@ describe("router API", () => {
     const researchBody = await researchResponse.json();
     assert.deepEqual(
       researchBody.endpoints.map((endpoint) => endpoint.id),
-      ["manus.research"],
+      ["manus.research", "parallel.task"],
     );
-    assert.equal(researchBody.endpoints[0].recommended_mcp_tool, "manus_research_start");
-    assert.deepEqual(researchBody.endpoints[0].mcp_tools, {
+    const manus = researchBody.endpoints.find((endpoint) => endpoint.id === "manus.research");
+    assert.equal(manus.recommended_mcp_tool, "manus_research_start");
+    assert.deepEqual(manus.mcp_tools, {
       start: "manus_research_start",
       status: "manus_research_status",
       result: "manus_research_result",
@@ -298,7 +299,14 @@ describe("router API", () => {
     assert.equal(dashboardResponse.status, 200);
     assert.deepEqual(
       (await dashboardResponse.json()).endpoints.map((endpoint) => endpoint.id),
-      ["browserbase.session", "exa.search", "manus.research"],
+      [
+        "browserbase.session",
+        "exa.search",
+        "parallel.search",
+        "parallel.extract",
+        "manus.research",
+        "parallel.task",
+      ],
     );
   });
 
@@ -306,7 +314,10 @@ describe("router API", () => {
     const response = await fetch(`${baseUrl}/v1/categories`, { headers: authHeaders() });
     assert.equal(response.status, 200);
     const body = await response.json();
-    assert.deepEqual(body.categories.map((category) => category.id), ["search", "research", "browser_usage"]);
+    assert.deepEqual(
+      body.categories.map((category) => category.id),
+      ["search", "research", "extract", "browser_usage"],
+    );
     const search = body.categories.find((category) => category.id === "search");
     assert.equal(search.recommended_endpoint_id, "exa.search");
     assert.equal(search.recommended_endpoint.id, "exa.search");
@@ -315,6 +326,9 @@ describe("router API", () => {
     assert.equal(research.recommended_endpoint_id, "manus.research");
     assert.equal(research.recommended_endpoint.id, "manus.research");
     assert.equal(research.recommended_mcp_tool, "manus_research_start");
+    const extract = body.categories.find((category) => category.id === "extract");
+    assert.equal(extract.recommended_endpoint_id, "parallel.extract");
+    assert.equal(extract.recommended_endpoint.id, "parallel.extract");
     assert.ok(search.endpoints.every((endpoint) => endpoint.status));
 
     const dashboardResponse = await fetch(`${baseUrl}/v1/dashboard/categories?include_empty=true`, { headers: sessionHeaders() });
@@ -367,11 +381,18 @@ describe("router API", () => {
     assert.equal(response.status, 200);
     const body = await response.json();
     assert.equal(body.status, "unverified");
-    assert.equal(body.summary.endpoint_count, 3);
+    assert.equal(body.summary.endpoint_count, 6);
     assert.equal(body.summary.operational_count, 1);
     assert.deepEqual(
       body.endpoints.map((endpoint) => endpoint.id).sort(),
-      ["browserbase.session", "exa.search", "manus.research"].sort(),
+      [
+        "browserbase.session",
+        "exa.search",
+        "manus.research",
+        "parallel.extract",
+        "parallel.search",
+        "parallel.task",
+      ].sort(),
     );
     const exa = body.endpoints.find((endpoint) => endpoint.id === "exa.search");
     assert.equal(exa.status, "healthy");
@@ -1769,8 +1790,8 @@ describe("router API", () => {
     const body = await response.json();
     assert.ok(body.monitoring.requests_24h.total >= 1);
     assert.equal(body.monitoring.requests_24h.errors, 0);
-    assert.equal(body.monitoring.endpoint_health.total, 3);
-    assert.equal(body.monitoring.endpoint_health.unverified, 2);
+    assert.equal(body.monitoring.endpoint_health.total, 6);
+    assert.equal(body.monitoring.endpoint_health.unverified, 5);
     assert.ok("error_rate" in body.monitoring.requests_24h);
   });
 

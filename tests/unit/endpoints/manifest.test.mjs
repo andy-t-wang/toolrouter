@@ -73,7 +73,70 @@ const SNAPSHOT_BASELINE = Object.freeze({
     },
     field_order: ["query", "task_type", "depth"],
   },
+  "parallel.search": {
+    id: "parallel.search",
+    provider: "parallel",
+    category: "search",
+    name: "Parallel Search",
+    description: "Keyword-driven web search through ToolRouter's x402 Parallel wrapper.",
+    method: "POST",
+    agentkit_value_type: "free_trial",
+    agentkit_value_label: "AgentKit-Free Trial",
+    agentkit_proof_header: false,
+    estimated_cost_usd: 0.02,
+    default_payment_mode: "agentkit_first",
+    ui_badge: "Search",
+    fixture_input: {
+      search_queries: ["top sushi places San Francisco"],
+      mode: "advanced",
+    },
+    field_order: ["search_queries", "mode"],
+  },
+  "parallel.extract": {
+    id: "parallel.extract",
+    provider: "parallel",
+    category: "extract",
+    name: "Parallel Extract",
+    description: "URL content extraction through ToolRouter's x402 Parallel wrapper.",
+    method: "POST",
+    agentkit_value_type: "free_trial",
+    agentkit_value_label: "AgentKit-Free Trial",
+    agentkit_proof_header: false,
+    estimated_cost_usd: 0.02,
+    default_payment_mode: "agentkit_first",
+    ui_badge: "Extract",
+    fixture_input: {
+      urls: ["https://example.com"],
+    },
+    field_order: ["urls"],
+  },
+  "parallel.task": {
+    id: "parallel.task",
+    provider: "parallel",
+    category: "research",
+    name: "Parallel Task",
+    description: "Asynchronous deep-research task through ToolRouter's x402 Parallel wrapper.",
+    method: "POST",
+    agentkit_value_type: "free_trial",
+    agentkit_value_label: "AgentKit-Free Trial",
+    agentkit_proof_header: false,
+    estimated_cost_usd: 0.31,
+    default_payment_mode: "agentkit_first",
+    ui_badge: "Research",
+    fixture_input: {
+      input: "Find the best MCP browser automation tools for agent workflows",
+      processor: "core",
+    },
+    field_order: ["input", "processor"],
+  },
 });
+
+const VARIABLE_URL_HOST_IDS = new Set([
+  "manus.research",
+  "parallel.search",
+  "parallel.extract",
+  "parallel.task",
+]);
 
 describe("EndpointManifest snapshot", () => {
   for (const endpointId of Object.keys(SNAPSHOT_BASELINE)) {
@@ -82,7 +145,7 @@ describe("EndpointManifest snapshot", () => {
       const snapshot = endpointSnapshot(endpoint);
       const baseline = SNAPSHOT_BASELINE[endpointId];
 
-      if (endpointId === "manus.research") {
+      if (VARIABLE_URL_HOST_IDS.has(endpointId)) {
         // url_host varies with env; assert separately as a non-empty hostname.
         const { url_host, ...rest } = snapshot;
         assert.ok(url_host && url_host.length > 0, "url_host must be a non-empty hostname");
@@ -95,7 +158,14 @@ describe("EndpointManifest snapshot", () => {
 
   it("registry order is stable and matches the baseline", () => {
     const ids = endpointRegistry.map((endpoint) => endpoint.id);
-    assert.deepEqual(ids, ["browserbase.session", "exa.search", "manus.research"]);
+    assert.deepEqual(ids, [
+      "browserbase.session",
+      "exa.search",
+      "parallel.search",
+      "parallel.extract",
+      "manus.research",
+      "parallel.task",
+    ]);
   });
 
   it("every registered endpoint produces a valid snapshot", () => {

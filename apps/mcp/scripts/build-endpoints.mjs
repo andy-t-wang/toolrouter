@@ -19,6 +19,7 @@ import { fileURLToPath } from "node:url";
 import {
   EXA_SEARCH_PRICES,
   MANUS_RESEARCH_DEPTHS,
+  PARALLEL_TASK_PROCESSORS,
   endpointRegistry,
 } from "../../../packages/router-core/src/endpoints/index.ts";
 import { endpointSnapshot } from "../../../packages/router-core/src/manifest/schema.ts";
@@ -27,6 +28,7 @@ const PROVIDER_LOGO_PATHS = Object.freeze({
   exa: "/exa-logomark.svg",
   browserbase: "/browserbase-logomark.svg",
   manus: "/manus-logomark.svg",
+  parallel: "/parallel-logomark.svg",
 });
 
 // Per-endpoint MCP tool wiring. The published package keeps the same tool
@@ -56,6 +58,28 @@ const MCP_TOOL_DEFINITIONS = Object.freeze({
       "Use this when the user asks for deep research, multi-source investigation, visual lookup, vendor research, or docs investigation. This starts one async Manus task through endpoint id manus.research and returns a task handle, not the final answer. Do not call start again for the same query; call the MCP tools manus_research_status or manus_research_result with the returned task_id unless the user explicitly asks for a new task.",
     input_kind: "research",
     // Manus uses depth-based pricing, resolved per-call.
+    default_max_usd: null,
+  }),
+  "parallel.search": Object.freeze({
+    tool_name: "parallel_search",
+    title: "Parallel search",
+    description: "Run a keyword-driven web search through ToolRouter's x402 Parallel wrapper.",
+    input_kind: "parallel_search",
+    default_max_usd: "0.02",
+  }),
+  "parallel.extract": Object.freeze({
+    tool_name: "parallel_extract",
+    title: "Parallel extract",
+    description: "Extract structured content and excerpts from one or more URLs through ToolRouter's x402 Parallel wrapper.",
+    input_kind: "parallel_extract",
+    default_max_usd: null,
+  }),
+  "parallel.task": Object.freeze({
+    tool_name: "parallel_task_start",
+    title: "Start Parallel task",
+    description:
+      "Use this when the user asks for deep, structured research with citations. This starts one async Parallel task through endpoint id parallel.task and returns a run handle, not the final answer. Do not call start again for the same query; call the MCP tools parallel_task_status or parallel_task_result with the returned task_id unless the user explicitly asks for a new task.",
+    input_kind: "parallel_task",
     default_max_usd: null,
   }),
 });
@@ -121,10 +145,16 @@ function buildManifest() {
     enums: {
       search_type: Object.keys(EXA_SEARCH_PRICES),
       manus_depth: Object.keys(MANUS_RESEARCH_DEPTHS),
+      parallel_processor: Object.keys(PARALLEL_TASK_PROCESSORS),
     },
     manus_pricing: {
       default_usd_by_depth: { ...MANUS_RESEARCH_DEPTHS },
       env_var_template: "TOOLROUTER_MANUS_RESEARCH_PRICE_<DEPTH>_USD",
+    },
+    parallel_pricing: {
+      default_usd_by_processor: { ...PARALLEL_TASK_PROCESSORS },
+      markup_usd: 0.01,
+      env_var_template: "TOOLROUTER_PARALLEL_TASK_PRICE_<PROCESSOR>_USD",
     },
   };
 }

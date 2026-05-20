@@ -56,9 +56,15 @@ type EndpointsManifest = {
   enums: {
     search_type: string[];
     manus_depth: string[];
+    parallel_processor?: string[];
   };
   manus_pricing: {
     default_usd_by_depth: Record<string, number>;
+    env_var_template: string;
+  };
+  parallel_pricing?: {
+    default_usd_by_processor: Record<string, number>;
+    markup_usd: number;
     env_var_template: string;
   };
 };
@@ -222,6 +228,67 @@ function inputPropertiesForKind(kind: string) {
       requiredAlternatives: [["query"], ["prompt"]] as string[][],
     };
   }
+  if (kind === "parallel_search") {
+    return {
+      properties: {
+        search_queries: {
+          type: "array",
+          items: { type: "string" },
+          minItems: 1,
+          maxItems: 8,
+          description: "Keyword queries (3-6 words each).",
+        },
+        objective: { type: "string", description: "Optional natural-language goal." },
+        mode: { type: "string", enum: ["basic", "advanced"], description: "Default 'advanced'." },
+        ...PAYMENT_PROPERTIES,
+      },
+      required: ["search_queries"] as string[],
+      requiredAlternatives: undefined as string[][] | undefined,
+    };
+  }
+  if (kind === "parallel_extract") {
+    return {
+      properties: {
+        urls: {
+          type: "array",
+          items: { type: "string" },
+          minItems: 1,
+          maxItems: 20,
+          description: "HTTPS URLs to extract content from.",
+        },
+        objective: { type: "string", description: "Optional natural-language goal." },
+        search_queries: { type: "array", items: { type: "string" }, maxItems: 8 },
+        full_content: { type: "boolean", description: "Return full page content rather than excerpts." },
+        ...PAYMENT_PROPERTIES,
+      },
+      required: ["urls"] as string[],
+      requiredAlternatives: undefined as string[][] | undefined,
+    };
+  }
+  if (kind === "parallel_task") {
+    return {
+      properties: {
+        input: {
+          oneOf: [{ type: "string" }, { type: "object" }],
+          description: "Task input — string or structured object.",
+        },
+        query: { type: "string", description: "Alias for input (string form)." },
+        prompt: { type: "string", description: "Alias for input (string form)." },
+        processor: {
+          type: "string",
+          enum: [...(manifest.enums.parallel_processor || ["lite", "base", "core", "pro", "ultra"])],
+          description: "Processor tier. Default 'ultra'.",
+        },
+        force_new: {
+          type: "boolean",
+          description: "Set true only when the user explicitly wants a fresh Parallel task for the same input.",
+        },
+        ...PAYMENT_PROPERTIES,
+      },
+      required: [] as string[],
+      requiredAlternatives: [["input"], ["query"], ["prompt"]] as string[][],
+    };
+  }
   throw new Error(`unknown MCP input_kind: ${kind}`);
 }
 
@@ -286,9 +353,38 @@ function defaultManusMaxUsd(depth: any, env: any) {
   return /^\d+(\.\d+)?$/u.test(raw) ? raw : fallbackUsdStr;
 }
 
+function defaultParallelTaskMaxUsd(processor: any, env: any) {
+  const manifest = loadEndpointsManifest();
+  if (!manifest.parallel_pricing || !manifest.enums.parallel_processor) return "";
+  const valid = manifest.enums.parallel_processor;
+  const fallback = valid.includes("ultra") ? "ultra" : valid[0];
+  const normalized = valid.includes(processor) ? processor : fallback;
+  const envKey = manifest.parallel_pricing.env_var_template.replace(
+    "<PROCESSOR>",
+    String(normalized).toUpperCase(),
+  );
+  const baseFromEnv = String(env[envKey] || "").trim();
+  const fallbackBase = manifest.parallel_pricing.default_usd_by_processor[normalized];
+  const base = /^\d+(\.\d+)?$/u.test(baseFromEnv) ? Number(baseFromEnv) : Number(fallbackBase || 0);
+  const total = base + Number(manifest.parallel_pricing.markup_usd || 0);
+  return total > 0 ? total.toString() : "";
+}
+
+function defaultParallelExtractMaxUsd(args: any) {
+  const urls = Array.isArray(args.urls) ? args.urls : Array.isArray(args.input?.urls) ? args.input.urls : [];
+  const count = urls.length || 1;
+  const total = 0.01 * count + 0.01;
+  return total.toFixed(2).replace(/0$/u, "").replace(/\.$/u, "");
+}
+
 const MANUS_NEXT_MCP_TOOLS = Object.freeze({
   status: "manus_research_status",
   result: "manus_research_result",
+});
+
+const PARALLEL_NEXT_MCP_TOOLS = Object.freeze({
+  status: "parallel_task_status",
+  result: "parallel_task_result",
 });
 
 const GENERIC_ENDPOINT_CONTROL_FIELDS = new Set([
@@ -382,7 +478,7 @@ export function tools(): McpTool[] {
     },
     ...endpointToolSpecs().map(({ name, title, description, inputSchema }) => {
       const tool: McpTool = { name, title, description, inputSchema };
-      if (name === "manus_research_start") {
+      if (name === "manus_research_start" || name === "parallel_task_start") {
         tool.outputSchema = jsonSchema({
           id: { type: ["string", "null"] },
           endpoint_id: { type: "string" },
@@ -452,6 +548,47 @@ export function tools(): McpTool[] {
       }, ["task_id", "status", "final_answer_available", "messages"]),
       annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
     },
+    {
+      name: "parallel_task_status",
+      title: "Check Parallel task status",
+      description: "Use this when you have a Parallel task_id and need to check whether the async run is running, waiting, stopped, or errored. Do not call start again for the same input.",
+      inputSchema: jsonSchema({
+        task_id: { type: "string", description: "Parallel task id returned by parallel_task_start." },
+      }, ["task_id"]),
+      outputSchema: jsonSchema({
+        task_id: { type: "string" },
+        status: { type: "string" },
+        title: { type: ["string", "null"] },
+        task_url: { type: ["string", "null"] },
+        created_at: { type: ["string", "null"] },
+        updated_at: { type: ["string", "null"] },
+        last_checked_at: { type: ["string", "null"] },
+        poll_after_seconds: { type: ["integer", "null"] },
+      }, ["task_id", "status", "poll_after_seconds"]),
+      annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
+    },
+    {
+      name: "parallel_task_result",
+      title: "Get Parallel task result",
+      description: "Use this when you have a Parallel task_id and need the final answer or latest async progress. If status is running, return the non-error progress response. Do not call start again for the same input.",
+      inputSchema: jsonSchema({
+        task_id: { type: "string", description: "Parallel task id returned by parallel_task_start." },
+      }, ["task_id"]),
+      outputSchema: jsonSchema({
+        task_id: { type: "string" },
+        status: { type: "string" },
+        final_answer_available: { type: "boolean" },
+        answer: { type: ["string", "null"] },
+        attachments: { type: "array" },
+        latest_status_message: { type: ["string", "null"] },
+        waiting_details: {},
+        error: { type: ["string", "object", "null"] },
+        messages: { type: "array" },
+        poll_after_seconds: { type: ["integer", "null"] },
+        isError: { type: "boolean" },
+      }, ["task_id", "status", "final_answer_available", "messages"]),
+      annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
+    },
   ];
 }
 
@@ -492,6 +629,115 @@ function manusNextToolCalls(taskId: string, nextMcpTools: any, nextApiRoutes: an
       note: "MCP tool name, not a ToolRouter endpoint_id.",
     },
   };
+}
+
+function parallelNextApiRoutes(taskId: string) {
+  const encoded = encodeURIComponent(taskId);
+  return {
+    status: `/v1/parallel/tasks/${encoded}/status`,
+    result: `/v1/parallel/tasks/${encoded}/result`,
+  };
+}
+
+function parallelNextToolCalls(taskId: string, nextMcpTools: any, nextApiRoutes: any) {
+  return {
+    status: {
+      type: "mcp_tool",
+      tool_name: nextMcpTools.status,
+      arguments: { task_id: taskId },
+      api_route: nextApiRoutes.status,
+      note: "MCP tool name, not a ToolRouter endpoint_id.",
+    },
+    result: {
+      type: "mcp_tool",
+      tool_name: nextMcpTools.result,
+      arguments: { task_id: taskId },
+      api_route: nextApiRoutes.result,
+      note: "MCP tool name, not a ToolRouter endpoint_id.",
+    },
+  };
+}
+
+function parallelTaskStartResult(data: any) {
+  const taskId = valueFrom(data, "task_id");
+  const nextMcpTools = valueFrom(data, "next_mcp_tools") || valueFrom(data, "next_tools") || PARALLEL_NEXT_MCP_TOOLS;
+  const nextApiRoutes = valueFrom(data, "next_api_routes") || (taskId ? parallelNextApiRoutes(taskId) : null);
+  const nextToolCalls =
+    valueFrom(data, "next_tool_calls") ||
+    (taskId && nextApiRoutes ? parallelNextToolCalls(taskId, nextMcpTools, nextApiRoutes) : null);
+  const structuredContent = {
+    id: data?.id || valueFrom(data, "request_id") || null,
+    endpoint_id: data?.endpoint_id || "parallel.task",
+    path: data?.path || null,
+    charged: data?.charged ?? null,
+    status_code: data?.status_code ?? null,
+    credit_reserved_usd: data?.credit_reserved_usd ?? null,
+    credit_captured_usd: data?.credit_captured_usd ?? null,
+    credit_released_usd: data?.credit_released_usd ?? null,
+    task_created: Boolean(valueFrom(data, "task_created")),
+    deduped: Boolean(valueFrom(data, "deduped")),
+    request_id: valueFrom(data, "request_id") || data?.id || null,
+    trace_id: valueFrom(data, "trace_id") || data?.trace_id || null,
+    task_id: taskId,
+    task_url: valueFrom(data, "task_url"),
+    status: valueFrom(data, "status") || "running",
+    poll_after_seconds: valueFrom(data, "poll_after_seconds") || 10,
+    next_tools: nextMcpTools,
+    next_mcp_tools: nextMcpTools,
+    next_endpoint_ids: valueFrom(data, "next_endpoint_ids") || [],
+    next_api_routes: nextApiRoutes,
+    next_tool_calls: nextToolCalls,
+    repeat_for_same_query: false,
+  };
+  const missingTask = !structuredContent.task_id;
+  const text = missingTask
+    ? [
+        "Parallel task did not return a run handle. Do not treat this as a created task.",
+        "",
+        JSON.stringify(data, null, 2),
+      ].join("\n")
+    : [
+        structuredContent.deduped ? "Existing Parallel task returned." : "Parallel task started.",
+        `Task id: ${structuredContent.task_id}`,
+        `Status: ${structuredContent.status}`,
+        `Next MCP tools, not endpoint IDs: call ${structuredContent.next_mcp_tools.status} or ${structuredContent.next_mcp_tools.result} after ${structuredContent.poll_after_seconds} seconds.`,
+        "Do not call start again for the same input unless the user explicitly asks for a new task.",
+      ].join("\n");
+  return textResult(text, structuredContent, missingTask);
+}
+
+function parallelTaskStatusResult(data: any) {
+  const text = [
+    `Parallel task ${data.task_id} is ${data.status}.`,
+    data.poll_after_seconds ? `Poll again after ${data.poll_after_seconds} seconds.` : null,
+  ].filter(Boolean).join("\n");
+  return textResult(text, data);
+}
+
+function parallelTaskFinalResult(data: any) {
+  const status = String(data?.status || "running");
+  const isError = data?.isError === true || status === "error";
+  let text: string;
+  if (isError) {
+    text = [
+      `Parallel task ${data.task_id} failed.`,
+      data.error ? `Error: ${data.error}` : null,
+    ].filter(Boolean).join("\n");
+  } else if (status === "waiting") {
+    text = [
+      `Parallel task ${data.task_id} is waiting.`,
+      data.latest_status_message || "Ask the user for the missing input instead of starting a new task.",
+    ].filter(Boolean).join("\n");
+  } else if (!data.final_answer_available) {
+    text = [
+      `Parallel task ${data.task_id} is ${status}.`,
+      data.latest_status_message || null,
+      data.poll_after_seconds ? `Poll again after ${data.poll_after_seconds} seconds.` : null,
+    ].filter(Boolean).join("\n");
+  } else {
+    text = data.answer || JSON.stringify(data, null, 2);
+  }
+  return textResult(text, data, isError);
 }
 
 function manusResearchStartResult(data: any) {
@@ -614,9 +860,18 @@ function requestedManusDepth(args: any) {
   return args.depth || input.depth || "standard";
 }
 
+function requestedParallelProcessor(args: any) {
+  const input = args.input && typeof args.input === "object" && !Array.isArray(args.input)
+    ? args.input
+    : {};
+  return args.processor || input.processor || "ultra";
+}
+
 function defaultMaxUsd(endpointId: string, args: any, env: any) {
   const manifest = loadEndpointsManifest();
   if (endpointId === "manus.research") return defaultManusMaxUsd(requestedManusDepth(args), env);
+  if (endpointId === "parallel.task") return defaultParallelTaskMaxUsd(requestedParallelProcessor(args), env);
+  if (endpointId === "parallel.extract") return defaultParallelExtractMaxUsd(args);
   const endpoint = manifest.endpoints.find((candidate) => candidate.id === endpointId);
   if (endpoint && endpoint.mcp.default_max_usd) return endpoint.mcp.default_max_usd;
   return undefined;
@@ -634,7 +889,7 @@ async function endpointPayload(name: string, args: any, { env, fetchImpl }: any)
     input: args.input !== undefined ? args.input : topLevelEndpointInput(args),
     ...(maxUsd !== undefined ? { maxUsd } : {}),
     ...(paymentMode !== undefined ? { payment_mode: paymentMode } : {}),
-    ...(name === "manus_research_start" && forceNew !== undefined
+    ...((name === "manus_research_start" || name === "parallel_task_start") && forceNew !== undefined
       ? { force_new: Boolean(forceNew) }
       : {}),
   };
@@ -682,6 +937,14 @@ export async function callTool(name: string, args: any = {}, options: any = {}) 
       const data = await routerFetch(`/v1/manus/tasks/${encodeURIComponent(args.task_id)}/result`, { env, fetchImpl });
       return manusResearchFinalResult(data);
     }
+    if (name === "parallel_task_status") {
+      const data = await routerFetch(`/v1/parallel/tasks/${encodeURIComponent(args.task_id)}/status`, { env, fetchImpl });
+      return parallelTaskStatusResult(data);
+    }
+    if (name === "parallel_task_result") {
+      const data = await routerFetch(`/v1/parallel/tasks/${encodeURIComponent(args.task_id)}/result`, { env, fetchImpl });
+      return parallelTaskFinalResult(data);
+    }
     const payload = name === "toolrouter_call_endpoint"
       ? genericEndpointPayload(args)
       : await endpointPayload(name, args, { env, fetchImpl });
@@ -689,6 +952,9 @@ export async function callTool(name: string, args: any = {}, options: any = {}) 
     const data = await routerFetch("/v1/requests", { env, fetchImpl, method: "POST", body: payload });
     if (name === "manus_research_start") {
       return manusResearchStartResult(data);
+    }
+    if (name === "parallel_task_start") {
+      return parallelTaskStartResult(data);
     }
     return textResult(JSON.stringify(data, null, 2), data);
   } catch (error) {

@@ -35,6 +35,13 @@ export const ENDPOINT_CATEGORY_DEFINITIONS = Object.freeze([
     use_cases: ["page fetch", "metadata extraction", "content ingestion"],
   },
   {
+    id: "extract",
+    name: "Extract",
+    description: "Extract structured content and excerpts from one or more URLs.",
+    recommended_endpoint_id: "parallel.extract",
+    use_cases: ["URL content extraction", "structured page excerpts", "research source ingestion"],
+  },
+  {
     id: "compute",
     name: "Compute",
     description: "Run bounded remote compute, transformations, and job execution.",

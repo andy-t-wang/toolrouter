@@ -1,12 +1,18 @@
 import { ENDPOINT_CATEGORY_DEFINITIONS, isEndpointCategory } from "./categories.ts";
 import { browserbaseSessionEndpointDefinition } from "./browser_usage/browserbase/session.ts";
+import { parallelExtractEndpointDefinition } from "./extract/parallel/extract.ts";
 import { manusResearchEndpointDefinition } from "./research/manus/research.ts";
+import { parallelTaskEndpointDefinition } from "./research/parallel/task.ts";
 import { exaSearchEndpointDefinition } from "./search/exa/search.ts";
+import { parallelSearchEndpointDefinition } from "./search/parallel/search.ts";
 
 const ENDPOINT_DEFINITIONS = Object.freeze([
   browserbaseSessionEndpointDefinition,
   exaSearchEndpointDefinition,
+  parallelSearchEndpointDefinition,
+  parallelExtractEndpointDefinition,
   manusResearchEndpointDefinition,
+  parallelTaskEndpointDefinition,
 ]);
 
 function assertHttpUrl(value, fieldName) {
