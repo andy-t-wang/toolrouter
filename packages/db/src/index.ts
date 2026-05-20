@@ -106,6 +106,33 @@ function qs(params: Record<string, any>) {
   return search.toString();
 }
 
+function rollupApiKeyStats(rows: Iterable<{ api_key_id?: string | null; ts?: string | null }>) {
+  // Compare timestamps as instants, not lexically — mixed offsets (`Z` vs
+  // `+00:00`, DST transitions) can lexically order a newer row behind an
+  // older one even when both are UTC.
+  const stats = new Map<string, { request_count: number; last_used_at: string | null; last_used_ms: number }>();
+  for (const row of rows) {
+    const keyId = row.api_key_id;
+    if (!keyId) continue;
+    const cur = stats.get(keyId) || { request_count: 0, last_used_at: null, last_used_ms: -Infinity };
+    cur.request_count += 1;
+    const ts = String(row.ts || "");
+    if (ts) {
+      const ms = Date.parse(ts);
+      if (Number.isFinite(ms) && ms > cur.last_used_ms) {
+        cur.last_used_at = ts;
+        cur.last_used_ms = ms;
+      }
+    }
+    stats.set(keyId, cur);
+  }
+  return Array.from(stats, ([api_key_id, value]) => ({
+    api_key_id,
+    request_count: value.request_count,
+    last_used_at: value.last_used_at,
+  }));
+}
+
 function ensureDevKey(data: any) {
   if (process.env.ROUTER_DEV_MODE !== "true") return null;
   const rawKey = process.env.AGENTKIT_ROUTER_DEV_API_KEY || "dev_agentkit_router_key";
@@ -256,18 +283,9 @@ export class LocalStore implements ToolRouterStore {
   }
 
   async listApiKeyStats({ user_id }: { user_id: string }) {
-    const stats = new Map<string, { request_count: number; last_used_at: string | null }>();
-    for (const row of this.read().requests) {
-      if (row.user_id !== user_id) continue;
-      const keyId = row.api_key_id;
-      if (!keyId) continue;
-      const cur = stats.get(keyId) || { request_count: 0, last_used_at: null };
-      cur.request_count += 1;
-      const ts = String(row.ts || "");
-      if (ts && (!cur.last_used_at || ts > cur.last_used_at)) cur.last_used_at = ts;
-      stats.set(keyId, cur);
-    }
-    return Array.from(stats, ([api_key_id, value]) => ({ api_key_id, ...value }));
+    return rollupApiKeyStats(
+      this.read().requests.filter((row: any) => row.user_id === user_id),
+    );
   }
 
   async disableApiKey({ id, user_id }: { id: string; user_id?: string }) {
@@ -619,19 +637,27 @@ export class SupabaseStore implements ToolRouterStore {
   }
 
   async listApiKeyStats({ user_id }: { user_id: string }) {
-    // PostgREST aggregate: groups by the non-aggregate column (api_key_id).
-    // count() and max(ts) are unbounded — no row limit, single round-trip.
-    const params = qs({
-      user_id: `eq.${user_id}`,
-      api_key_id: "not.is.null",
-      select: "api_key_id,request_count:id.count(),last_used_at:ts.max()",
-    });
-    const rows = (await this.request(`/requests?${params}`)) || [];
-    return rows.map((row: any) => ({
-      api_key_id: row.api_key_id,
-      request_count: Number(row.request_count) || 0,
-      last_used_at: row.last_used_at || null,
-    }));
+    // PostgREST `db-aggregates-enabled` is off by default on Supabase, so we
+    // pull (api_key_id, ts) rows and roll up client-side instead of using
+    // count()/max(). Page through limit/offset until we get a short page, so
+    // the rollup doesn't silently truncate at `db-max-rows` (commonly 1000).
+    const pageSize = 1000;
+    const maxPages = 100;
+    const all: any[] = [];
+    for (let page = 0; page < maxPages; page++) {
+      const params = qs({
+        user_id: `eq.${user_id}`,
+        api_key_id: "not.is.null",
+        select: "api_key_id,ts",
+        order: "ts.asc,id.asc",
+        limit: pageSize,
+        offset: page * pageSize,
+      });
+      const rows: any[] = (await this.request(`/requests?${params}`)) || [];
+      all.push(...rows);
+      if (rows.length < pageSize) break;
+    }
+    return rollupApiKeyStats(all);
   }
 
   async disableApiKey({ id, user_id }: { id: string; user_id?: string }) {

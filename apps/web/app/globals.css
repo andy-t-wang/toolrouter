@@ -163,8 +163,7 @@ code {
 .key-actions,
 .key-token-row,
 .pill,
-.chip,
-.side-status strong {
+.chip {
   align-items: center;
   display: flex;
 }
@@ -277,26 +276,6 @@ code {
   background: var(--bone-3);
   color: var(--ink);
   font-weight: 500;
-}
-
-.side-status {
-  border-top: 1px solid var(--line);
-  display: grid;
-  gap: 4px;
-  margin-top: 24px;
-  padding: 10px 10px 0;
-}
-
-.side-status span:first-child {
-  color: var(--mute);
-  font-size: 11px;
-}
-
-.side-status strong {
-  color: var(--ink-2);
-  font-size: 13px;
-  font-weight: 400;
-  gap: 8px;
 }
 
 .main {
