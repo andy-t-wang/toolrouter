@@ -341,6 +341,40 @@ describe("ToolRouter MCP server", () => {
     });
   });
 
+  it("nests an object parallel_task_start input under the input key", async () => {
+    const calls = [];
+    const result = await callTool("parallel_task_start", {
+      input: { topic: "image search providers", region: "us" },
+      processor: "pro",
+    }, {
+      env: { TOOLROUTER_API_URL: "http://router.test", TOOLROUTER_API_KEY: "tr_test" },
+      fetchImpl: async (url, init) => {
+        calls.push({ url, init });
+        return response({
+          id: "req_parallel_obj",
+          endpoint_id: "parallel.task",
+          path: "x402",
+          charged: true,
+          task_created: true,
+          deduped: false,
+          task_id: "run_parallel_obj",
+          status: "running",
+          poll_after_seconds: 10,
+          next_tools: { status: "parallel_task_status", result: "parallel_task_result" },
+          repeat_for_same_query: false,
+        });
+      },
+    });
+
+    assert.equal(result.isError, false);
+    const body = JSON.parse(calls[0].init.body);
+    assert.equal(body.endpoint_id, "parallel.task");
+    assert.deepEqual(body.input, {
+      input: { topic: "image search providers", region: "us" },
+      processor: "pro",
+    });
+  });
+
   it("keeps generic endpoint calls as raw ToolRouter responses", async () => {
     const calls = [];
     const result = await callTool("toolrouter_call_endpoint", {

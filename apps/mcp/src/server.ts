@@ -233,10 +233,10 @@ function inputPropertiesForKind(kind: string) {
       properties: {
         search_queries: {
           type: "array",
-          items: { type: "string" },
+          items: { type: "string", maxLength: 200 },
           minItems: 1,
-          maxItems: 8,
-          description: "Keyword queries (3-6 words each).",
+          maxItems: 5,
+          description: "Keyword queries (3-6 words each, max 5 queries, 200 chars each).",
         },
         objective: { type: "string", description: "Optional natural-language goal." },
         mode: { type: "string", enum: ["basic", "advanced"], description: "Default 'advanced'." },
@@ -257,7 +257,12 @@ function inputPropertiesForKind(kind: string) {
           description: "HTTPS URLs to extract content from.",
         },
         objective: { type: "string", description: "Optional natural-language goal." },
-        search_queries: { type: "array", items: { type: "string" }, maxItems: 8 },
+        search_queries: {
+          type: "array",
+          items: { type: "string", maxLength: 200 },
+          maxItems: 5,
+          description: "Optional keyword queries (max 5, 200 chars each).",
+        },
         full_content: { type: "boolean", description: "Return full page content rather than excerpts." },
         ...PAYMENT_PROPERTIES,
       },
@@ -877,18 +882,7 @@ function defaultMaxUsd(endpointId: string, args: any, env: any) {
   return undefined;
 }
 
-function isPlainObject(value: any): value is Record<string, any> {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
-}
-
 function parallelTaskInputObject(args: any) {
-  if (isPlainObject(args.input)) {
-    const wrapped: Record<string, any> = { ...args.input };
-    if (wrapped.processor === undefined && args.processor !== undefined) {
-      wrapped.processor = args.processor;
-    }
-    return wrapped;
-  }
   const wrapped: Record<string, any> = {};
   if (args.input !== undefined) wrapped.input = args.input;
   else if (args.query !== undefined) wrapped.query = args.query;
