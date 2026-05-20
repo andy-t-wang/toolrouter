@@ -619,19 +619,27 @@ export class SupabaseStore implements ToolRouterStore {
   }
 
   async listApiKeyStats({ user_id }: { user_id: string }) {
-    // PostgREST aggregate: groups by the non-aggregate column (api_key_id).
-    // count() and max(ts) are unbounded — no row limit, single round-trip.
+    // PostgREST `db-aggregates-enabled` is off by default on Supabase, so we
+    // pull (api_key_id, ts) rows and roll up client-side instead of using
+    // count()/max() — same shape as LocalStore.listApiKeyStats.
     const params = qs({
       user_id: `eq.${user_id}`,
       api_key_id: "not.is.null",
-      select: "api_key_id,request_count:id.count(),last_used_at:ts.max()",
+      select: "api_key_id,ts",
+      order: "ts.desc",
     });
-    const rows = (await this.request(`/requests?${params}`)) || [];
-    return rows.map((row: any) => ({
-      api_key_id: row.api_key_id,
-      request_count: Number(row.request_count) || 0,
-      last_used_at: row.last_used_at || null,
-    }));
+    const rows: any[] = (await this.request(`/requests?${params}`)) || [];
+    const stats = new Map<string, { request_count: number; last_used_at: string | null }>();
+    for (const row of rows) {
+      const keyId = row.api_key_id;
+      if (!keyId) continue;
+      const cur = stats.get(keyId) || { request_count: 0, last_used_at: null };
+      cur.request_count += 1;
+      const ts = String(row.ts || "");
+      if (ts && (!cur.last_used_at || ts > cur.last_used_at)) cur.last_used_at = ts;
+      stats.set(keyId, cur);
+    }
+    return Array.from(stats, ([api_key_id, value]) => ({ api_key_id, ...value }));
   }
 
   async disableApiKey({ id, user_id }: { id: string; user_id?: string }) {

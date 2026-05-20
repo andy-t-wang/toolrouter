@@ -85,6 +85,36 @@ describe("Supabase store RPC accounting", () => {
     });
   });
 
+  it("rolls up API key request stats without PostgREST aggregates", async () => {
+    const { store, calls } = rpcCapturingStore([
+      { api_key_id: "key_a", ts: "2026-05-19T10:00:00.000Z" },
+      { api_key_id: "key_a", ts: "2026-05-19T09:00:00.000Z" },
+      { api_key_id: "key_b", ts: "2026-05-18T12:00:00.000Z" },
+    ]);
+
+    const stats = await store.listApiKeyStats({
+      user_id: "00000000-0000-4000-8000-000000000001",
+    });
+
+    assert.equal(calls.length, 1);
+    const [requestPath] = calls[0].path.split("?");
+    assert.equal(requestPath, "/requests");
+    const params = new URLSearchParams(calls[0].path.split("?")[1]);
+    assert.equal(params.get("user_id"), "eq.00000000-0000-4000-8000-000000000001");
+    assert.equal(params.get("api_key_id"), "not.is.null");
+    const select = params.get("select") || "";
+    assert.doesNotMatch(select, /count\(\)/u, "must not call PostgREST count() aggregate");
+    assert.doesNotMatch(select, /max\(\)/u, "must not call PostgREST max() aggregate");
+    assert.match(select, /api_key_id/u);
+    assert.match(select, /ts/u);
+
+    const byKey = new Map(stats.map((row) => [row.api_key_id, row]));
+    assert.equal(byKey.get("key_a").request_count, 2);
+    assert.equal(byKey.get("key_a").last_used_at, "2026-05-19T10:00:00.000Z");
+    assert.equal(byKey.get("key_b").request_count, 1);
+    assert.equal(byKey.get("key_b").last_used_at, "2026-05-18T12:00:00.000Z");
+  });
+
   it("settles credit purchases through the atomic SQL RPC", async () => {
     const { store, calls } = rpcCapturingStore({
       id: "cp_1",

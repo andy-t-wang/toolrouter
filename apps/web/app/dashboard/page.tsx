@@ -868,13 +868,6 @@ export default function DashboardPage() {
                 </a>
               ))}
             </nav>
-            <div className="side-status">
-              <span>Status</span>
-              <strong>
-                <span className="dot good" />
-                Live status tracked
-              </strong>
-            </div>
           </aside>
 
           <main className="main">
