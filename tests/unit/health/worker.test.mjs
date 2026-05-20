@@ -570,4 +570,115 @@ describe("endpoint health worker", () => {
     assert.equal(db.insertedHealthChecks[0].error, null);
     assert.equal(db.insertedHealthChecks[0].payment_error, null);
   });
+
+  it("writes per-layer health for a paid probe that settled and reached the upstream (U6)", async () => {
+    const endpoint = getEndpoint("browserbase.session");
+    const db = createDb();
+
+    await runEndpointHealthCheck({
+      endpoint,
+      db,
+      executor: async () => ({
+        ok: true,
+        status_code: 200,
+        path: "agentkit_to_x402",
+        charged: true,
+        latency_ms: 40,
+        amount_usd: "0.01",
+      }),
+      now: () => new Date("2026-05-20T10:00:00.000Z"),
+      useRecentRequests: false,
+    });
+
+    const status = db.upsertedStatuses[0];
+    assert.equal(status.layer_facilitator_status, "healthy");
+    assert.equal(status.layer_upstream_status, "healthy");
+    assert.equal(status.layer_transport_status, "healthy");
+    assert.ok(status.layer_facilitator_updated_at);
+    assert.ok(status.layer_upstream_updated_at);
+    assert.ok(status.layer_transport_updated_at);
+    // agentkit layer is NOT touched by a paid probe that served via agentkit_to_x402 fallback.
+    // (Free trial wasn't realized — charged=true means we paid.) The plan keeps agentkit
+    // untouched and lets the agentkit probe own that signal.
+    assert.equal(status.layer_agentkit_status, undefined);
+  });
+
+  it("writes per-layer health for an agentkit probe served from the AgentKit path (U6)", async () => {
+    const endpoint = getEndpoint("exa.search");
+    const db = createDb();
+
+    await runEndpointHealthCheck({
+      endpoint,
+      db,
+      executor: async () => ({
+        ok: true,
+        status_code: 200,
+        path: "agentkit",
+        charged: false,
+        latency_ms: 40,
+      }),
+      now: () => new Date("2026-05-20T10:00:00.000Z"),
+      useRecentRequests: false,
+      probeKind: "agentkit",
+      updateEndpointStatus: true,
+    });
+
+    const status = db.upsertedStatuses[0];
+    assert.equal(status.layer_agentkit_status, "healthy");
+    assert.equal(status.layer_transport_status, "healthy");
+    // Paid layers untouched on the agentkit probe.
+    assert.equal(status.layer_facilitator_status, undefined);
+    assert.equal(status.layer_upstream_status, undefined);
+  });
+
+  it("attributes a Settlement failed 402 to the facilitator layer in per-layer columns (U6)", async () => {
+    const endpoint = getEndpoint("exa.search");
+    const db = createDb();
+
+    await runEndpointHealthCheck({
+      endpoint,
+      db,
+      executor: async () => ({
+        ok: false,
+        status_code: 402,
+        path: "agentkit_to_x402",
+        charged: false,
+        latency_ms: 900,
+        body: { error: "Settlement failed: 402" },
+      }),
+      now: () => new Date("2026-05-20T10:00:00.000Z"),
+      useRecentRequests: false,
+    });
+
+    const status = db.upsertedStatuses[0];
+    assert.equal(status.layer_facilitator_status, "degraded");
+    assert.equal(status.layer_transport_status, "healthy");
+    // upstream was never reached because settlement failed before forward.
+    assert.equal(status.layer_upstream_status, undefined);
+  });
+
+  it("attributes a 503 upstream failure to the upstream layer in per-layer columns (U6)", async () => {
+    const endpoint = getEndpoint("browserbase.session");
+    const db = createDb();
+
+    await runEndpointHealthCheck({
+      endpoint,
+      db,
+      executor: async () => ({
+        ok: false,
+        status_code: 503,
+        path: "agentkit_to_x402",
+        charged: true,
+        latency_ms: 800,
+        body: { error: "service unavailable" },
+      }),
+      now: () => new Date("2026-05-20T10:00:00.000Z"),
+      useRecentRequests: false,
+    });
+
+    const status = db.upsertedStatuses[0];
+    assert.equal(status.layer_upstream_status, "failing");
+    assert.equal(status.layer_facilitator_status, "healthy");
+    assert.equal(status.layer_transport_status, "healthy");
+  });
 });

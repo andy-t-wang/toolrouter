@@ -627,6 +627,33 @@ async function monitoringPayload(store: any, user_id: string) {
   };
 }
 
+// Layer staleness window (U6). 24h is a flat ceiling that covers the 1h paid
+// probe and the 12h agentkit probe cadences with margin. Anything older than
+// this surfaces as `unknown` in the public DTO rather than as a cached value.
+const LAYER_FRESHNESS_WINDOW_MS = 24 * 60 * 60 * 1000;
+const HEALTH_LAYER_NAMES = ["facilitator", "agentkit", "upstream", "transport"] as const;
+
+function freshLayerStatus(value: any, updatedAt: any, now: Date) {
+  if (!value) return "unknown";
+  const updatedAtMs = typeof updatedAt === "string" ? Date.parse(updatedAt) : NaN;
+  if (!Number.isFinite(updatedAtMs)) return "unknown";
+  if (now.getTime() - updatedAtMs > LAYER_FRESHNESS_WINDOW_MS) return "unknown";
+  return String(value);
+}
+
+function publicStatusLayers(status: any, now: Date) {
+  const layers: Record<string, { status: string; updated_at: string | null }> = {};
+  for (const layer of HEALTH_LAYER_NAMES) {
+    const raw = status?.[`layer_${layer}_status`] ?? null;
+    const updatedAt = status?.[`layer_${layer}_updated_at`] ?? null;
+    layers[layer] = {
+      status: freshLayerStatus(raw, updatedAt, now),
+      updated_at: typeof updatedAt === "string" ? updatedAt : null,
+    };
+  }
+  return layers;
+}
+
 function publicStatusDto(
   endpoint: any,
   status: any,
@@ -686,6 +713,7 @@ function publicStatusDto(
     agentkit_last_checked_at: checkedAt(latestAgentKitEvidence),
     agentkit_path: latestAgentKitEvidence?.path || null,
     agentkit_charged: Boolean(latestAgentKitEvidence?.charged || false),
+    layers: publicStatusLayers(status, now),
     last_error: publicStatusError(status || latestCheck),
   };
 }

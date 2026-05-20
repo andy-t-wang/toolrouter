@@ -15,6 +15,31 @@ import {
 
 import { providerLogoPath } from "./provider-logos.ts";
 
+export type LayerStatusName = "healthy" | "degraded" | "failing" | "unknown" | string;
+
+export type LayerStatusRow = {
+  status: LayerStatusName;
+  updated_at: string | null;
+};
+
+export type EndpointLayerStatuses = {
+  facilitator: LayerStatusRow;
+  agentkit: LayerStatusRow;
+  upstream: LayerStatusRow;
+  transport: LayerStatusRow;
+};
+
+export const HEALTH_LAYER_NAMES = ["facilitator", "agentkit", "upstream", "transport"] as const;
+
+function unknownLayerStatuses(): EndpointLayerStatuses {
+  return {
+    facilitator: { status: "unknown", updated_at: null },
+    agentkit: { status: "unknown", updated_at: null },
+    upstream: { status: "unknown", updated_at: null },
+    transport: { status: "unknown", updated_at: null },
+  };
+}
+
 export type LandingEndpointFallback = {
   id: string;
   provider: string;
@@ -30,6 +55,7 @@ export type LandingEndpointFallback = {
   sparkline_30d: number[];
   health_check_count_30d: number;
   provider_logo_path: string;
+  layers: EndpointLayerStatuses;
 };
 
 function toLandingFallback(endpoint: MaterializedEndpoint): LandingEndpointFallback {
@@ -48,6 +74,7 @@ function toLandingFallback(endpoint: MaterializedEndpoint): LandingEndpointFallb
     sparkline_30d: [],
     health_check_count_30d: 0,
     provider_logo_path: providerLogoPath(endpoint.provider),
+    layers: unknownLayerStatuses(),
   };
 }
 

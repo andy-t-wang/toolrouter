@@ -386,6 +386,45 @@ describe("router API", () => {
     assert.equal(exa.last_error, null);
   });
 
+  it("exposes per-layer health on /v1/status and surfaces stale layers as unknown (U6)", async () => {
+    await withIsolatedApp("toolrouter-public-status-layers-", {}, async ({ baseUrl, store }) => {
+      const now = new Date();
+      const fresh = now.toISOString();
+      const stale = new Date(now.getTime() - 25 * 60 * 60 * 1000).toISOString();
+      await store.upsertEndpointStatus({
+        endpoint_id: "exa.search",
+        status: "healthy",
+        last_checked_at: fresh,
+        status_code: 200,
+        latency_ms: 90,
+        path: "agentkit_to_x402",
+        charged: true,
+        last_error: null,
+        layer_facilitator_status: "degraded",
+        layer_facilitator_updated_at: fresh,
+        layer_upstream_status: "healthy",
+        layer_upstream_updated_at: fresh,
+        layer_transport_status: "healthy",
+        layer_transport_updated_at: fresh,
+        layer_agentkit_status: "healthy",
+        // intentionally older than the 24h window so it should surface unknown
+        layer_agentkit_updated_at: stale,
+      });
+
+      const response = await fetch(`${baseUrl}/v1/status`);
+      assert.equal(response.status, 200);
+      const body = await response.json();
+      const exa = body.endpoints.find((endpoint) => endpoint.id === "exa.search");
+      assert.ok(exa.layers, "expected layers on the public DTO");
+      assert.equal(exa.layers.facilitator.status, "degraded");
+      assert.equal(exa.layers.upstream.status, "healthy");
+      assert.equal(exa.layers.transport.status, "healthy");
+      // Stale agentkit timestamp → surfaced as unknown rather than the cached "healthy".
+      assert.equal(exa.layers.agentkit.status, "unknown");
+      assert.equal(exa.layers.agentkit.updated_at, stale);
+    });
+  });
+
   it("redacts raw health errors from public status", async () => {
     await withIsolatedApp("toolrouter-public-status-redaction-", {}, async ({ baseUrl, store }) => {
       const checkedAt = new Date().toISOString();

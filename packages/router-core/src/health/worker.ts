@@ -247,8 +247,65 @@ function rowFromError(endpoint, checkedAt, error, latencyMs) {
   };
 }
 
-function endpointStatusRow(healthCheckRow) {
-  return {
+// Layers we surface in the public DTO. Order matters only for documentation —
+// each layer is independently updated by the worker based on what a given
+// probe actually exercised.
+export const HEALTH_LAYERS = Object.freeze(["facilitator", "agentkit", "upstream", "transport"]);
+
+function layerStatusForSuccessfulProbe(probeKind, probePaymentMode, path) {
+  // What a successful probe proves depends on the path it took.
+  //  - x402_only / paid path that actually settled → facilitator + upstream + transport healthy
+  //  - agentkit_first path that served from AgentKit → agentkit + transport healthy (we may
+  //    not have hit the facilitator at all because AgentKit skipped settlement)
+  //  - agentkit_first that fell through to x402 (agentkit_to_x402) → all of facilitator,
+  //    agentkit (we tried), upstream, transport are healthy
+  const layers: Record<string, string> = { transport: "healthy" };
+  const paymentMode = probePaymentMode || "agentkit_first";
+  const pathName = typeof path === "string" ? path.toLowerCase() : "";
+  if (probeKind === "agentkit") {
+    layers.agentkit = "healthy";
+    if (pathName === "agentkit_to_x402") {
+      layers.facilitator = "healthy";
+      layers.upstream = "healthy";
+    }
+    return layers;
+  }
+  // Availability probe.
+  if (paymentMode === "x402_only" || pathName === "x402" || pathName === "agentkit_to_x402") {
+    layers.facilitator = "healthy";
+    layers.upstream = "healthy";
+  } else if (pathName === "agentkit") {
+    // Paid probe served from AgentKit cache — facilitator not exercised.
+    layers.agentkit = "healthy";
+  } else {
+    // Unknown path on a 2xx — assume the upstream answered. Be conservative
+    // and only mark transport + upstream healthy; the facilitator is left
+    // untouched (its last value will be preserved by merge in the store).
+    layers.upstream = "healthy";
+  }
+  return layers;
+}
+
+function layerStatusForAttributedFailure(attribution, statusCode): Record<string, string> {
+  // A failure was attributed. The attribution layer is downgraded; all other
+  // layers are left untouched (the store merges with the previous row).
+  const severity = statusCode === null || (Number.isFinite(statusCode) && statusCode >= 500)
+    ? "failing"
+    : "degraded";
+  const layer = attribution.layer;
+  if (layer === "facilitator") return { facilitator: severity, transport: "healthy" };
+  if (layer === "router_payment") return { facilitator: severity, transport: "healthy" };
+  if (layer === "agentkit") return { agentkit: severity, transport: "healthy" };
+  if (layer === "upstream") return { upstream: severity, facilitator: "healthy", transport: "healthy" };
+  if (layer === "rate_limit") return { upstream: severity, transport: "healthy" };
+  if (layer === "timeout") return { transport: severity };
+  if (layer === "transport") return { transport: severity };
+  return {};
+}
+
+function endpointStatusRow(healthCheckRow, { attribution = null, probeKind = "availability", probePaymentMode = null } = {}) {
+  const now = new Date().toISOString();
+  const base = {
     endpoint_id: healthCheckRow.endpoint_id,
     status: healthCheckRow.status,
     last_checked_at: healthCheckRow.checked_at,
@@ -263,8 +320,24 @@ function endpointStatusRow(healthCheckRow) {
     payment_network: healthCheckRow.payment_network,
     payment_error: healthCheckRow.payment_error,
     last_error: healthCheckRow.error,
-    updated_at: new Date().toISOString(),
+    updated_at: now,
   };
+
+  // Disabled / unverified probes don't claim per-layer attribution.
+  if (healthCheckRow.status === "unverified") return base;
+
+  const layerUpdates = attribution
+    ? layerStatusForAttributedFailure(attribution, healthCheckRow.status_code)
+    : layerStatusForSuccessfulProbe(probeKind, probePaymentMode, healthCheckRow.path);
+
+  for (const layer of HEALTH_LAYERS) {
+    const value = layerUpdates[layer];
+    if (value) {
+      base[`layer_${layer}_status`] = value;
+      base[`layer_${layer}_updated_at`] = now;
+    }
+  }
+  return base;
 }
 
 async function executeThroughExecutor(executor, payload) {
@@ -303,8 +376,13 @@ async function upsertEndpointStatus(db, row) {
   throw new TypeError("db must expose upsertEndpointStatus(row) or Supabase from(table)");
 }
 
-async function persistRows(db, healthCheckRow, { updateEndpointStatus = true } = {}) {
-  const statusRow = endpointStatusRow(healthCheckRow);
+async function persistRows(db, healthCheckRow, {
+  updateEndpointStatus = true,
+  attribution = null,
+  probeKind = "availability",
+  probePaymentMode = null,
+} = {}) {
+  const statusRow = endpointStatusRow(healthCheckRow, { attribution, probeKind, probePaymentMode });
   await insertHealthCheck(db, healthCheckRow);
   if (updateEndpointStatus) await upsertEndpointStatus(db, statusRow);
   return statusRow;
@@ -350,6 +428,8 @@ export async function runEndpointHealthCheck({
   }
 
   let healthCheckRow;
+  let attribution = null;
+  let probePaymentMode = null;
   if (!endpoint.enabled) {
     healthCheckRow = {
       id: `hc_${randomUUID()}`,
@@ -379,10 +459,12 @@ export async function runEndpointHealthCheck({
         : null;
       if (recentRequest) {
         healthCheckRow = rowFromRequest(endpoint, recentRequest, checkedAt, { probeKind });
+        attribution = attributionFor(recentRequest);
       } else {
         const probe = healthProbeForEndpoint(endpoint, probeKind);
         const request = endpoint.buildRequest(probe.input);
         const traceId = `health_${randomUUID()}`;
+        probePaymentMode = probe.paymentMode || endpoint.defaultPaymentMode || "agentkit_first";
         const result = await executeThroughExecutor(executor, {
           kind: "health_probe",
           probeKind,
@@ -391,11 +473,12 @@ export async function runEndpointHealthCheck({
           input: probe.input,
           request,
           maxUsd: probe.maxUsd,
-          paymentMode: probe.paymentMode || endpoint.defaultPaymentMode || "agentkit_first",
+          paymentMode: probePaymentMode,
           traceId,
           timeoutMs: healthProbeTimeoutMs(timeoutMs ?? probe.timeoutMs ?? probe.timeout_ms),
         });
         const normalized = normalizeExecutionResult(result, Date.now() - started);
+        attribution = normalized.attribution ?? null;
         healthCheckRow = {
           id: `hc_${randomUUID()}`,
           endpoint_id: endpoint.id,
@@ -418,10 +501,16 @@ export async function runEndpointHealthCheck({
       }
     } catch (error) {
       healthCheckRow = rowFromError(endpoint, checkedAt, error, Date.now() - started);
+      attribution = attributionFor({ error: healthCheckRow.error });
     }
   }
 
-  const statusRow = await persistRows(db, healthCheckRow, { updateEndpointStatus });
+  const statusRow = await persistRows(db, healthCheckRow, {
+    updateEndpointStatus,
+    attribution,
+    probeKind,
+    probePaymentMode,
+  });
   return {
     endpoint_id: endpoint.id,
     status: healthCheckRow.status,
