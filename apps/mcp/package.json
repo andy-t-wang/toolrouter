@@ -38,12 +38,13 @@
     "node": ">=22"
   },
   "scripts": {
+    "build-endpoints": "node --import tsx scripts/build-endpoints.mjs",
     "build": "tsc -p tsconfig.build.json",
-    "dev": "node --env-file-if-exists=../../.env --import tsx src/server.ts",
-    "start": "node --env-file-if-exists=../../.env --import tsx src/server.ts",
+    "dev": "npm run build-endpoints && node --env-file-if-exists=../../.env --import tsx src/server.ts",
+    "start": "npm run build-endpoints && node --env-file-if-exists=../../.env --import tsx src/server.ts",
     "check": "tsc -p ../../tsconfig.json --noEmit",
     "verify-dist": "node scripts/verify-dist.mjs",
-    "prepack": "npm run build && npm run verify-dist"
+    "prepack": "npm run build-endpoints && npm run build && npm run verify-dist"
   },
   "dependencies": {}
 }

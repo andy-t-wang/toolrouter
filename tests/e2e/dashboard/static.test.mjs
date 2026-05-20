@@ -8,6 +8,8 @@ const docsPage = readFileSync(new URL("../../../apps/web/app/docs/page.tsx", imp
 const mcpClientTabs = readFileSync(new URL("../../../apps/web/app/mcp-client-tabs.tsx", import.meta.url), "utf8");
 const mcpContent = readFileSync(new URL("../../../apps/web/app/mcp-content.ts", import.meta.url), "utf8");
 const dashboardPage = readFileSync(new URL("../../../apps/web/app/dashboard/page.tsx", import.meta.url), "utf8");
+const providerLogos = readFileSync(new URL("../../../apps/web/lib/provider-logos.ts", import.meta.url), "utf8");
+const endpointManifestLib = readFileSync(new URL("../../../apps/web/lib/endpoint-manifest.ts", import.meta.url), "utf8");
 const layout = readFileSync(new URL("../../../apps/web/app/layout.tsx", import.meta.url), "utf8");
 const ogRoute = readFileSync(new URL("../../../apps/web/app/og/route.tsx", import.meta.url), "utf8");
 const authConfirmRoute = readFileSync(new URL("../../../apps/web/app/auth/confirm/route.ts", import.meta.url), "utf8");
@@ -135,8 +137,12 @@ describe("web dashboard static wiring", () => {
     assert.match(dashboardPage, /\/human\.svg/);
     assert.match(dashboardPage, /AgentKit - Enabled/);
     assert.match(dashboardPage, /human-badge-mark/);
-    assert.match(dashboardPage, /\/exa-logomark\.svg/);
-    assert.match(dashboardPage, /\/browserbase-logomark\.svg/);
+    // Logo paths now live in the shared apps/web/lib/provider-logos.ts helper
+    // consumed by both the landing page and the dashboard.
+    assert.match(providerLogos, /\/exa-logomark\.svg/);
+    assert.match(providerLogos, /\/browserbase-logomark\.svg/);
+    assert.match(providerLogos, /\/manus-logomark\.svg/);
+    assert.match(dashboardPage, /providerLogoPath/);
     assert.match(dashboardPage, /<th>Protocol<\/th>/);
     assert.match(dashboardPage, /<th>Benefit<\/th>/);
     assert.match(dashboardPage, /AgentKit - \{label\}/);
