@@ -12,7 +12,7 @@ import {
   createSellerService,
   type SellerService,
 } from "../createSellerService.ts";
-import { MonthlyAgentKitStorage } from "../manus/upstream.ts";
+import { MonthlyAgentKitStorage } from "../agentkit-storage.ts";
 import {
   parallelExtractPriceUsd,
   parallelSearchPriceUsd,

@@ -12,11 +12,11 @@ import {
   createSellerService,
   type SellerService,
 } from "../createSellerService.ts";
+import { MonthlyAgentKitStorage } from "../agentkit-storage.ts";
 import { manusResearchPriceUsd } from "./pricing.ts";
 import {
   createManusFacilitatorConfig,
   forwardManusUpstream,
-  MonthlyAgentKitStorage,
 } from "./upstream.ts";
 
 export const MANUS_RESEARCH_PATH = "/x402/manus/research";

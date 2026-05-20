@@ -1,31 +1,19 @@
-// Manus-specific upstream client and shared primitives used by the Manus
-// seller registration. Pulled from the original `apps/api/src/manus.ts`.
-//
-// `MonthlyAgentKitStorage` is currently parameterized by the storage_keyspace
-// "manus" — when a second seller lands, this will be promoted into the shared
-// `createSellerService` primitive (or its own shared module) using the
-// manifest's `agentkit.storage_keyspace` field.
+// Manus-specific upstream client. Facilitator config, error mapping, and
+// the body forwarder live here; the cross-seller AgentKit storage primitive
+// is in `../agentkit-storage.ts` and is shared with other first-party
+// sellers (currently Parallel) via `keyspace`.
 
-import { createHash } from "node:crypto";
 import { createFacilitatorConfig } from "@coinbase/x402";
 
+import { MonthlyAgentKitStorage } from "../agentkit-storage.ts";
 import { buildManusTaskBody } from "./pricing.ts";
+
+// Re-exported so legacy imports (`import { MonthlyAgentKitStorage } from
+// "./manus/upstream.ts"`) keep working alongside the shared-module path.
+export { MonthlyAgentKitStorage };
 
 const DEFAULT_NETWORK = "eip155:8453";
 export type NetworkId = `${string}:${string}`;
-
-function monthKey(now = new Date()) {
-  return now.toISOString().slice(0, 7);
-}
-
-function secondsUntilNextMonth(now = new Date()) {
-  const next = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
-  return Math.max(60, Math.ceil((next.getTime() - now.getTime()) / 1000));
-}
-
-function hashHumanId(value: string) {
-  return createHash("sha256").update(value).digest("hex");
-}
 
 export function x402Network(): NetworkId {
   return (process.env.X402_DEFAULT_CHAIN_ID || DEFAULT_NETWORK) as NetworkId;
@@ -72,39 +60,6 @@ export function createManusFacilitatorConfig() {
   return {
     url: process.env.X402_FACILITATOR_URL || "https://x402.org/facilitator",
   };
-}
-
-export class MonthlyAgentKitStorage {
-  cache: any;
-  keyspace: string;
-
-  constructor(cache: any, keyspace = "manus") {
-    this.cache = cache;
-    this.keyspace = keyspace;
-  }
-
-  async tryIncrementUsage(endpoint: string, humanId: string, limit: number) {
-    const key = `agentkit:${this.keyspace}:${endpoint}:${monthKey()}:${hashHumanId(humanId)}`;
-    const result = await this.cache.increment({
-      key,
-      limit,
-      windowSeconds: secondsUntilNextMonth(),
-    });
-    return result.value <= limit;
-  }
-
-  async hasUsedNonce(nonce: string) {
-    if (typeof this.cache.has !== "function") return false;
-    return this.cache.has({ key: `agentkit:${this.keyspace}:nonce:${hashHumanId(nonce)}` });
-  }
-
-  async recordNonce(nonce: string) {
-    if (typeof this.cache.set !== "function") return;
-    await this.cache.set({
-      key: `agentkit:${this.keyspace}:nonce:${hashHumanId(nonce)}`,
-      windowSeconds: Number(process.env.AGENTKIT_NONCE_TTL_SECONDS || 10 * 60),
-    });
-  }
 }
 
 /**

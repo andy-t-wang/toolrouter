@@ -14,7 +14,12 @@ import {
   parallelSearchPriceUsd,
   parallelTaskPriceUsd,
 } from "../../../apps/api/src/sellers/parallel/pricing.ts";
-import { safeParallelError } from "../../../apps/api/src/sellers/parallel/upstream.ts";
+import {
+  forwardParallelExtractUpstream,
+  forwardParallelSearchUpstream,
+  forwardParallelTaskUpstream,
+  safeParallelError,
+} from "../../../apps/api/src/sellers/parallel/upstream.ts";
 
 describe("Parallel seller manifests", () => {
   it("mounts each manifest at the documented x402 path", () => {
@@ -75,6 +80,71 @@ describe("Parallel seller manifests", () => {
     assert.equal(parallelSearchSellerManifest.agentkit.uses, 5);
     assert.equal(parallelExtractSellerManifest.agentkit.uses, 5);
     assert.equal(parallelTaskSellerManifest.agentkit.uses, 1);
+  });
+
+  it("forwarders preserve `input` for both string and object shapes (parallel.task)", async () => {
+    const captured = [];
+    const fetchImpl = async (url, init) => {
+      captured.push({ url: String(url), body: JSON.parse(init.body) });
+      return new Response('{"run_id":"r","status":"queued"}', {
+        status: 202,
+        headers: { "content-type": "application/json" },
+      });
+    };
+    const secrets = { PARALLEL_API_KEY: "test_key" };
+    const makeReply = () => ({ statusCode: 200, status(c) { this.statusCode = c; return this; } });
+
+    // String input
+    const stringReply = makeReply();
+    const stringResult = await forwardParallelTaskUpstream({
+      request: { body: { input: "Hello world", processor: "core", max_usd: "0.035" } },
+      reply: stringReply,
+      secrets,
+      fetchImpl,
+    });
+    assert.equal(stringResult.ok, true);
+    assert.deepEqual(captured.at(-1).body, { input: "Hello world", processor: "core" });
+
+    // Object input — was previously dropped by the hoist branch
+    const objectReply = makeReply();
+    const objectResult = await forwardParallelTaskUpstream({
+      request: {
+        body: {
+          input: { topic: "rate limits", filters: { since: "2026-01-01" } },
+          processor: "core",
+          payment_mode: "x402_only",
+        },
+      },
+      reply: objectReply,
+      secrets,
+      fetchImpl,
+    });
+    assert.equal(objectResult.ok, true);
+    assert.deepEqual(captured.at(-1).body, {
+      input: { topic: "rate limits", filters: { since: "2026-01-01" } },
+      processor: "core",
+    });
+
+    // Control fields are stripped from every forwarder regardless of shape
+    const searchReply = makeReply();
+    await forwardParallelSearchUpstream({
+      request: {
+        body: { search_queries: ["x"], mode: "basic", endpoint_id: "parallel.search", maxUsd: "0.02" },
+      },
+      reply: searchReply,
+      secrets,
+      fetchImpl,
+    });
+    assert.deepEqual(captured.at(-1).body, { search_queries: ["x"], mode: "basic" });
+
+    const extractReply = makeReply();
+    await forwardParallelExtractUpstream({
+      request: { body: { urls: ["https://example.com"], force_new: true } },
+      reply: extractReply,
+      secrets,
+      fetchImpl,
+    });
+    assert.deepEqual(captured.at(-1).body, { urls: ["https://example.com"] });
   });
 
   it("safeParallelError maps HTTP statuses to user-safe labels", () => {

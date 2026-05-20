@@ -9,7 +9,7 @@ These are durable project decisions for future agents working in this repo.
 - Agents call named endpoints explicitly through `POST /v1/requests`; do not add intent routing until the product has enough real endpoint volume to justify it.
 - Categories are the agent-facing discovery layer, not hidden intent routing. Agents can ask for generic categories like `search`, `browser_usage`, or `data`, inspect the recommended endpoint, then call the selected endpoint explicitly so traces and billing stay concrete.
 - Category discovery is exposed through `GET /v1/categories` and MCP tools like `toolrouter_list_categories` and `toolrouter_recommend_endpoint`.
-- The launch registry should stay small and reliable. As of this note, active public endpoints are `exa.search`, `browserbase.session`, and `manus.research`.
+- The launch registry should stay small and reliable. As of this note, active public endpoints are `exa.search`, `parallel.search`, `parallel.extract`, `browserbase.session`, `manus.research`, and `parallel.task`.
 
 ## Endpoint Template
 

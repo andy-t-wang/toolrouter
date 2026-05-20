@@ -75,18 +75,9 @@ function stripControlFields(body: any) {
     forceNew: _forceNewAlt,
     endpoint_id: _endpointId,
     endpointId: _endpointIdAlt,
-    input: rawInput,
     ...rest
   } = body;
-  // When `input` is an object, treat it as the wrapper-style envelope and
-  // hoist its fields into the upstream body (matches how `/v1/requests`
-  // accepts a nested input). When it's any other value (string, number,
-  // array — Parallel Task uses `input: string|object`), pass it through
-  // unchanged.
-  if (rawInput && typeof rawInput === "object" && !Array.isArray(rawInput)) {
-    return { ...rest, ...rawInput };
-  }
-  return rawInput === undefined ? rest : { ...rest, input: rawInput };
+  return rest;
 }
 
 async function forwardJson({
