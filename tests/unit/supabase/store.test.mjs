@@ -115,6 +115,51 @@ describe("Supabase store RPC accounting", () => {
     assert.equal(byKey.get("key_b").last_used_at, "2026-05-18T12:00:00.000Z");
   });
 
+  it("pages through API key request rows to escape PostgREST db-max-rows", async () => {
+    const fullPage = Array.from({ length: 1000 }, (_, i) => ({
+      api_key_id: "key_a",
+      ts: `2026-05-19T${String(Math.floor(i / 60)).padStart(2, "0")}:${String(i % 60).padStart(2, "0")}:00.000Z`,
+    }));
+    const tailPage = [{ api_key_id: "key_a", ts: "2026-05-20T00:00:00.000Z" }];
+    const responses = [fullPage, tailPage];
+    const { store, calls } = rpcCapturingStore(() => responses.shift() ?? []);
+
+    const stats = await store.listApiKeyStats({
+      user_id: "00000000-0000-4000-8000-000000000001",
+    });
+
+    assert.equal(calls.length, 2, "must keep paging until short page");
+    const offsets = calls.map((call) => {
+      return new URLSearchParams(call.path.split("?")[1]).get("offset");
+    });
+    assert.deepEqual(offsets, ["0", "1000"]);
+
+    const params = new URLSearchParams(calls[0].path.split("?")[1]);
+    assert.equal(params.get("limit"), "1000");
+    assert.match(params.get("order") || "", /id/u, "tiebreak by id so pages don't overlap");
+
+    const byKey = new Map(stats.map((row) => [row.api_key_id, row]));
+    assert.equal(byKey.get("key_a").request_count, 1001);
+    assert.equal(byKey.get("key_a").last_used_at, "2026-05-20T00:00:00.000Z");
+  });
+
+  it("picks the latest last_used_at by instant, not lexical order", async () => {
+    // `+00:00` ('+' = 0x2B) sorts before `Z` (0x5A) lexically, so a naive
+    // `ts > last` comparison would prefer the older `Z` row over the newer
+    // `+00:00` one even though both are UTC.
+    const { store } = rpcCapturingStore([
+      { api_key_id: "key_a", ts: "2026-05-19T10:00:00.000Z" },
+      { api_key_id: "key_a", ts: "2026-05-19T10:00:01+00:00" },
+    ]);
+
+    const stats = await store.listApiKeyStats({
+      user_id: "00000000-0000-4000-8000-000000000001",
+    });
+
+    assert.equal(stats[0].request_count, 2);
+    assert.equal(stats[0].last_used_at, "2026-05-19T10:00:01+00:00");
+  });
+
   it("settles credit purchases through the atomic SQL RPC", async () => {
     const { store, calls } = rpcCapturingStore({
       id: "cp_1",
