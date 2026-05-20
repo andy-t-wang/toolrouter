@@ -2,7 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-const { createDatadogClient, datadogTags } = await import("../../../apps/api/src/datadog.ts");
+const { createDatadogClient, datadogTags } = await import("../../../apps/api/src/services/datadog.ts");
 const datadogDashboardScript = readFileSync(
   new URL("../../../scripts/datadog-dashboard.mjs", import.meta.url),
   "utf8",
