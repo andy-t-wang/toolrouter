@@ -12,7 +12,23 @@ export async function authKeysRoutes(app: any) {
 
   app.get("/v1/api-keys", async (request: any) => {
     const user = await authenticateSupabaseUser(request.headers);
-    return { api_keys: await store.listApiKeys({ user_id: user.user_id }) };
+    const [keys, stats] = await Promise.all([
+      store.listApiKeys({ user_id: user.user_id }),
+      store.listApiKeyStats({ user_id: user.user_id }),
+    ]);
+    const statsById = new Map<string, { request_count: number; last_used_at: string | null }>(
+      stats.map((row: any) => [row.api_key_id, row]),
+    );
+    return {
+      api_keys: keys.map((key: any) => {
+        const stat = statsById.get(key.id);
+        return {
+          ...key,
+          request_count: stat?.request_count ?? 0,
+          last_used_at: stat?.last_used_at ?? null,
+        };
+      }),
+    };
   });
 
   app.post("/v1/api-keys", async (request: any, reply: any) => {

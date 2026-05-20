@@ -1,8 +1,4 @@
-import {
-  HEALTH_LAYER_NAMES,
-  landingEndpointFallbacks,
-  type EndpointLayerStatuses,
-} from "../lib/endpoint-manifest.ts";
+import { landingEndpointFallbacks } from "../lib/endpoint-manifest.ts";
 import { providerLogoPath } from "../lib/provider-logos.ts";
 
 export const dynamic = "force-dynamic";
@@ -30,7 +26,6 @@ type LandingEndpoint = {
   charged?: boolean;
   amount_usd?: number | string | null;
   last_error?: string | null;
-  layers?: EndpointLayerStatuses;
 };
 
 type LandingStatus = {
@@ -213,20 +208,6 @@ function ProviderMark({ provider }: { provider: LandingEndpoint }) {
   );
 }
 
-function statusReason(provider: LandingEndpoint) {
-  const status = publicEndpointStatus(provider);
-  if (status === "healthy") return "Latest check passed";
-  const error = String(provider.last_error || "");
-  if (error.includes("timed out")) return "Provider timed out";
-  if (error.includes("minimum charge amount")) return "Provider payment error";
-  if (status === "degraded" && Number(provider.status_code) === 200) {
-    return "Latest check was slow";
-  }
-  if (Number(provider.status_code) >= 500) return "Provider error";
-  if (status === "unverified") return "Awaiting first check";
-  return "Needs recovery check";
-}
-
 function agentKitBenefit(provider: LandingEndpoint) {
   const type = String(
     provider.agentkit_value_type || provider.agentkit_value_label || "",
@@ -263,41 +244,6 @@ function AgentKitBenefit({ provider }: { provider: LandingEndpoint }) {
   );
 }
 
-function layerChipDot(status: string) {
-  if (status === "healthy") return "good";
-  if (status === "degraded") return "warn";
-  if (status === "failing") return "bad";
-  return "";
-}
-
-function layerChipTitle(name: string, status: string) {
-  const label = name.slice(0, 1).toUpperCase() + name.slice(1);
-  return `${label}: ${status}`;
-}
-
-function LayerChips({ provider }: { provider: LandingEndpoint }) {
-  const layers = provider.layers;
-  if (!layers) return null;
-  return (
-    <div className="row layer-chips" role="list" aria-label="Layer health">
-      {HEALTH_LAYER_NAMES.map((name) => {
-        const status = layers[name]?.status || "unknown";
-        return (
-          <span
-            key={name}
-            role="listitem"
-            className={`layer-chip layer-chip-${status}`}
-            title={layerChipTitle(name, status)}
-          >
-            <span className={`dot ${layerChipDot(status)}`} />
-            <span className="layer-chip-label">{name.slice(0, 1).toUpperCase() + name.slice(1)}</span>
-          </span>
-        );
-      })}
-    </div>
-  );
-}
-
 function UptimeRow({ provider }: { provider: LandingEndpoint }) {
   return (
     <div className="mkt-uptime-grid mkt-uptime-row">
@@ -317,8 +263,6 @@ function UptimeRow({ provider }: { provider: LandingEndpoint }) {
       <AgentKitBenefit provider={provider} />
       <div>
         <StatusDot status={publicEndpointStatus(provider)} />
-        <span className="status-reason">{statusReason(provider)}</span>
-        <LayerChips provider={provider} />
       </div>
       <div className="mono muted check-age">
         {formatProbeAge(provider.last_checked_at)}

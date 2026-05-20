@@ -45,6 +45,9 @@ export type ToolRouterStore = {
   findApiKeyByHash(keyHash: string): Promise<any>;
   createApiKey(input: { user_id?: string; caller_id: string }): Promise<any>;
   listApiKeys(input?: { user_id?: string }): Promise<any[]>;
+  listApiKeyStats(input: { user_id: string }): Promise<
+    Array<{ api_key_id: string; request_count: number; last_used_at: string | null }>
+  >;
   disableApiKey(input: { id: string; user_id?: string }): Promise<any>;
   insertRequest(row: any): Promise<any>;
   listRequests(filters?: any): Promise<any[]>;
@@ -250,6 +253,21 @@ export class LocalStore implements ToolRouterStore {
     return this.read().api_keys
       .filter((key: any) => !user_id || key.user_id === user_id)
       .map(({ key_hash, ...key }: any) => key);
+  }
+
+  async listApiKeyStats({ user_id }: { user_id: string }) {
+    const stats = new Map<string, { request_count: number; last_used_at: string | null }>();
+    for (const row of this.read().requests) {
+      if (row.user_id !== user_id) continue;
+      const keyId = row.api_key_id;
+      if (!keyId) continue;
+      const cur = stats.get(keyId) || { request_count: 0, last_used_at: null };
+      cur.request_count += 1;
+      const ts = String(row.ts || "");
+      if (ts && (!cur.last_used_at || ts > cur.last_used_at)) cur.last_used_at = ts;
+      stats.set(keyId, cur);
+    }
+    return Array.from(stats, ([api_key_id, value]) => ({ api_key_id, ...value }));
   }
 
   async disableApiKey({ id, user_id }: { id: string; user_id?: string }) {
@@ -598,6 +616,22 @@ export class SupabaseStore implements ToolRouterStore {
     };
     if (user_id) params.user_id = `eq.${user_id}`;
     return this.request(`/api_keys?${qs(params)}`);
+  }
+
+  async listApiKeyStats({ user_id }: { user_id: string }) {
+    // PostgREST aggregate: groups by the non-aggregate column (api_key_id).
+    // count() and max(ts) are unbounded — no row limit, single round-trip.
+    const params = qs({
+      user_id: `eq.${user_id}`,
+      api_key_id: "not.is.null",
+      select: "api_key_id,request_count:id.count(),last_used_at:ts.max()",
+    });
+    const rows = (await this.request(`/requests?${params}`)) || [];
+    return rows.map((row: any) => ({
+      api_key_id: row.api_key_id,
+      request_count: Number(row.request_count) || 0,
+      last_used_at: row.last_used_at || null,
+    }));
   }
 
   async disableApiKey({ id, user_id }: { id: string; user_id?: string }) {
