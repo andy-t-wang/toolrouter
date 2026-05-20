@@ -37,11 +37,11 @@ import {
   buildAgentKitVerificationRequest,
   registrationPayloadFromBody,
 } from "./agentkitRegistration.ts";
+import { registerManusSellerService } from "./sellers/manus/index.ts";
 import {
-  createManusX402Wrapper,
   getManusTaskDetail,
   listManusTaskMessages,
-} from "./manus.ts";
+} from "./sellers/manus/tasks.ts";
 
 function requestFilters(query: any) {
   const cursor = decodeRequestCursor(query.cursor);
@@ -1874,7 +1874,7 @@ export function createApiApp({
   agentBookVerifier = null,
   agentBookRegistration = null,
   manusWrapper = null,
-  createManusWrapper = createManusX402Wrapper,
+  createManusWrapper = registerManusSellerService,
   manusFetch = fetch,
   logger = true,
 }: any = {}) {

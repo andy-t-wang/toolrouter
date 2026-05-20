@@ -2,11 +2,13 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
 import {
-  MonthlyAgentKitStorage,
   buildManusTaskBody,
-  createManusFacilitatorConfig,
   manusResearchPriceUsd,
-} from "../../../apps/api/src/manus.ts";
+} from "../../../apps/api/src/sellers/manus/pricing.ts";
+import {
+  MonthlyAgentKitStorage,
+  createManusFacilitatorConfig,
+} from "../../../apps/api/src/sellers/manus/upstream.ts";
 import { MemoryCache } from "../../../packages/cache/src/index.ts";
 
 const PRICE_ENV = [
