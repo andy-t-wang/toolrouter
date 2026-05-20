@@ -44,6 +44,18 @@ describe("parallel-tasks helpers", () => {
     assert.notEqual(a, c);
   });
 
+  it("dedupe key is stable for object inputs with reordered keys", () => {
+    const a = parallelDedupeKey(
+      { user_id: "u" },
+      { input: { topic: "rate limits", sources: ["docs"] }, processor: "core" },
+    );
+    const b = parallelDedupeKey(
+      { user_id: "u" },
+      { input: { sources: ["docs"], topic: "rate limits" }, processor: "core" },
+    );
+    assert.equal(a, b);
+  });
+
   it("maps Parallel status enum to ToolRouter lifecycle", () => {
     assert.equal(normalizeParallelStatus("queued"), "running");
     assert.equal(normalizeParallelStatus("running"), "running");
@@ -107,6 +119,16 @@ describe("parallel-tasks helpers", () => {
     assert.equal(row.dedupe_key, "ddd");
     assert.equal(row.status, "running");
     assert.equal(row.provider_task_id, null);
+  });
+
+  it("keeps clients polling when status flips to stopped but result is not yet ready", () => {
+    const task = { provider_task_id: "run_2", status: "running" };
+    const detail = { run: { status: "completed" } };
+    const payload = parallelResultPayload({ task, detail, resultBody: null });
+    assert.equal(payload.status, "stopped");
+    assert.equal(payload.final_answer_available, false);
+    assert.equal(payload.poll_after_seconds, PARALLEL_POLL_AFTER_SECONDS);
+    assert.equal(payload.isError, false);
   });
 
   it("result payload surfaces completed-state answer + citations", () => {

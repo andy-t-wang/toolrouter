@@ -29,7 +29,7 @@ export function normalizedParallelTaskInput(input: any = {}) {
     }
     normalizedInput = trimmed;
   } else if (rawInput && typeof rawInput === "object" && !Array.isArray(rawInput)) {
-    normalizedInput = JSON.stringify(rawInput);
+    normalizedInput = stableJson(rawInput);
   } else {
     throw Object.assign(new Error("input is required"), {
       statusCode: 400,
@@ -346,18 +346,30 @@ export function parallelResultPayload({ task, detail, resultBody }: any) {
   const status = detailPayload.status;
   const answer = status === "stopped" ? extractOutputText(resultBody?.output) : null;
   const citations = extractCitations(resultBody?.output);
+  const finalAnswerAvailable = Boolean(answer);
+  // When the run is marked stopped but the result payload isn't ready yet
+  // (e.g. transient 404/408 from /result), keep clients polling instead of
+  // letting them treat the run as terminally answerless.
+  const stoppedAwaitingResult = status === "stopped" && !finalAnswerAvailable;
   return {
     task_id: task.provider_task_id || task.id,
     status,
-    final_answer_available: Boolean(answer),
+    final_answer_available: finalAnswerAvailable,
     answer,
     attachments: citations,
-    latest_status_message: status === "running" ? "Parallel task is running." : null,
+    latest_status_message:
+      status === "running"
+        ? "Parallel task is running."
+        : stoppedAwaitingResult
+          ? "Parallel task completed; final answer not yet available."
+          : null,
     waiting_details: status === "waiting" ? detailPayload.error || null : null,
     error: status === "error" ? detailPayload.error || "Parallel task failed" : null,
     messages: [],
     poll_after_seconds:
-      status === "running" || status === "waiting" ? PARALLEL_POLL_AFTER_SECONDS : null,
+      status === "running" || status === "waiting" || stoppedAwaitingResult
+        ? PARALLEL_POLL_AFTER_SECONDS
+        : null,
     isError: status === "error",
   };
 }

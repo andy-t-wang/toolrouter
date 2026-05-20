@@ -133,6 +133,22 @@ services:
       - key: MANUS_API_KEY
         value: SET_IN_APP_PLATFORM
         type: SECRET
+      - key: PARALLEL_API_KEY
+        value: SET_IN_APP_PLATFORM
+        type: SECRET
+      - key: X402_PARALLEL_PAY_TO_ADDRESS
+        value: SET_IN_APP_PLATFORM
+        type: SECRET
+      - key: TOOLROUTER_PARALLEL_TASK_PRICE_LITE_USD
+        value: "0.015"
+      - key: TOOLROUTER_PARALLEL_TASK_PRICE_BASE_USD
+        value: "0.02"
+      - key: TOOLROUTER_PARALLEL_TASK_PRICE_CORE_USD
+        value: "0.035"
+      - key: TOOLROUTER_PARALLEL_TASK_PRICE_PRO_USD
+        value: "0.11"
+      - key: TOOLROUTER_PARALLEL_TASK_PRICE_ULTRA_USD
+        value: "0.31"
       - key: TOOLROUTER_AGENTKIT_PREFLIGHT_TIMEOUT_MS
         value: "10000"
       - key: TOOLROUTER_MAX_TOP_UP_USD

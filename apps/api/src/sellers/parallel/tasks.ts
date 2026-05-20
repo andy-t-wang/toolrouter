@@ -65,9 +65,17 @@ export async function getParallelTaskRun(
   return fetchParallelJson({ path: "/v1/tasks/runs/{run_id}", runId, fetchImpl });
 }
 
+// Keep this short — `/v1/parallel/tasks/:task_id/result` is the buyer-facing
+// poll, so we should return quickly and let the client come back rather than
+// long-poll Parallel for minutes per request.
+export const PARALLEL_TASK_RESULT_POLL_TIMEOUT_SECONDS = 5;
+
 export async function getParallelTaskResult(
   runId: string,
-  { fetchImpl = fetch, timeoutSeconds = 600 }: { fetchImpl?: typeof fetch; timeoutSeconds?: number } = {},
+  {
+    fetchImpl = fetch,
+    timeoutSeconds = PARALLEL_TASK_RESULT_POLL_TIMEOUT_SECONDS,
+  }: { fetchImpl?: typeof fetch; timeoutSeconds?: number } = {},
 ) {
   return fetchParallelJson({
     path: "/v1/tasks/runs/{run_id}/result",

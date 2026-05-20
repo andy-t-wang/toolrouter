@@ -877,6 +877,31 @@ function defaultMaxUsd(endpointId: string, args: any, env: any) {
   return undefined;
 }
 
+function isPlainObject(value: any): value is Record<string, any> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function parallelTaskInputObject(args: any) {
+  if (isPlainObject(args.input)) {
+    const wrapped: Record<string, any> = { ...args.input };
+    if (wrapped.processor === undefined && args.processor !== undefined) {
+      wrapped.processor = args.processor;
+    }
+    return wrapped;
+  }
+  const wrapped: Record<string, any> = {};
+  if (args.input !== undefined) wrapped.input = args.input;
+  else if (args.query !== undefined) wrapped.query = args.query;
+  else if (args.prompt !== undefined) wrapped.prompt = args.prompt;
+  if (args.processor !== undefined) wrapped.processor = args.processor;
+  return wrapped;
+}
+
+function endpointInputForName(name: string, args: any) {
+  if (name === "parallel_task_start") return parallelTaskInputObject(args);
+  return args.input !== undefined ? args.input : topLevelEndpointInput(args);
+}
+
 async function endpointPayload(name: string, args: any, { env, fetchImpl }: any) {
   const spec = endpointToolByName().get(name);
   if (!spec) return null;
@@ -886,7 +911,7 @@ async function endpointPayload(name: string, args: any, { env, fetchImpl }: any)
   const forceNew = args.force_new ?? args.forceNew;
   return {
     endpoint_id: endpointId,
-    input: args.input !== undefined ? args.input : topLevelEndpointInput(args),
+    input: endpointInputForName(name, args),
     ...(maxUsd !== undefined ? { maxUsd } : {}),
     ...(paymentMode !== undefined ? { payment_mode: paymentMode } : {}),
     ...((name === "manus_research_start" || name === "parallel_task_start") && forceNew !== undefined
