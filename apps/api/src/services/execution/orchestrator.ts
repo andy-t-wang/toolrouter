@@ -149,7 +149,6 @@ function createRequestRow({
     credit_released_usd: credit?.credit_released_usd || null,
     latency_ms: result.latency_ms ?? null,
     error: resultError,
-    body: null,
   };
 }
 

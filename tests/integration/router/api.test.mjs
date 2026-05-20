@@ -875,7 +875,7 @@ describe("router API", () => {
     assert.equal(detail.request.endpoint_id, "exa.search");
     assert.equal(detail.request.body, undefined);
     const stored = await store.getRequest(created.id);
-    assert.equal(stored.body, null);
+    assert.equal(stored.body, undefined);
   });
 
   it("ignores caller-supplied api_key_id when listing API-key request traces", async () => {
