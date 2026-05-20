@@ -496,7 +496,7 @@ describe("endpoint health worker", () => {
     assert.equal(db.insertedHealthChecks[0].charged, true);
   });
 
-  it("sanitizes provider body errors for failed health probes", async () => {
+  it("attributes a 5xx upstream failure to the upstream layer, not the payment layer", async () => {
     const endpoint = getEndpoint("browserbase.session");
     const db = createDb();
 
@@ -519,10 +519,55 @@ describe("endpoint health worker", () => {
     });
 
     assert.equal(result.status, "failing");
-    assert.equal(
-      db.insertedHealthChecks[0].error,
-      "Provider payment error",
-    );
+    assert.equal(db.insertedHealthChecks[0].error, "Provider service error");
     assert.equal(db.upsertedStatuses[0].last_error, db.insertedHealthChecks[0].error);
+  });
+
+  it("attributes a 402 'Settlement failed' body to the facilitator layer with the canonical label", async () => {
+    const endpoint = getEndpoint("exa.search");
+    const db = createDb();
+
+    const result = await runEndpointHealthCheck({
+      endpoint,
+      db,
+      executor: async () => ({
+        ok: false,
+        status_code: 402,
+        path: "agentkit_to_x402",
+        charged: false,
+        latency_ms: 900,
+        body: { error: "Settlement failed: 402", transaction: "" },
+      }),
+      now: () => new Date("2026-05-19T16:13:00.000Z"),
+      useRecentRequests: false,
+    });
+
+    assert.equal(result.status, "degraded");
+    assert.equal(db.insertedHealthChecks[0].error, "Settlement failed at facilitator");
+    assert.equal(db.insertedHealthChecks[0].payment_error, "Settlement failed at facilitator");
+    assert.equal(db.upsertedStatuses[0].last_error, "Settlement failed at facilitator");
+  });
+
+  it("does NOT degrade a clean unresolved x402 challenge envelope (protocol working, not a failure)", async () => {
+    const endpoint = getEndpoint("browserbase.session");
+    const db = createDb();
+
+    const result = await runEndpointHealthCheck({
+      endpoint,
+      db,
+      executor: async () => ({
+        ok: true,
+        status_code: 200,
+        path: "agentkit_to_x402",
+        charged: true,
+        latency_ms: 1_200,
+      }),
+      now: () => new Date("2026-05-19T17:00:00.000Z"),
+      useRecentRequests: false,
+    });
+
+    assert.equal(result.status, "healthy");
+    assert.equal(db.insertedHealthChecks[0].error, null);
+    assert.equal(db.insertedHealthChecks[0].payment_error, null);
   });
 });

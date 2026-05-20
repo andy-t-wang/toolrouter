@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 
 import { countsAsAgentKitEvidence } from "../agentkitValue.ts";
+import { attributeFailure } from "../attribution.ts";
 import { endpointRegistry } from "../endpoints/registry.ts";
 
 export const DEFAULT_HEALTH_CHECK_INTERVAL_MS = 12 * 60 * 60 * 1000;
@@ -60,38 +61,33 @@ function pick(result, snakeName, camelName) {
   return result?.[snakeName] ?? result?.[camelName] ?? null;
 }
 
-function providerBodyMessage(result) {
-  const body = result?.body;
-  if (!body) return null;
-  if (typeof body === "string") return body;
-  if (typeof body !== "object") return null;
-  const message = body.error || body.message;
-  const details = body.details;
-  if (message && details) return `${message}: ${details}`;
-  return message || details || null;
-}
-
-function safePaymentError(value) {
-  if (!value) return null;
-  return "Provider payment error";
+function attributionFor(result) {
+  return attributeFailure({
+    status_code: pick(result, "status_code", "statusCode"),
+    error: result?.error ?? null,
+    payment_error: pick(result, "payment_error", "paymentError"),
+    body: result?.body,
+    ok: result?.ok,
+  });
 }
 
 function safeHealthError(result) {
-  const statusCode = maybeNumber(pick(result, "status_code", "statusCode"));
-  const error = String(result?.error ?? providerBodyMessage(result) ?? result?.payment_error ?? "");
-  if (!error && (!Number.isFinite(statusCode) || statusCode < 400)) return null;
-  if (statusCode === 402) return "Provider payment required";
-  if (statusCode === 429) return "Provider rate limited";
-  if (statusCode === 504 || /timed out|timeout/iu.test(error)) return "Provider timed out";
-  if (/payment|stripe|x402/iu.test(error)) return "Provider payment error";
-  if (Number.isFinite(statusCode) && statusCode >= 500) return "Provider error";
-  return "Provider check failed";
+  return attributionFor(result)?.label ?? null;
+}
+
+function paymentErrorLabel(attribution) {
+  if (!attribution) return null;
+  if (attribution.layer === "facilitator" || attribution.layer === "router_payment") {
+    return attribution.label;
+  }
+  return null;
 }
 
 function normalizeExecutionResult(result, fallbackLatencyMs) {
   const statusCode = maybeNumber(pick(result, "status_code", "statusCode"));
   const payment = result?.payment || result?.paymentReceipt || {};
   const ok = result?.ok ?? (statusCode !== null ? statusCode >= 200 && statusCode < 300 : false);
+  const attribution = attributionFor(result);
 
   return {
     status_code: statusCode,
@@ -106,14 +102,26 @@ function normalizeExecutionResult(result, fallbackLatencyMs) {
       pick(result, "payment_reference", "paymentReference") ?? payment.reference ?? payment.paymentReference,
     ),
     payment_network: maybeString(pick(result, "payment_network", "paymentNetwork") ?? payment.network),
-    payment_error: safePaymentError(pick(result, "payment_error", "paymentError") ?? payment.error),
-    error: safeHealthError(result),
+    payment_error: paymentErrorLabel(attribution),
+    error: attribution?.label ?? null,
+    attribution,
   };
 }
 
 function statusFromResult(result, endpoint, { requireAgentKitValue = false } = {}) {
-  if (result.payment_error) return "degraded";
-  if (result.ok) {
+  // A clean unresolved x402 challenge envelope is the protocol working — never
+  // a failure to attribute. attributeFailure returns null in that case so we
+  // fall through to the success-shape check.
+  const attribution = result.attribution ?? null;
+  if (attribution) {
+    // A failure was attributed. 5xx-style upstream/transport failures with no
+    // status code are `failing`; everything else is `degraded`.
+    if (result.status_code === null || (Number.isFinite(result.status_code) && result.status_code >= 500)) {
+      return "failing";
+    }
+    return "degraded";
+  }
+  if (result.ok || (result.status_code !== null && result.status_code >= 200 && result.status_code < 300)) {
     if (result.latency_ms > latencyBudgetMs(endpoint)) return "degraded";
     if (requireAgentKitValue && !countsAsAgentKitEvidence(endpoint, result)) return "degraded";
     return "healthy";
@@ -188,13 +196,15 @@ function healthProbeForEndpoint(endpoint, probeKind = "availability") {
 }
 
 function rowFromRequest(endpoint, requestRow, checkedAt, { probeKind = "availability" } = {}) {
+  const attribution = attributionFor(requestRow);
   const normalized = {
     status_code: maybeNumber(requestRow.status_code),
     ok: requestRow.ok !== false,
     latency_ms: maybeNumber(requestRow.latency_ms) ?? 0,
     path: maybeString(requestRow.path),
     charged: Boolean(requestRow.charged),
-    payment_error: maybeString(requestRow.payment_error),
+    payment_error: paymentErrorLabel(attribution),
+    attribution,
   };
   return {
     id: `hc_req_${requestRow.id || randomUUID()}_${randomUUID()}`,
@@ -212,8 +222,8 @@ function rowFromRequest(endpoint, requestRow, checkedAt, { probeKind = "availabi
     currency: maybeString(requestRow.currency),
     payment_reference: null,
     payment_network: maybeString(requestRow.payment_network),
-    payment_error: safePaymentError(normalized.payment_error),
-    error: safeHealthError(requestRow),
+    payment_error: normalized.payment_error,
+    error: attribution?.label ?? null,
   };
 }
 

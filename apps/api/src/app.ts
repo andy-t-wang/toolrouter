@@ -5,6 +5,8 @@ import { authenticateApiKey, authenticateSupabaseUser } from "@toolrouter/auth";
 import { createCache, enforceRequestPolicy } from "@toolrouter/cache";
 import { createStore } from "@toolrouter/db";
 import {
+  agentRequestLabel,
+  attributeFailure,
   executeEndpoint,
   countsAsAgentKitEvidence,
   getEndpoint,
@@ -157,26 +159,26 @@ function endpointDto(endpoint: any) {
 }
 
 function publicStatusError(row: any) {
-  const error = String(row?.last_error || row?.error || "");
-  const statusCode = Number(row?.status_code);
-  if (!error && (!Number.isFinite(statusCode) || statusCode < 400)) return null;
-  if (statusCode === 402) return "Provider payment required";
-  if (statusCode === 429) return "Provider rate limited";
-  if (statusCode === 504 || /timed out|timeout/iu.test(error)) return "Provider timed out";
-  if (Number.isFinite(statusCode) && statusCode >= 500) return "Provider error";
-  if (/payment|stripe|x402/iu.test(error)) return "Provider payment error";
-  return "Latest check failed";
+  // Always re-attribute on read so the public DTO never leaks raw provider
+  // error strings (which can contain payment headers, account ids, etc.).
+  // Worker-written labels are safe but external/imported rows may not be.
+  const attribution = attributeFailure({
+    status_code: row?.status_code,
+    error: row?.last_error ?? row?.error,
+    payment_error: row?.payment_error,
+    body: row?.body,
+  });
+  return attribution?.label ?? null;
 }
 
 function publicRequestError(row: any) {
-  const statusCode = Number(row?.status_code);
-  const raw = String(row?.error || "");
-  if (!raw && (!Number.isFinite(statusCode) || statusCode < 400)) return null;
-  if (statusCode === 402) return "Payment required";
-  if (statusCode === 429) return "Rate limited";
-  if (statusCode === 504 || /timed out|timeout/iu.test(raw)) return "Request timed out";
-  if (Number.isFinite(statusCode) && statusCode >= 500) return "Provider error";
-  return "Request failed";
+  const attribution = attributeFailure({
+    status_code: row?.status_code,
+    error: row?.error,
+    payment_error: row?.payment_error,
+    body: row?.body,
+  });
+  return agentRequestLabel(attribution);
 }
 
 function publicEndpoint(endpoint: any, statusByEndpoint: Map<string, any>) {
