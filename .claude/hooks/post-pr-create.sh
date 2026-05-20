@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # PostToolUse hook: when `gh pr create` runs, spawn a detached watcher that
-# polls the PR for new review comments every 8 minutes and dispatches a
+# polls the PR for new review comments every 5 minutes and dispatches a
 # headless `claude -p` invocation to address them.
 set -euo pipefail
 

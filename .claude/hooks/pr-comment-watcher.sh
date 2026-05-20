@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Background watcher: every 8 minutes, fetch new review comments on the PR
+# Background watcher: every 5 minutes, fetch new review comments on the PR
 # past the watermark and dispatch a headless `claude -p` to fix+push.
 # Loops until the PR is no longer OPEN.
 set -uo pipefail
@@ -45,7 +45,7 @@ if [[ -z "$CLAUDE_BIN" ]]; then
   log "claude CLI not found on PATH; cannot apply fixes"
 fi
 
-SLEEP_SECS="${PR_WATCHER_SLEEP_SECS:-480}"  # 8 minutes
+SLEEP_SECS="${PR_WATCHER_SLEEP_SECS:-300}"  # 5 minutes
 MAX_CYCLES="${PR_WATCHER_MAX_CYCLES:-0}"    # 0 = unbounded
 cycle=0
 
