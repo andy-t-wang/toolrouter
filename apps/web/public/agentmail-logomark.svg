@@ -1,0 +1,7 @@
+<svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="AgentMail">
+  <rect width="32" height="32" rx="7" fill="#111827"/>
+  <path d="M7 10.5C7 9.39543 7.89543 8.5 9 8.5H23C24.1046 8.5 25 9.39543 25 10.5V21.5C25 22.6046 24.1046 23.5 23 23.5H9C7.89543 23.5 7 22.6046 7 21.5V10.5Z" fill="white"/>
+  <path d="M8.25 10.25L15.104 15.127C15.641 15.509 16.359 15.509 16.896 15.127L23.75 10.25" stroke="#111827" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M11.25 20.5L14.1 16.85" stroke="#2563EB" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M20.75 20.5L17.9 16.85" stroke="#2563EB" stroke-width="1.7" stroke-linecap="round"/>
+</svg>

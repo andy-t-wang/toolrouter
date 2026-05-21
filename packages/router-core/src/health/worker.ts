@@ -191,7 +191,7 @@ function endpointProbeCadence({ statusRow, now, intervalMs, failureRetryInterval
 }
 
 function healthProbeForEndpoint(endpoint, probeKind = "availability") {
-  if (probeKind === "agentkit") return endpoint.agentkitHealthProbe || endpoint.healthProbe;
+  if (probeKind === "agentkit") return endpoint.agentkitHealthProbe || null;
   return endpoint.healthProbe;
 }
 
@@ -245,6 +245,32 @@ function rowFromError(endpoint, checkedAt, error, latencyMs) {
     payment_error: null,
     error: safeHealthError({ error }),
   };
+}
+
+function rowFromUnverified(endpoint, checkedAt, error) {
+  return {
+    id: `hc_${randomUUID()}`,
+    endpoint_id: endpoint.id,
+    checked_at: checkedAt.toISOString(),
+    status: "unverified",
+    status_code: null,
+    latency_ms: 0,
+    path: null,
+    charged: false,
+    estimated_usd: maybeString(endpoint.estimated_cost_usd),
+    amount_usd: null,
+    currency: null,
+    payment_reference: null,
+    payment_network: null,
+    payment_error: null,
+    error,
+  };
+}
+
+function missingRequiredEnv(probe) {
+  const required = probe?.required_env || probe?.requiredEnv || [];
+  if (!Array.isArray(required)) return [];
+  return required.filter((name) => !process.env[String(name)]);
 }
 
 // Layers we surface in the public DTO. Order matters only for documentation —
@@ -503,42 +529,57 @@ export async function runEndpointHealthCheck({
         attribution = attributionFor(recentRequest);
       } else {
         const probe = healthProbeForEndpoint(endpoint, probeKind);
-        const request = endpoint.buildRequest(probe.input);
-        const traceId = `health_${randomUUID()}`;
-        probePaymentMode = probe.paymentMode || endpoint.defaultPaymentMode || "agentkit_first";
-        const result = await executeThroughExecutor(executor, {
-          kind: "health_probe",
-          probeKind,
-          endpoint,
-          endpointId: endpoint.id,
-          input: probe.input,
-          request,
-          maxUsd: probe.maxUsd,
-          paymentMode: probePaymentMode,
-          traceId,
-          timeoutMs: healthProbeTimeoutMs(timeoutMs ?? probe.timeoutMs ?? probe.timeout_ms),
-        });
-        const normalized = normalizeExecutionResult(result, Date.now() - started);
-        attribution = normalized.attribution ?? null;
-        healthCheckRow = {
-          id: `hc_${randomUUID()}`,
-          endpoint_id: endpoint.id,
-          checked_at: checkedAt.toISOString(),
-          status: statusFromResult(normalized, endpoint, {
-            requireAgentKitValue: probeKind === "agentkit",
-          }),
-          status_code: normalized.status_code,
-          latency_ms: normalized.latency_ms,
-          path: normalized.path,
-          charged: normalized.charged,
-          estimated_usd: normalized.estimated_usd ?? request.estimatedUsd,
-          amount_usd: normalized.amount_usd,
-          currency: normalized.currency,
-          payment_reference: null,
-          payment_network: normalized.payment_network,
-          payment_error: normalized.payment_error,
-          error: normalized.error,
-        };
+        if (!probe) {
+          healthCheckRow = rowFromUnverified(endpoint, checkedAt, `${probeKind} probe not supported`);
+        } else if (probe.mode === "manual_only" && !force) {
+          healthCheckRow = rowFromUnverified(endpoint, checkedAt, "manual health probe");
+        } else {
+          const missingEnv = missingRequiredEnv(probe);
+          if (missingEnv.length > 0) {
+            healthCheckRow = rowFromUnverified(
+              endpoint,
+              checkedAt,
+              `missing health env: ${missingEnv.join(", ")}`,
+            );
+          } else {
+            const request = endpoint.buildRequest(probe.input);
+            const traceId = `health_${randomUUID()}`;
+            probePaymentMode = probe.paymentMode || endpoint.defaultPaymentMode || "agentkit_first";
+            const result = await executeThroughExecutor(executor, {
+              kind: "health_probe",
+              probeKind,
+              endpoint,
+              endpointId: endpoint.id,
+              input: probe.input,
+              request,
+              maxUsd: probe.maxUsd,
+              paymentMode: probePaymentMode,
+              traceId,
+              timeoutMs: healthProbeTimeoutMs(timeoutMs ?? probe.timeoutMs ?? probe.timeout_ms),
+            });
+            const normalized = normalizeExecutionResult(result, Date.now() - started);
+            attribution = normalized.attribution ?? null;
+            healthCheckRow = {
+              id: `hc_${randomUUID()}`,
+              endpoint_id: endpoint.id,
+              checked_at: checkedAt.toISOString(),
+              status: statusFromResult(normalized, endpoint, {
+                requireAgentKitValue: probeKind === "agentkit",
+              }),
+              status_code: normalized.status_code,
+              latency_ms: normalized.latency_ms,
+              path: normalized.path,
+              charged: normalized.charged,
+              estimated_usd: normalized.estimated_usd ?? request.estimatedUsd,
+              amount_usd: normalized.amount_usd,
+              currency: normalized.currency,
+              payment_reference: null,
+              payment_network: normalized.payment_network,
+              payment_error: normalized.payment_error,
+              error: normalized.error,
+            };
+          }
+        }
       }
     } catch (error) {
       healthCheckRow = rowFromError(endpoint, checkedAt, error, Date.now() - started);

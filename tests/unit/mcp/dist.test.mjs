@@ -26,6 +26,11 @@ describe("ToolRouter MCP built dist", () => {
     const built = await import(distPath);
     const names = built.tools().map((tool) => tool.name).sort();
     assert.deepEqual(names, [
+      "agentmail_create_inbox",
+      "agentmail_get_message",
+      "agentmail_list_messages",
+      "agentmail_reply_to_message",
+      "agentmail_send_message",
       "browserbase_session_create",
       "exa_search",
       "manus_research_result",

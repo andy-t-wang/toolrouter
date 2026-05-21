@@ -11,7 +11,7 @@
 export type AgentkitValueType = "free_trial" | "discount" | "access";
 export type PaymentMode = "agentkit_first" | "agentkit_only" | "x402_only";
 
-export type EndpointMethod = "POST";
+export type EndpointMethod = "GET" | "POST";
 
 // Runtime validators (`packages/router-core/src/testing/endpointHarness.ts`)
 // enforce the discriminated values for `mode` and `payment_mode`. The TS
@@ -24,6 +24,7 @@ export interface EndpointHealthProbe {
   max_usd: string;
   latency_budget_ms?: number;
   timeout_ms?: number;
+  required_env?: readonly string[];
   input: Record<string, unknown>;
 }
 
@@ -77,19 +78,19 @@ export interface EndpointManifest {
   readonly description: string;
   /** HTTPS URL of the upstream endpoint. */
   readonly url: string;
-  /** HTTP method — must be `POST` for MVP (validator enforces). */
-  readonly method: string;
-  /** Required AgentKit support flag (validator enforces `true`). */
+  /** HTTP method for the provider request. */
+  readonly method: EndpointMethod;
+  /** Whether the provider endpoint supports AgentKit. */
   readonly agentkit: boolean;
-  /** Required x402 support flag (validator enforces `true`). */
+  /** Whether the provider endpoint supports x402. */
   readonly x402: boolean;
   /** Whether the endpoint requires an `agentkit` SIWE header alongside x402
    *  payment (Browserbase = true). */
   readonly agentkit_proof_header?: boolean;
   /** Cost estimate in USD (used for spend caps and UI). */
   readonly estimated_cost_usd: number;
-  readonly agentkit_value_type: AgentkitValueType;
-  readonly agentkit_value_label: string;
+  readonly agentkit_value_type: AgentkitValueType | null;
+  readonly agentkit_value_label: string | null;
   readonly default_payment_mode?: string;
   readonly ui: EndpointUiMetadata;
   readonly fixture_input: Record<string, unknown>;
@@ -123,12 +124,12 @@ export interface MaterializedEndpoint extends EndpointManifest {
     readonly latencyBudgetMs?: number;
     readonly timeoutMs?: number;
   };
-  readonly agentkitHealthProbe: EndpointAgentkitHealthProbe & {
+  readonly agentkitHealthProbe: (EndpointAgentkitHealthProbe & {
     readonly maxUsd: string;
     readonly paymentMode: string;
     readonly latencyBudgetMs?: number;
     readonly timeoutMs?: number;
-  };
+  }) | null;
   readonly liveSmoke: EndpointLiveSmoke;
   readonly buildRequest: (input: Record<string, unknown>) => unknown;
 }

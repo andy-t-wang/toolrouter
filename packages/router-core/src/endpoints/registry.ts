@@ -1,6 +1,11 @@
 import { ENDPOINT_CATEGORY_DEFINITIONS, isEndpointCategory } from "./categories.ts";
 import { browserbaseSessionEndpointDefinition } from "./browser_usage/browserbase/session.ts";
 import { parallelExtractEndpointDefinition } from "./extract/parallel/extract.ts";
+import { agentmailCreateInboxEndpointDefinition } from "./productivity/agentmail/create-inbox.ts";
+import { agentmailGetMessageEndpointDefinition } from "./productivity/agentmail/get-message.ts";
+import { agentmailListMessagesEndpointDefinition } from "./productivity/agentmail/list-messages.ts";
+import { agentmailReplyToMessageEndpointDefinition } from "./productivity/agentmail/reply-to-message.ts";
+import { agentmailSendMessageEndpointDefinition } from "./productivity/agentmail/send-message.ts";
 import { manusResearchEndpointDefinition } from "./research/manus/research.ts";
 import { parallelTaskEndpointDefinition } from "./research/parallel/task.ts";
 import { exaSearchEndpointDefinition } from "./search/exa/search.ts";
@@ -13,6 +18,11 @@ const ENDPOINT_DEFINITIONS = Object.freeze([
   parallelExtractEndpointDefinition,
   manusResearchEndpointDefinition,
   parallelTaskEndpointDefinition,
+  agentmailCreateInboxEndpointDefinition,
+  agentmailListMessagesEndpointDefinition,
+  agentmailGetMessageEndpointDefinition,
+  agentmailSendMessageEndpointDefinition,
+  agentmailReplyToMessageEndpointDefinition,
 ]);
 
 function assertHttpUrl(value, fieldName) {
@@ -35,12 +45,27 @@ export function validateEndpoint(endpoint) {
     throw new RangeError(`endpoint ${endpoint.id} has unsupported category: ${endpoint.category}`);
   }
   assertHttpUrl(endpoint.url, `${endpoint.id}.url`);
-  if (endpoint.method !== "POST") throw new RangeError(`endpoint ${endpoint.id} must use POST for MVP`);
-  if (!endpoint.agentkit || !endpoint.x402) {
-    throw new Error(`endpoint ${endpoint.id} must support AgentKit and x402`);
+  if (!["GET", "POST"].includes(endpoint.method)) {
+    throw new RangeError(`endpoint ${endpoint.id} must use GET or POST`);
   }
-  if (!["free_trial", "discount", "access"].includes(endpoint.agentkit_value_type)) {
-    throw new Error(`endpoint ${endpoint.id} must define agentkit_value_type`);
+  if (endpoint.agentkit !== true && endpoint.agentkit !== false) {
+    throw new Error(`endpoint ${endpoint.id} must declare agentkit support`);
+  }
+  if (endpoint.x402 !== true) {
+    throw new Error(`endpoint ${endpoint.id} must support x402`);
+  }
+  if (endpoint.agentkit) {
+    if (!["free_trial", "discount", "access"].includes(endpoint.agentkit_value_type)) {
+      throw new Error(`endpoint ${endpoint.id} must define agentkit_value_type`);
+    }
+    if (typeof endpoint.agentkit_value_label !== "string" || endpoint.agentkit_value_label.length === 0) {
+      throw new Error(`endpoint ${endpoint.id} must define agentkit_value_label`);
+    }
+  } else if (endpoint.agentkit_value_type || endpoint.agentkit_value_label) {
+    throw new Error(`endpoint ${endpoint.id} must not define AgentKit value metadata without AgentKit`);
+  }
+  if (!Number.isFinite(endpoint.estimated_cost_usd) || endpoint.estimated_cost_usd < 0) {
+    throw new Error(`endpoint ${endpoint.id} must define non-negative estimated_cost_usd`);
   }
   if (!endpoint.fixture_input) throw new Error(`endpoint ${endpoint.id} missing fixture_input`);
   if (!endpoint.health_probe) throw new Error(`endpoint ${endpoint.id} missing health_probe`);
@@ -60,6 +85,28 @@ function materializeEndpoint(definition) {
     fieldOrder,
     ...definition.ui,
   });
+  const agentkitHealthProbe = definition.agentkit
+    ? Object.freeze({
+        ...(definition.agentkit_health_probe || definition.health_probe),
+        maxUsd: definition.agentkit_health_probe?.max_usd || definition.agentkit_health_probe?.maxUsd || maxUsd,
+        paymentMode:
+          definition.agentkit_health_probe?.payment_mode ||
+          definition.agentkit_health_probe?.paymentMode ||
+          definition.default_payment_mode ||
+          "agentkit_first",
+        latencyBudgetMs:
+          definition.agentkit_health_probe?.latency_budget_ms ??
+          definition.agentkit_health_probe?.latencyBudgetMs ??
+          definition.health_probe.latency_budget_ms ??
+          definition.health_probe.latencyBudgetMs,
+        timeoutMs:
+          definition.agentkit_health_probe?.timeout_ms ??
+          definition.agentkit_health_probe?.timeoutMs ??
+          definition.health_probe.timeout_ms ??
+          definition.health_probe.timeoutMs,
+      })
+    : null;
+
   return Object.freeze({
     ...definition,
     enabled: true,
@@ -77,25 +124,7 @@ function materializeEndpoint(definition) {
       latencyBudgetMs: definition.health_probe.latency_budget_ms ?? definition.health_probe.latencyBudgetMs,
       timeoutMs: definition.health_probe.timeout_ms ?? definition.health_probe.timeoutMs,
     }),
-    agentkitHealthProbe: Object.freeze({
-      ...(definition.agentkit_health_probe || definition.health_probe),
-      maxUsd: definition.agentkit_health_probe?.max_usd || definition.agentkit_health_probe?.maxUsd || maxUsd,
-      paymentMode:
-        definition.agentkit_health_probe?.payment_mode ||
-        definition.agentkit_health_probe?.paymentMode ||
-        definition.default_payment_mode ||
-        "agentkit_first",
-      latencyBudgetMs:
-        definition.agentkit_health_probe?.latency_budget_ms ??
-        definition.agentkit_health_probe?.latencyBudgetMs ??
-        definition.health_probe.latency_budget_ms ??
-        definition.health_probe.latencyBudgetMs,
-      timeoutMs:
-        definition.agentkit_health_probe?.timeout_ms ??
-        definition.agentkit_health_probe?.timeoutMs ??
-        definition.health_probe.timeout_ms ??
-        definition.health_probe.timeoutMs,
-    }),
+    agentkitHealthProbe,
     liveSmoke: Object.freeze({
       ...definition.live_smoke,
     }),
@@ -146,7 +175,9 @@ export function listCategories({ includeEmpty = false }: any = {}) {
   return ENDPOINT_CATEGORY_DEFINITIONS
     .map((category) => {
       const endpoints = endpointRegistry.filter((endpoint) => endpoint.category === category.id);
-      const recommended = endpoints.find((endpoint) => endpoint.id === category.recommended_endpoint_id) || endpoints[0] || null;
+      const recommended = category.recommended_endpoint_id
+        ? endpoints.find((endpoint) => endpoint.id === category.recommended_endpoint_id) || null
+        : null;
       return {
         id: category.id,
         name: category.name,

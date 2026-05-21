@@ -29,6 +29,7 @@ const PROVIDER_LOGO_PATHS = Object.freeze({
   browserbase: "/browserbase-logomark.svg",
   manus: "/manus-logomark.svg",
   parallel: "/parallel-logomark.svg",
+  agentmail: "/agentmail-logomark.svg",
 });
 
 // Per-endpoint MCP tool wiring. The published package keeps the same tool
@@ -81,6 +82,41 @@ const MCP_TOOL_DEFINITIONS = Object.freeze({
       "Use this when the user asks for deep, structured research with citations. This starts one async Parallel task through endpoint id parallel.task and returns a run handle, not the final answer. Do not call start again for the same query; call the MCP tools parallel_task_status or parallel_task_result with the returned task_id unless the user explicitly asks for a new task.",
     input_kind: "parallel_task",
     default_max_usd: null,
+  }),
+  "agentmail.create_inbox": Object.freeze({
+    tool_name: "agentmail_create_inbox",
+    title: "AgentMail create inbox",
+    description: "Create an AgentMail inbox through ToolRouter's server-side x402 AgentMail wrapper. This is a paid endpoint; use client_id for idempotent retries.",
+    input_kind: "agentmail_create_inbox",
+    default_max_usd: "2.01",
+  }),
+  "agentmail.list_messages": Object.freeze({
+    tool_name: "agentmail_list_messages",
+    title: "AgentMail list messages",
+    description: "List messages in an AgentMail inbox through ToolRouter; do not call AgentMail's x402 upstream directly.",
+    input_kind: "agentmail_list_messages",
+    default_max_usd: "0",
+  }),
+  "agentmail.get_message": Object.freeze({
+    tool_name: "agentmail_get_message",
+    title: "AgentMail get message",
+    description: "Fetch a specific AgentMail message through ToolRouter; do not call AgentMail's x402 upstream directly.",
+    input_kind: "agentmail_get_message",
+    default_max_usd: "0",
+  }),
+  "agentmail.send_message": Object.freeze({
+    tool_name: "agentmail_send_message",
+    title: "AgentMail send message",
+    description: "Send an email from an AgentMail inbox through ToolRouter's server-side x402 AgentMail wrapper.",
+    input_kind: "agentmail_send_message",
+    default_max_usd: "0.02",
+  }),
+  "agentmail.reply_to_message": Object.freeze({
+    tool_name: "agentmail_reply_to_message",
+    title: "AgentMail reply to message",
+    description: "Reply to an AgentMail message through ToolRouter's server-side x402 AgentMail wrapper.",
+    input_kind: "agentmail_reply_to_message",
+    default_max_usd: "0.02",
   }),
 });
 

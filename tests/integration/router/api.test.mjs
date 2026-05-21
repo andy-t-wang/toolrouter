@@ -306,6 +306,11 @@ describe("router API", () => {
         "parallel.extract",
         "manus.research",
         "parallel.task",
+        "agentmail.create_inbox",
+        "agentmail.list_messages",
+        "agentmail.get_message",
+        "agentmail.send_message",
+        "agentmail.reply_to_message",
       ],
     );
   });
@@ -316,7 +321,7 @@ describe("router API", () => {
     const body = await response.json();
     assert.deepEqual(
       body.categories.map((category) => category.id),
-      ["search", "research", "extract", "browser_usage"],
+      ["search", "research", "extract", "productivity", "browser_usage"],
     );
     const search = body.categories.find((category) => category.id === "search");
     assert.equal(search.recommended_endpoint_id, "exa.search");
@@ -329,6 +334,9 @@ describe("router API", () => {
     const extract = body.categories.find((category) => category.id === "extract");
     assert.equal(extract.recommended_endpoint_id, "parallel.extract");
     assert.equal(extract.recommended_endpoint.id, "parallel.extract");
+    const productivity = body.categories.find((category) => category.id === "productivity");
+    assert.equal(productivity.recommended_endpoint_id, null);
+    assert.equal(productivity.recommended_endpoint, null);
     assert.ok(search.endpoints.every((endpoint) => endpoint.status));
 
     const dashboardResponse = await fetch(`${baseUrl}/v1/dashboard/categories?include_empty=true`, { headers: sessionHeaders() });
@@ -381,7 +389,7 @@ describe("router API", () => {
     assert.equal(response.status, 200);
     const body = await response.json();
     assert.equal(body.status, "unverified");
-    assert.equal(body.summary.endpoint_count, 6);
+    assert.equal(body.summary.endpoint_count, 11);
     assert.equal(body.summary.operational_count, 1);
     assert.deepEqual(
       body.endpoints.map((endpoint) => endpoint.id).sort(),
@@ -392,6 +400,11 @@ describe("router API", () => {
         "parallel.extract",
         "parallel.search",
         "parallel.task",
+        "agentmail.create_inbox",
+        "agentmail.list_messages",
+        "agentmail.get_message",
+        "agentmail.send_message",
+        "agentmail.reply_to_message",
       ].sort(),
     );
     const exa = body.endpoints.find((endpoint) => endpoint.id === "exa.search");
@@ -1790,8 +1803,8 @@ describe("router API", () => {
     const body = await response.json();
     assert.ok(body.monitoring.requests_24h.total >= 1);
     assert.equal(body.monitoring.requests_24h.errors, 0);
-    assert.equal(body.monitoring.endpoint_health.total, 6);
-    assert.equal(body.monitoring.endpoint_health.unverified, 5);
+    assert.equal(body.monitoring.endpoint_health.total, 11);
+    assert.equal(body.monitoring.endpoint_health.unverified, 10);
     assert.ok("error_rate" in body.monitoring.requests_24h);
   });
 

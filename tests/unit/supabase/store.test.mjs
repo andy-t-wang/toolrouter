@@ -186,4 +186,88 @@ describe("Supabase store RPC accounting", () => {
       p_metadata: { stripe_event_id: "evt_1" },
     });
   });
+
+  it("persists AgentMail inbox ownership through server-only PostgREST upserts", async () => {
+    const created = {
+      id: "ami_1",
+      inbox_id: "inbox_123",
+      email: "agent@agentmail.to",
+      owner_address: "0x00000000000000000000000000000000000000a1",
+    };
+    const { store, calls } = rpcCapturingStore((path) =>
+      path.startsWith("/agentmail_inboxes?on_conflict=inbox_id") ? [created] : [],
+    );
+
+    await store.upsertAgentmailInbox({
+      inbox_id: "inbox_123",
+      email: "agent@agentmail.to",
+      owner_address: "0x00000000000000000000000000000000000000A1",
+      metadata: { provider: "agentmail" },
+    });
+
+    const post = calls.find((call) => call.path === "/agentmail_inboxes?on_conflict=inbox_id");
+    assert.ok(post, "must upsert by inbox_id after ownership preflight");
+    assert.equal(post.options.method, "POST");
+    assert.equal(post.options.prefer, "resolution=merge-duplicates,return=representation");
+    assert.equal(post.options.body.inbox_id, "inbox_123");
+    assert.equal(post.options.body.email, "agent@agentmail.to");
+    assert.equal(post.options.body.owner_address, "0x00000000000000000000000000000000000000a1");
+    assert.deepEqual(post.options.body.metadata, { provider: "agentmail" });
+  });
+
+  it("does not transfer AgentMail inbox ownership to another payer", async () => {
+    const existing = {
+      id: "ami_1",
+      inbox_id: "inbox_123",
+      email: "agent@agentmail.to",
+      owner_address: "0x00000000000000000000000000000000000000a1",
+    };
+    const { store, calls } = rpcCapturingStore((path) =>
+      path.includes("inbox_id=eq.inbox_123") ? [existing] : [],
+    );
+
+    await assert.rejects(
+      () =>
+        store.upsertAgentmailInbox({
+          inbox_id: "inbox_123",
+          email: "agent@agentmail.to",
+          owner_address: "0x00000000000000000000000000000000000000b2",
+        }),
+      (error) => {
+        assert.equal(error.statusCode, 403);
+        assert.equal(error.code, "agentmail_inbox_not_owned");
+        return true;
+      },
+    );
+
+    assert.equal(
+      calls.some((call) => call.path === "/agentmail_inboxes?on_conflict=inbox_id"),
+      false,
+      "must reject before writing a different owner",
+    );
+  });
+
+  it("finds AgentMail ownership records by inbox id before falling back to email", async () => {
+    const responses = [
+      [],
+      [
+        {
+          inbox_id: "inbox_123",
+          email: "agent@agentmail.to",
+          owner_address: "0x00000000000000000000000000000000000000a1",
+        },
+      ],
+    ];
+    const { store, calls } = rpcCapturingStore(() => responses.shift() ?? []);
+
+    const row = await store.findAgentmailInboxByIdentifier({
+      identifier: "agent@agentmail.to",
+    });
+
+    assert.equal(row.inbox_id, "inbox_123");
+    assert.equal(calls.length, 2);
+    assert.equal(calls[0].path.split("?")[0], "/agentmail_inboxes");
+    assert.equal(new URLSearchParams(calls[0].path.split("?")[1]).get("inbox_id"), "eq.agent@agentmail.to");
+    assert.equal(new URLSearchParams(calls[1].path.split("?")[1]).get("email"), "eq.agent@agentmail.to");
+  });
 });

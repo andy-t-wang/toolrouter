@@ -22,6 +22,10 @@ const atomicCreditMigration = readFileSync(
   new URL("../../../supabase/migrations/0012_atomic_credit_accounting.sql", import.meta.url),
   "utf8",
 );
+const agentmailInboxesMigration = readFileSync(
+  new URL("../../../supabase/migrations/0015_agentmail_inboxes.sql", import.meta.url),
+  "utf8",
+);
 
 describe("Supabase RLS migration", () => {
   it("enables RLS on every durable router table", () => {
@@ -39,6 +43,7 @@ describe("Supabase RLS migration", () => {
     }
     assert.match(purchasesMigration, /alter table credit_purchases enable row level security;/);
     assert.match(endpointTasksMigration, /alter table public\.endpoint_tasks enable row level security;/);
+    assert.match(agentmailInboxesMigration, /alter table agentmail_inboxes enable row level security;/);
   });
 
   it("does not grant client roles access to API key hashes", () => {
@@ -81,6 +86,8 @@ describe("Supabase RLS migration", () => {
     assert.match(perfMigration, /using \(user_id = \(select auth\.uid\(\)\)\);/);
     assert.match(endpointTasksMigration, /revoke all on public\.endpoint_tasks from anon, authenticated;/);
     assert.doesNotMatch(endpointTasksMigration, /grant select on public\.endpoint_tasks to authenticated;/);
+    assert.match(agentmailInboxesMigration, /revoke all on table agentmail_inboxes from anon, authenticated;/);
+    assert.doesNotMatch(agentmailInboxesMigration, /grant select[\s\S]*agentmail_inboxes[\s\S]*to authenticated;/);
   });
 
   it("adds covering indexes for foreign keys used by production tables", () => {

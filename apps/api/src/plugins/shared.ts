@@ -15,6 +15,8 @@ export interface SharedDeps {
   agentBookVerifier: any;
   agentBookRegistration: any;
   manusFetch: typeof fetch;
+  parallelFetch: typeof fetch;
+  agentmailFetch: typeof fetch;
 }
 
 declare module "fastify" {
@@ -29,6 +31,8 @@ declare module "fastify" {
     agentBookVerifier: any;
     agentBookRegistration: any;
     manusFetch: typeof fetch;
+    parallelFetch: typeof fetch;
+    agentmailFetch: typeof fetch;
   }
 }
 
@@ -43,4 +47,6 @@ export async function sharedPlugin(app: any, opts: SharedDeps) {
   app.decorate("agentBookVerifier", opts.agentBookVerifier);
   app.decorate("agentBookRegistration", opts.agentBookRegistration);
   app.decorate("manusFetch", opts.manusFetch);
+  app.decorate("parallelFetch", opts.parallelFetch);
+  app.decorate("agentmailFetch", opts.agentmailFetch);
 }

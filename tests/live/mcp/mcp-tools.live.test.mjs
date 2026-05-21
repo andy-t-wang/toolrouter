@@ -11,6 +11,9 @@ const apiKey =
 const apiUrl = process.env.TOOLROUTER_API_URL || "https://toolrouter.world";
 const runLive = process.env.RUN_LIVE_MCP_TESTS === "true" && Boolean(apiKey);
 const runPaid = runLive && process.env.RUN_LIVE_MCP_PAID_SMOKE === "true";
+const runAgentmail = runPaid &&
+  process.env.RUN_LIVE_AGENTMAIL_TESTS === "true" &&
+  Boolean(process.env.AGENTMAIL_HEALTH_INBOX_ID && process.env.AGENTMAIL_HEALTH_INBOX_EMAIL);
 
 function liveOptions() {
   return {
@@ -59,6 +62,15 @@ function paidArgsFor(endpointId) {
       force_new: true,
     };
   }
+  if (endpointId === "agentmail.send_message") {
+    return {
+      ...base,
+      inbox_id: process.env.AGENTMAIL_HEALTH_INBOX_ID,
+      to: process.env.AGENTMAIL_HEALTH_INBOX_EMAIL,
+      subject: smoke.input.subject,
+      text: smoke.input.text,
+    };
+  }
   throw new Error(`unsupported endpoint for MCP paid args: ${endpointId}`);
 }
 
@@ -82,10 +94,13 @@ describe("ToolRouter MCP live e2e", () => {
       await callTool("toolrouter_list_endpoints", {}, liveOptions()),
       "toolrouter_list_endpoints",
     );
-    assert.deepEqual(
-      endpointList.endpoints.map((endpoint) => endpoint.id).sort(),
-      ["browserbase.session", "exa.search", "manus.research"].sort(),
-    );
+    const endpointIds = endpointList.endpoints.map((endpoint) => endpoint.id);
+    for (const endpointId of ["browserbase.session", "exa.search", "manus.research"]) {
+      assert.ok(endpointIds.includes(endpointId), endpointId);
+    }
+    if (process.env.RUN_LIVE_AGENTMAIL_TESTS === "true") {
+      assert.ok(endpointIds.includes("agentmail.send_message"));
+    }
 
     const categories = assertToolOk(
       await callTool("toolrouter_list_categories", {}, liveOptions()),
@@ -114,6 +129,9 @@ describe("ToolRouter MCP live e2e", () => {
       ["browserbase_session_create", paidArgsFor("browserbase.session")],
       ["manus_research_start", paidArgsFor("manus.research")],
     ];
+    if (runAgentmail) {
+      calls.push(["agentmail_send_message", paidArgsFor("agentmail.send_message")]);
+    }
     let lastRequestId = null;
 
     for (const [name, args] of calls) {

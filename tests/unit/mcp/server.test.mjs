@@ -32,6 +32,13 @@ function onceData(stream) {
   });
 }
 
+function hasRequiredAlternative(schema, required) {
+  return (schema.anyOf || []).some((alternative) => {
+    const actual = new Set(alternative.required || []);
+    return actual.size === required.length && required.every((key) => actual.has(key));
+  });
+}
+
 describe("ToolRouter MCP server", () => {
   it("negotiates MCP initialization and lists tools", async () => {
     const initialized = await handleJsonRpcMessage({
@@ -51,6 +58,11 @@ describe("ToolRouter MCP server", () => {
     assert.ok(listed.result.tools.some((tool) => tool.name === "manus_research_start"));
     assert.ok(listed.result.tools.some((tool) => tool.name === "manus_research_status"));
     assert.ok(listed.result.tools.some((tool) => tool.name === "manus_research_result"));
+    assert.ok(listed.result.tools.some((tool) => tool.name === "agentmail_create_inbox"));
+    assert.ok(listed.result.tools.some((tool) => tool.name === "agentmail_list_messages"));
+    assert.ok(listed.result.tools.some((tool) => tool.name === "agentmail_get_message"));
+    assert.ok(listed.result.tools.some((tool) => tool.name === "agentmail_send_message"));
+    assert.ok(listed.result.tools.some((tool) => tool.name === "agentmail_reply_to_message"));
     assert.equal(listed.result.tools.some((tool) => tool.name === "toolrouter_research"), false);
     assert.equal(listed.result.tools.some((tool) => tool.name === "manus_research"), false);
     assert.ok(tools().some((tool) => tool.name === "browserbase_session_create"));
@@ -71,6 +83,26 @@ describe("ToolRouter MCP server", () => {
     assert.ok(genericTool.inputSchema.properties.endpointId);
     assert.ok(genericTool.inputSchema.properties.max_usd);
     assert.ok(genericTool.inputSchema.properties.paymentMode);
+    const listMailTool = tools().find((tool) => tool.name === "agentmail_list_messages");
+    assert.ok(hasRequiredAlternative(listMailTool.inputSchema, ["inboxId"]));
+    assert.ok(listMailTool.inputSchema.properties.includeSpam);
+    assert.ok(listMailTool.inputSchema.properties.includeBlocked);
+    assert.ok(listMailTool.inputSchema.properties.includeUnauthenticated);
+    assert.ok(listMailTool.inputSchema.properties.includeTrash);
+    const getMailTool = tools().find((tool) => tool.name === "agentmail_get_message");
+    assert.ok(hasRequiredAlternative(getMailTool.inputSchema, ["inboxId", "messageId"]));
+    const sendMailTool = tools().find((tool) => tool.name === "agentmail_send_message");
+    assert.equal(sendMailTool.inputSchema.properties.to.oneOf.length, 2);
+    assert.equal(sendMailTool.inputSchema.properties.to.oneOf[1].minItems, 1);
+    assert.ok(sendMailTool.inputSchema.properties.replyTo);
+    assert.ok(hasRequiredAlternative(sendMailTool.inputSchema, ["inboxId", "to", "html"]));
+    assert.ok(hasRequiredAlternative(sendMailTool.inputSchema, ["inbox_id", "to", "text"]));
+    assert.equal(sendMailTool.inputSchema.properties.attachments.maxItems, 10);
+    const replyMailTool = tools().find((tool) => tool.name === "agentmail_reply_to_message");
+    assert.ok(replyMailTool.inputSchema.properties.replyTo);
+    assert.ok(replyMailTool.inputSchema.properties.replyAll);
+    assert.ok(hasRequiredAlternative(replyMailTool.inputSchema, ["inboxId", "messageId", "html"]));
+    assert.ok(hasRequiredAlternative(replyMailTool.inputSchema, ["inbox_id", "message_id", "text"]));
   });
 
   it("supports Content-Length framed stdio used by MCP clients", async () => {
@@ -117,6 +149,95 @@ describe("ToolRouter MCP server", () => {
       },
       maxUsd: "0.01",
     });
+  });
+
+  it("calls AgentMail endpoint tools with x402-only defaults", async () => {
+    const calls = [];
+    const result = await callTool("agentmail_send_message", {
+      inbox_id: "agent@agentmail.to",
+      to: "recipient@example.com",
+      subject: "Hello",
+      text: "Body",
+    }, {
+      env: { TOOLROUTER_API_URL: "http://router.test", TOOLROUTER_API_KEY: "tr_test" },
+      fetchImpl: async (url, init) => {
+        calls.push({ url, init });
+        return response({ id: "req_mail", endpoint_id: "agentmail.send_message", path: "x402", charged: true });
+      },
+    });
+
+    assert.equal(result.isError, false);
+    assert.deepEqual(JSON.parse(calls[0].init.body), {
+      endpoint_id: "agentmail.send_message",
+      input: {
+        inbox_id: "agent@agentmail.to",
+        to: "recipient@example.com",
+        subject: "Hello",
+        text: "Body",
+      },
+      maxUsd: "0.02",
+    });
+  });
+
+  it("surfaces AgentMail IDs from named tool responses for chaining", async () => {
+    const result = await callTool("agentmail_create_inbox", {
+      client_id: "test-inbox",
+    }, {
+      env: { TOOLROUTER_API_URL: "http://router.test", TOOLROUTER_API_KEY: "tr_test" },
+      fetchImpl: async () => response({
+        id: "req_mail_create",
+        endpoint_id: "agentmail.create_inbox",
+        path: "x402",
+        charged: true,
+        status_code: 200,
+        body: {
+          ok: true,
+          provider: "agentmail",
+          result: {
+            id: "inbox_123",
+            email: "health@agentmail.to",
+          },
+        },
+      }),
+    });
+
+    assert.equal(result.isError, false);
+    assert.equal(result.structuredContent.id, "req_mail_create");
+    assert.equal(result.structuredContent.endpoint_id, "agentmail.create_inbox");
+    assert.equal(result.structuredContent.inbox_id, "inbox_123");
+    assert.equal(result.structuredContent.email, "health@agentmail.to");
+    assert.equal(result.structuredContent.message_id, null);
+    assert.equal(result.structuredContent.charged, true);
+
+    const sendResult = await callTool("agentmail_send_message", {
+      inbox_id: "health@agentmail.to",
+      to: "recipient@example.com",
+      subject: "Hello",
+      text: "Body",
+    }, {
+      env: { TOOLROUTER_API_URL: "http://router.test", TOOLROUTER_API_KEY: "tr_test" },
+      fetchImpl: async () => response({
+        id: "req_mail_send",
+        endpoint_id: "agentmail.send_message",
+        path: "x402",
+        charged: true,
+        status_code: 200,
+        body: {
+          ok: true,
+          provider: "agentmail",
+          result: {
+            id: "msg_123",
+            thread_id: "thread_123",
+          },
+        },
+      }),
+    });
+
+    assert.equal(sendResult.isError, false);
+    assert.equal(sendResult.structuredContent.id, "req_mail_send");
+    assert.equal(sendResult.structuredContent.inbox_id, null);
+    assert.equal(sendResult.structuredContent.message_id, "msg_123");
+    assert.equal(sendResult.structuredContent.thread_id, "thread_123");
   });
 
   it("canonicalizes the stale api.toolrouter.com alias to the current API base", async () => {
@@ -571,14 +692,27 @@ describe("ToolRouter MCP server", () => {
     const { createApiApp } = await import("../../../apps/api/src/app.ts");
     const { MemoryCache } = await import("../../../packages/cache/src/index.ts");
     const app = createApiApp({ logger: false, cache: new MemoryCache() });
-    const response = await app.inject({
-      method: "OPTIONS",
-      url: "/x402/manus/research",
-    });
-    await app.close();
-    assert.equal(response.statusCode, 204);
-    assert.match(response.headers["access-control-allow-headers"], /payment-signature/u);
-    assert.match(response.headers["access-control-expose-headers"], /payment-required/u);
+    try {
+      for (const url of [
+        "/x402/manus/research",
+        "/x402/agentmail/inboxes",
+        "/x402/agentmail/messages/send",
+        "/x402/agentmail/messages/reply",
+      ]) {
+        const response = await app.inject({
+          method: "OPTIONS",
+          url,
+        });
+        assert.equal(response.statusCode, 204, url);
+        assert.match(response.headers["access-control-allow-origin"], /\*/u, url);
+        assert.match(response.headers["access-control-allow-headers"], /payment-signature/u, url);
+        assert.match(response.headers["access-control-allow-headers"], /agentkit/u, url);
+        assert.match(response.headers["access-control-expose-headers"], /payment-required/u, url);
+        assert.match(response.headers["access-control-expose-headers"], /payment-response/u, url);
+      }
+    } finally {
+      await app.close();
+    }
   });
 
   it("passes explicit payment mode overrides for smoke tests", async () => {

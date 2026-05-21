@@ -38,6 +38,7 @@ function initialData() {
     credit_ledger_entries: [],
     credit_purchases: [],
     wallet_transactions: [],
+    agentmail_inboxes: [],
   };
 }
 
@@ -96,6 +97,8 @@ export type ToolRouterStore = {
   claimCreditPurchaseForFunding(input: { id?: string; provider_checkout_session_id?: string }): Promise<any>;
   listCreditPurchases(input?: { user_id?: string; status?: string; since?: string; limit?: number }): Promise<any[]>;
   insertWalletTransaction(row: any): Promise<any>;
+  upsertAgentmailInbox(row: any): Promise<any>;
+  findAgentmailInboxByIdentifier(input: { identifier: string }): Promise<any>;
 };
 
 function qs(params: Record<string, any>) {
@@ -237,6 +240,7 @@ export class LocalStore implements ToolRouterStore {
     data.credit_ledger_entries ||= [];
     data.credit_purchases ||= [];
     data.wallet_transactions ||= [];
+    data.agentmail_inboxes ||= [];
     ensureDevKey(data);
     writeJson(this.path, data);
     return data;
@@ -556,6 +560,42 @@ export class LocalStore implements ToolRouterStore {
     data.wallet_transactions = data.wallet_transactions.slice(0, 10000);
     this.write(data);
     return row;
+  }
+
+  async upsertAgentmailInbox(row: any) {
+    const data = this.read();
+    const now = new Date().toISOString();
+    const normalizedOwner = String(row.owner_address || "").toLowerCase();
+    const index = data.agentmail_inboxes.findIndex(
+      (item: any) => item.inbox_id === row.inbox_id || (row.email && item.email === row.email),
+    );
+    if (index >= 0 && String(data.agentmail_inboxes[index].owner_address || "").toLowerCase() !== normalizedOwner) {
+      throw Object.assign(new Error("AgentMail inbox is already owned by another payer"), {
+        statusCode: 403,
+        code: "agentmail_inbox_not_owned",
+      });
+    }
+    const existing = index >= 0 ? data.agentmail_inboxes[index] : null;
+    const next = {
+      ...row,
+      id: existing?.id || row.id || `ami_${randomUUID()}`,
+      created_at: existing?.created_at || row.created_at || now,
+      owner_address: normalizedOwner,
+      updated_at: now,
+    };
+    if (index >= 0) data.agentmail_inboxes[index] = { ...data.agentmail_inboxes[index], ...next };
+    else data.agentmail_inboxes.unshift(next);
+    this.write(data);
+    return data.agentmail_inboxes.find((item: any) => item.inbox_id === next.inbox_id) || next;
+  }
+
+  async findAgentmailInboxByIdentifier({ identifier }: { identifier: string }) {
+    const needle = String(identifier || "");
+    return (
+      this.read().agentmail_inboxes.find(
+        (row: any) => row.inbox_id === needle || row.email === needle,
+      ) || null
+    );
   }
 }
 
@@ -1028,6 +1068,51 @@ export class SupabaseStore implements ToolRouterStore {
       body: row,
       prefer: "return=representation",
     }))?.[0] || row;
+  }
+
+  async upsertAgentmailInbox(row: any) {
+    const now = new Date().toISOString();
+    const owner_address = String(row.owner_address || "").toLowerCase();
+    let existing = await this.findAgentmailInboxByIdentifier({ identifier: row.inbox_id });
+    if (!existing && row.email) {
+      existing = await this.findAgentmailInboxByIdentifier({ identifier: row.email });
+    }
+    if (existing && String(existing.owner_address || "").toLowerCase() !== owner_address) {
+      throw Object.assign(new Error("AgentMail inbox is already owned by another payer"), {
+        statusCode: 403,
+        code: "agentmail_inbox_not_owned",
+      });
+    }
+    const body = {
+      ...row,
+      id: existing?.id || row.id || `ami_${randomUUID()}`,
+      created_at: existing?.created_at || row.created_at || now,
+      owner_address,
+      updated_at: now,
+    };
+    if (existing && existing.inbox_id !== row.inbox_id) {
+      return (await this.request(`/agentmail_inboxes?${qs({ id: `eq.${existing.id}`, select: "*" })}`, {
+        method: "PATCH",
+        body,
+        prefer: "return=representation",
+      }))?.[0] || body;
+    }
+    return (await this.request("/agentmail_inboxes?on_conflict=inbox_id", {
+      method: "POST",
+      body,
+      prefer: "resolution=merge-duplicates,return=representation",
+    }))?.[0] || body;
+  }
+
+  async findAgentmailInboxByIdentifier({ identifier }: { identifier: string }) {
+    const inboxRows = await this.request(
+      `/agentmail_inboxes?${qs({ inbox_id: `eq.${identifier}`, select: "*", limit: 1 })}`,
+    );
+    if (inboxRows?.[0]) return inboxRows[0];
+    const emailRows = await this.request(
+      `/agentmail_inboxes?${qs({ email: `eq.${identifier}`, select: "*", limit: 1 })}`,
+    );
+    return emailRows?.[0] || null;
   }
 }
 

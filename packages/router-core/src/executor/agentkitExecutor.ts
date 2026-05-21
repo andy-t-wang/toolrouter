@@ -236,9 +236,17 @@ function normalizePaymentMode(paymentMode, endpoint) {
 
 function chargedFrom({ path, receipt, events, response }) {
   if (path === "agentkit") return false;
+  const receiptAmount = receipt?.amount_usd ?? receipt?.amountUsd;
+  const selectedPaidAmount = events.some(
+    (event) =>
+      event.type === "x402_payment_selected" &&
+      decimalUsdToAtomic(event.amount_usd || "0") > 0n,
+  );
+  if (receipt?.payment_reference) {
+    return receiptAmount === null || receiptAmount === undefined || decimalUsdToAtomic(receiptAmount) > 0n;
+  }
   return Boolean(
-    receipt.payment_reference ||
-      (response?.ok && events.some((event) => event.type === "x402_payment_selected")),
+    response?.ok && selectedPaidAmount,
   );
 }
 
