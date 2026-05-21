@@ -7,7 +7,14 @@
 # Local agent/runtime state
 .agentkit-router/
 .mcp.json
-.codex/
+.codex/*
+!.codex/
+!.codex/config.toml
+!.codex/hooks/
+!.codex/hooks/*.py
+.codex/hooks/__pycache__/
+.codex/hooks/logs/
+.codex/hooks/state/
 .compound-engineering/*.local.yaml
 
 # Dependencies

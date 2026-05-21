@@ -2,6 +2,14 @@
 
 These are durable project decisions for future agents working in this repo.
 
+## Codex PR Follow-up
+
+- This project has a Codex `PostToolUse` hook in `.codex/config.toml` that detects successful `git push` commands and schedules `.codex/hooks/post_push_pr_comment_fixer.py` to run five minutes later.
+- The hook should identify the open PR from the current branch or checkout, inspect unresolved review comments and requested changes, make focused valid fixes, run relevant quick checks, commit only those fixes, and push the PR branch.
+- If there is no open PR, no actionable feedback, or no changed files after review, the hook run should log that clearly and avoid committing or pushing.
+- Do not amend commits, force-push, change the PR title or description, or reply to review comments unless the user explicitly asks.
+
+
 ## Product Shape
 
 - ToolRouter is an AgentKit-first x402 endpoint router.
