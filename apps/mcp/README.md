@@ -1,10 +1,19 @@
 # ToolRouter MCP
 
-MCP adapter for ToolRouter. It exposes ToolRouter endpoints to MCP-capable agents and calls the ToolRouter API with your API key. Agents run this package with `npx`; they do not need a local ToolRouter repo checkout.
+MCP adapter for ToolRouter. It exposes ToolRouter endpoints to MCP-capable agents and calls the ToolRouter API with your API key.
 
 Create an account, verify World ID, and generate an API key at [toolrouter.world](https://toolrouter.world/).
 
 ## Usage
+
+Remote-capable MCP clients should connect directly to the hosted endpoint:
+
+```text
+https://toolrouter.world/mcp
+Authorization: Bearer tr_...
+```
+
+Use the npm package only for clients that require a local stdio command:
 
 ```sh
 TOOLROUTER_API_KEY=tr_... npx -y @worldcoin/toolrouter
@@ -30,7 +39,22 @@ TOOLROUTER_MCP_LIVE_MANIFEST=false
 
 ## MCP Client Config
 
-Most stdio MCP clients can run the adapter with `npx`:
+Remote HTTP MCP:
+
+```json
+{
+  "mcpServers": {
+    "toolrouter": {
+      "url": "https://toolrouter.world/mcp",
+      "headers": {
+        "Authorization": "Bearer tr_..."
+      }
+    }
+  }
+}
+```
+
+Stdio fallback:
 
 ```json
 {
@@ -47,7 +71,7 @@ Most stdio MCP clients can run the adapter with `npx`:
 }
 ```
 
-Claude Code:
+Claude Code stdio fallback:
 
 ```sh
 claude mcp add --scope user \
@@ -56,7 +80,7 @@ claude mcp add --scope user \
   -- toolrouter npx -y @worldcoin/toolrouter
 ```
 
-Codex:
+Codex stdio fallback:
 
 ```sh
 codex mcp add \
@@ -67,6 +91,8 @@ codex mcp add \
 
 The adapter does not load wallet secrets or provider API keys. It only calls ToolRouter's API:
 
+- `POST /mcp`
+- `POST /v1/mcp`
 - `GET /v1/mcp/manifest`
 - `GET /v1/endpoints`
 - `GET /v1/categories`

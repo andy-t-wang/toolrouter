@@ -1,3 +1,14 @@
+const hostedMcpJson = `{
+  "mcpServers": {
+    "toolrouter": {
+      "url": "https://toolrouter.world/mcp",
+      "headers": {
+        "Authorization": "Bearer tr_..."
+      }
+    }
+  }
+}`;
+
 const routerMcpJson = `{
   "mcpServers": {
     "toolrouter": {
@@ -21,9 +32,15 @@ Summarize the best 5 options and include the ToolRouter request id.`;
 
 export const mcpClients = [
   {
+    id: "hosted-http",
+    label: "Hosted HTTP",
+    detail: "Use this for clients that support remote MCP servers. No npm package or local command is required.",
+    code: hostedMcpJson,
+  },
+  {
     id: "claude-code",
-    label: "Claude Code",
-    detail: "Run this once where Claude Code is authenticated. It installs the MCP adapter with npx.",
+    label: "Claude Code stdio",
+    detail: "Use this fallback where Claude Code only supports local stdio MCP commands.",
     code: `claude mcp add --scope user \\
   -e TOOLROUTER_API_URL=https://toolrouter.world \\
   -e TOOLROUTER_API_KEY=tr_... \\
@@ -31,8 +48,8 @@ export const mcpClients = [
   },
   {
     id: "codex",
-    label: "Codex",
-    detail: "Run this once to add ToolRouter to Codex. It installs the MCP adapter with npx.",
+    label: "Codex stdio",
+    detail: "Use this fallback where Codex only supports local stdio MCP commands.",
     code: `codex mcp add \\
   --env TOOLROUTER_API_URL=https://toolrouter.world \\
   --env TOOLROUTER_API_KEY=tr_... \\
@@ -41,26 +58,24 @@ export const mcpClients = [
   {
     id: "cursor",
     label: "Cursor",
-    detail: "Paste this into your workspace or global Cursor MCP config. Cursor will run the npm package with npx.",
+    detail: "Paste this into your workspace or global Cursor MCP config when remote MCP is enabled.",
     code: `.cursor/mcp.json
 
-${routerMcpJson}`,
+${hostedMcpJson}`,
   },
   {
     id: "vs-code",
     label: "VS Code",
-    detail: "Paste this into VS Code's MCP config. VS Code will run the npm package with npx.",
+    detail: "Paste this into VS Code's MCP config when remote MCP is enabled.",
     code: `.vscode/mcp.json
 
 {
   "servers": {
     "toolrouter": {
-      "type": "stdio",
-      "command": "npx",
-      "args": ["-y", "@worldcoin/toolrouter"],
-      "env": {
-        "TOOLROUTER_API_URL": "https://toolrouter.world",
-        "TOOLROUTER_API_KEY": "tr_..."
+      "type": "http",
+      "url": "https://toolrouter.world/mcp",
+      "headers": {
+        "Authorization": "Bearer tr_..."
       }
     }
   }
@@ -69,7 +84,7 @@ ${routerMcpJson}`,
   {
     id: "hermes",
     label: "Hermes",
-    detail: "Paste this under ~/.hermes/config.yaml, then run hermes mcp test toolrouter and use /reload-mcp or start Hermes.",
+    detail: "Use this stdio fallback if your Hermes version cannot connect to the hosted MCP URL, then run hermes mcp test toolrouter.",
     code: `# ~/.hermes/config.yaml
 mcp_servers:
   toolrouter:
@@ -82,9 +97,15 @@ mcp_servers:
   {
     id: "openclaw",
     label: "OpenClaw",
-    detail: "Paste this into ~/.openclaw/openclaw.json. OpenClaw will run the npm package with npx; reload MCP or open a fresh session.",
+    detail: "Paste this into ~/.openclaw/openclaw.json when remote MCP is enabled; reload MCP or open a fresh session.",
     code: `~/.openclaw/openclaw.json
 
-${routerMcpJson}`,
+${hostedMcpJson}`,
+  },
+  {
+    id: "stdio-json",
+    label: "Stdio fallback",
+    detail: "Use this only for clients that require a local command transport.",
+    code: routerMcpJson,
   },
 ];

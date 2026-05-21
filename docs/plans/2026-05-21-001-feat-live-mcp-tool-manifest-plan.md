@@ -9,13 +9,13 @@ date: 2026-05-21
 
 ## Summary
 
-ToolRouter should make newly deployed endpoints appear as MCP tools without requiring every agent to install a freshly published `@worldcoin/toolrouter` package. The plan moves MCP tool metadata into a live API-served manifest, updates the MCP server to prefer that manifest at runtime, and keeps the bundled manifest as a deterministic offline fallback.
+ToolRouter should make newly deployed endpoints appear as MCP tools without requiring every agent to install a freshly published `@worldcoin/toolrouter` package. The plan moves MCP tool metadata into a live API-served manifest, updates the MCP server to prefer that manifest at runtime, adds a hosted MCP HTTP endpoint for remote-capable clients, and keeps the bundled npm adapter as a deterministic stdio fallback.
 
 ---
 
 ## Problem Frame
 
-Adding endpoints today requires coordination across endpoint registration, MCP tool wiring, package build output, npm publishing, and agent upgrades. That makes new tools fragile: if the npm package is stale, agents can see categories or endpoints in the API but cannot call the new named MCP tool through their installed server.
+Adding endpoints today requires coordination across endpoint registration, MCP tool wiring, package build output, npm publishing, and agent upgrades. That makes new tools fragile: if the npm package is stale, agents can see categories or endpoints in the API but cannot call the new named MCP tool through their installed server. Even with a live manifest, clients that are taught to install MCP through `npx` still depend on npm as the bootstrap path, so remote-capable clients need a hosted MCP URL as the primary setup path.
 
 ---
 
@@ -36,6 +36,7 @@ Adding endpoints today requires coordination across endpoint registration, MCP t
 - R3. The API and MCP package must derive tool metadata from the same source to avoid drift between `/v1/categories`, `/v1/endpoints`, `tools/list`, and package build artifacts.
 - R4. Category convenience tools must continue to route through the live recommended endpoint so category changes can deploy server-side.
 - R5. Tests must prove that a remote manifest can add a tool the local bundle did not know about and that calling it uses `POST /v1/requests` with the concrete `endpoint_id`.
+- R6. Remote-capable MCP clients must be able to connect directly to ToolRouter by URL, with API-key auth, without downloading the npm package.
 
 ---
 
@@ -44,6 +45,7 @@ Adding endpoints today requires coordination across endpoint registration, MCP t
 - This plan does not add a marketplace, user-specific endpoint entitlement filtering, or dashboard authoring flow for endpoints.
 - This plan does not make already-running MCP clients hot-reload tool lists by push notification; clients that cache `tools/list` may need to refresh or restart to see a changed list.
 - This plan does not attempt to infer brand-new custom result renderers from the manifest. Unknown live tools return the generic ToolRouter response.
+- This plan does not remove the npm package. It remains the fallback for MCP clients that only support stdio transports.
 
 ### Deferred to Follow-Up Work
 
@@ -82,6 +84,7 @@ Adding endpoints today requires coordination across endpoint registration, MCP t
 - Prefer the live manifest in MCP runtime, fallback to bundled manifest: Runtime MCP servers should fetch `/v1/mcp/manifest` with `TOOLROUTER_API_KEY`; if the key is missing or the request fails, they should keep using `dist/endpoints.json`.
 - Keep calls generic for unknown live tools: Named tool invocation only needs the tool name, endpoint id, input object, and default `maxUsd`; specialized result shaping remains an enhancement, not a prerequisite for live tool availability.
 - Keep category recommendation lookup live: Category wrappers should still ask `/v1/categories?include_empty=true` for the current recommended endpoint before calling `/v1/requests`.
+- Prefer hosted MCP setup: The public setup surface should teach `https://toolrouter.world/mcp` first and present `npx -y @worldcoin/toolrouter` only as the stdio fallback.
 
 ---
 
@@ -120,6 +123,27 @@ sequenceDiagram
   MCP->>API: POST /v1/requests { endpoint_id, input, maxUsd }
   API-->>MCP: request trace/result
   MCP-->>Client: generic or specialized result
+```
+
+```mermaid
+sequenceDiagram
+  participant Client as Remote-capable MCP client
+  participant API as ToolRouter API /mcp
+  participant Core as Existing MCP handler
+  participant Router as ToolRouter routes
+
+  Client->>API: POST /mcp initialize
+  API-->>Client: serverInfo + tools capability
+  Client->>API: POST /mcp tools/list (Bearer API key)
+  API->>Core: handleJsonRpcMessage(tools/list)
+  Core->>Router: GET /v1/mcp/manifest
+  Router-->>Core: live tools + schemas
+  Core-->>API: tools/list result
+  API-->>Client: MCP tools
+  Client->>API: POST /mcp tools/call exa_search
+  Core->>Router: POST /v1/requests
+  Router-->>Core: request trace/result
+  API-->>Client: MCP tool result
 ```
 
 ---
@@ -223,7 +247,43 @@ sequenceDiagram
 **Verification:**
 - Installed MCP servers can expose and call a newly deployed tool from API manifest data alone.
 
-### U4. DTO Mapping and Documentation Cleanup
+### U4. Hosted MCP HTTP Transport
+
+**Goal:** Let remote-capable MCP clients connect directly to ToolRouter without installing the npm adapter.
+
+**Requirements:** R1, R3, R6
+
+**Dependencies:** U1, U2, U3
+
+**Files:**
+- Create: `apps/api/src/routes/mcp.routes.ts`
+- Modify: `apps/api/src/app.ts`
+- Modify: `apps/api/src/plugins/cors.ts`
+- Modify: `apps/web/app/mcp-content.ts`
+- Modify: `apps/web/app/mcp-client-tabs.tsx`
+- Modify: `apps/mcp/README.md`
+- Test: `tests/integration/router/api.test.mjs`
+- Test: `tests/integration/router/auth-coverage.test.mjs`
+- Test: `tests/e2e/dashboard/static.test.mjs`
+
+**Approach:**
+- Expose `POST /mcp` and `POST /v1/mcp` as JSON-RPC HTTP endpoints.
+- Delegate requests to the existing MCP `handleJsonRpcMessage` implementation so hosted and stdio transports share tool listing, endpoint invocation, and result formatting.
+- Require `authenticateApiKey` for private MCP methods such as `tools/list` and `tools/call`; allow `initialize` and `ping` so clients can negotiate before sending auth-protected tool calls.
+- Route the MCP handler's internal ToolRouter API calls through `app.inject` so hosted MCP reuses the same API routes without network self-calls.
+- Update CORS to allow MCP protocol/session headers.
+- Update setup docs to lead with the hosted URL and keep `npx` as a fallback.
+
+**Test scenarios:**
+- Happy path: unauthenticated `initialize` works over `POST /mcp`.
+- Auth path: unauthenticated `tools/list` on `/mcp` and `/v1/mcp` is rejected.
+- Happy path: authenticated `tools/list` returns the same live tools as the stdio MCP handler.
+- Happy path: authenticated `tools/call` invokes a concrete endpoint through `/v1/requests`.
+
+**Verification:**
+- Remote-capable MCP clients can use ToolRouter through a hosted URL without installing the npm adapter.
+
+### U5. DTO Mapping and Documentation Cleanup
 
 **Goal:** Remove duplicated MCP tool-name mapping where practical and document the new live-deploy behavior for endpoint onboarding and MCP users.
 
@@ -259,10 +319,10 @@ sequenceDiagram
 
 ## System-Wide Impact
 
-- **Interaction graph:** `tools/list` gains an API dependency when configured with an API key, but fallback keeps local startup usable.
+- **Interaction graph:** `tools/list` gains an API dependency when configured with an API key, but fallback keeps local startup usable. Remote-capable clients can bypass local startup entirely by using `POST /mcp`.
 - **Error propagation:** Live manifest failures should be swallowed into bundled fallback for listing; actual tool-call failures should continue to return MCP `isError` payloads as today.
 - **State lifecycle risks:** Remote manifest caching can make a new deploy visible after a short delay; TTL must stay short enough for "live deploy" expectations.
-- **API surface parity:** `/v1/endpoints`, `/v1/categories`, MCP `tools/list`, and package codegen all depend on the same router-core projection after this change.
+- **API surface parity:** `/v1/endpoints`, `/v1/categories`, `/mcp`, MCP `tools/list`, and package codegen all depend on the same router-core projection after this change.
 - **Integration coverage:** Unit tests need remote-only manifest fixtures because the checked-in registry cannot prove that an unknown future tool works.
 - **Unchanged invariants:** MCP still never reads wallet private keys, provider API keys, Supabase service-role keys, or payment signatures.
 
@@ -276,6 +336,7 @@ sequenceDiagram
 | Old package cannot synthesize schemas for new input kinds | Include concrete `input_schema` in the API manifest and prefer it at runtime |
 | New endpoints need special result shaping | Return generic ToolRouter traces by default; add package-side rich formatters later only when the generic result is inadequate |
 | Tool-name mapping drifts between API and MCP package | Move mapping into router-core and make codegen/API tests consume the same builder |
+| Agents keep copying npm setup snippets | Teach the hosted MCP URL first on the setup surface and document `npx` only as stdio fallback |
 
 ---
 
@@ -283,6 +344,7 @@ sequenceDiagram
 
 - Endpoint deploy checklist should treat `/v1/mcp/manifest` as the live verification target before announcing a tool.
 - A new npm release is still useful for protocol/runtime improvements, but ordinary endpoint additions should only require deploying the ToolRouter API and web surfaces.
+- Remote-capable MCP setup should use `https://toolrouter.world/mcp` with `Authorization: Bearer <ToolRouter API key>`.
 - Operators can set `TOOLROUTER_MCP_LIVE_MANIFEST=false` for deterministic local debugging against the bundled manifest.
 
 ---
@@ -293,6 +355,7 @@ sequenceDiagram
 - Related code: `apps/mcp/scripts/build-endpoints.mjs`
 - Related code: `packages/router-core/src/endpoints/registry.ts`
 - Related code: `packages/router-core/src/manifest/schema.ts`
+- Related code: `apps/api/src/routes/mcp.routes.ts`
 - Related code: `apps/api/src/routes/status.routes.ts`
 - Related code: `apps/api/src/services/monitoring.ts`
 - Project guidance: `agents.md`

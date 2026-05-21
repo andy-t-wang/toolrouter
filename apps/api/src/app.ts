@@ -26,6 +26,7 @@ import { authKeysRoutes } from "./routes/auth-keys.routes.ts";
 import { dashboardRoutes } from "./routes/dashboard.routes.ts";
 import { executionRoutes } from "./routes/execution.routes.ts";
 import { ledgerRoutes } from "./routes/ledger.routes.ts";
+import { mcpRoutes } from "./routes/mcp.routes.ts";
 import { requestsRoutes } from "./routes/requests.routes.ts";
 import { sellersRoutes, type SellerRoutesOpts } from "./routes/sellers.routes.ts";
 import { statusRoutes } from "./routes/status.routes.ts";
@@ -179,6 +180,7 @@ export function createApiApp(deps: CreateApiAppDeps = {}) {
     version: "0.1.0",
   }));
   app.register(statusRoutes);
+  app.register(mcpRoutes);
   app.register(authKeysRoutes);
   app.register(agentKitRoutes);
   app.register(ledgerRoutes);

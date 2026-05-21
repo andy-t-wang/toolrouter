@@ -10,11 +10,11 @@ export function applyCors(app: any) {
     reply.header("access-control-allow-origin", origin);
     reply.header(
       "access-control-allow-headers",
-      "authorization,content-type,x-requested-with,payment-signature,agentkit,settlement-overrides",
+      "authorization,content-type,x-requested-with,payment-signature,agentkit,settlement-overrides,mcp-protocol-version,mcp-session-id",
     );
     reply.header(
       "access-control-expose-headers",
-      "payment-required,payment-response,x-payment-response",
+      "payment-required,payment-response,x-payment-response,mcp-protocol-version,mcp-session-id",
     );
     reply.header("access-control-allow-methods", "GET,POST,DELETE,OPTIONS");
     if (request.method === "OPTIONS") {
