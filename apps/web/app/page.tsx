@@ -98,15 +98,13 @@ function mergeEndpointRows(rows: LandingEndpoint[]) {
     fallbackStatus.endpoints.map((endpoint) => [endpoint.id, endpoint]),
   );
   const seen = new Set<string>();
-  const merged = rows
-    .filter((endpoint) => fallbackById.has(endpoint.id))
-    .map((endpoint) => {
-      seen.add(endpoint.id);
-      return {
-        ...(fallbackById.get(endpoint.id) || {}),
-        ...endpoint,
-      };
-    });
+  const merged = rows.map((endpoint) => {
+    seen.add(endpoint.id);
+    return {
+      ...(fallbackById.get(endpoint.id) || {}),
+      ...endpoint,
+    };
+  });
   for (const endpoint of fallbackStatus.endpoints) {
     if (!seen.has(endpoint.id)) merged.push(endpoint);
   }

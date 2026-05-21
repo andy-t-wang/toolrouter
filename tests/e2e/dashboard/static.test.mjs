@@ -51,7 +51,8 @@ describe("web dashboard static wiring", () => {
     assert.match(landingPage, /categoryTabsFromEndpoints/);
     assert.match(landingPage, /Endpoint categories/);
     assert.match(landingPage, /endpoint-tabs/);
-    assert.match(landingPage, /fallbackById\.has\(endpoint\.id\)/);
+    assert.match(landingPage, /fallbackById\.get\(endpoint\.id\)/);
+    assert.match(landingPage, /if \(!seen\.has\(endpoint\.id\)\)/);
     assert.match(landingPage, /endpoint_count:\s+endpoints\.length/);
     assert.match(landingPage, /categoryTabHref\(category\.id\)/);
     assert.match(landingPage, /visibleProviders\.map/);
