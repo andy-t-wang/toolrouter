@@ -163,6 +163,7 @@ export interface SellerServiceDeps {
     request: any;
     reply: any;
     secrets: Record<string, string>;
+    payment: any;
   }) => Promise<unknown>;
 }
 
@@ -260,7 +261,7 @@ export async function createSellerService(
       return sendX402Instructions(reply, processResult.response);
     }
 
-    const body = await deps.forwardUpstream({ request, reply, secrets });
+    const body = await deps.forwardUpstream({ request, reply, secrets, payment: processResult });
     // If the forwarder set a non-2xx status, surface its body unchanged.
     const replyStatus = typeof reply.statusCode === "number" ? reply.statusCode : 200;
     if (replyStatus >= 400) return body;

@@ -89,6 +89,7 @@ export const agentmailReplyToMessageSellerManifest: SellerManifest = Object.free
 export interface RegisterAgentmailSellerDeps {
   cache: any;
   agentBook: any;
+  store?: any;
   fetchImpl?: typeof fetch;
   facilitatorClient?: any;
   upstreamPaymentSigner?: any;
@@ -99,10 +100,12 @@ function buildSeller(
   forwardUpstream: (args: {
     request: any;
     reply: any;
+    payment: any;
+    store: any;
     fetchImpl: typeof fetch;
     paymentSigner: any;
   }) => Promise<unknown>,
-  { cache, agentBook, fetchImpl = fetch, facilitatorClient, upstreamPaymentSigner }: RegisterAgentmailSellerDeps,
+  { cache, agentBook, store, fetchImpl = fetch, facilitatorClient, upstreamPaymentSigner }: RegisterAgentmailSellerDeps,
 ) {
   const storage = new MonthlyAgentKitStorage(cache, manifest.id);
   const paymentSigner = upstreamPaymentSigner === undefined
@@ -114,8 +117,8 @@ function buildSeller(
     facilitatorConfig: facilitatorClient ? undefined : createParallelFacilitatorConfig(),
     facilitatorClient,
     storage,
-    forwardUpstream: async ({ request, reply }) =>
-      forwardUpstream({ request, reply, fetchImpl, paymentSigner }),
+    forwardUpstream: async ({ request, reply, payment }) =>
+      forwardUpstream({ request, reply, payment, store, fetchImpl, paymentSigner }),
   });
 }
 
@@ -136,4 +139,3 @@ export async function registerAgentmailReplyToMessageSellerService(
 ): Promise<SellerService> {
   return buildSeller(agentmailReplyToMessageSellerManifest, forwardAgentmailReplyToMessageUpstream, deps);
 }
-

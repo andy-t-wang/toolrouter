@@ -160,20 +160,24 @@ async function agentmailSellerServices(
   if (opts.disableAgentmailSellers) return [];
   const cache = app.cache;
   const agentBook = app.agentBookVerifier || (await loadAgentBookVerifier());
+  const store = app.store;
   const fetchImpl = opts.agentmailFetch || fetch;
   const createInbox = (opts.registerAgentmailCreateInboxSeller || registerAgentmailCreateInboxSellerService)({
     cache,
     agentBook,
+    store,
     fetchImpl,
   });
   const sendMessage = (opts.registerAgentmailSendMessageSeller || registerAgentmailSendMessageSellerService)({
     cache,
     agentBook,
+    store,
     fetchImpl,
   });
   const replyToMessage = (opts.registerAgentmailReplyToMessageSeller || registerAgentmailReplyToMessageSellerService)({
     cache,
     agentBook,
+    store,
     fetchImpl,
   });
   return Promise.all([createInbox, sendMessage, replyToMessage]);
@@ -300,6 +304,7 @@ function registerLazyAgentmailProxies(app: any, opts: SellerRoutesOpts) {
       const attempt = factory({
         cache: app.cache,
         agentBook: app.agentBookVerifier || (await loadAgentBookVerifier()),
+        store: app.store,
         fetchImpl,
       });
       inFlight = attempt;
