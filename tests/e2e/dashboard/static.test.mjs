@@ -97,6 +97,10 @@ describe("web dashboard static wiring", () => {
     assert.match(setupPage, /<McpClientTabs \/>/);
     assert.match(setupSurface, /Connect your client/);
     assert.match(setupSurface, /https:\/\/toolrouter\.world/);
+    assert.match(setupSurface, /https:\/\/toolrouter\.world\/mcp/);
+    assert.match(setupSurface, /Hosted HTTP/);
+    assert.match(setupSurface, /No npm package or local command is required/);
+    assert.match(setupSurface, /Authorization/);
     assert.doesNotMatch(setupSurface, /localhost/);
     assert.doesNotMatch(setupSurface, /127\.0\.0\.1/);
     assert.doesNotMatch(setupSurface, /127\.0\.0\.1:9402/);
@@ -113,7 +117,6 @@ describe("web dashboard static wiring", () => {
     assert.match(setupSurface, /Generate an API key, then replace/);
     assert.doesNotMatch(setupSurface, /do not need a local ToolRouter repo path/);
     assert.match(setupSurface, /~\/\.openclaw\/openclaw\.json/);
-    assert.match(setupSurface, /\/reload-mcp/);
     assert.match(setupSurface, /hermes mcp test toolrouter/);
     assert.match(setupSurface, /role="tab"/);
     assert.match(setupSurface, /mcp-code-panel/);

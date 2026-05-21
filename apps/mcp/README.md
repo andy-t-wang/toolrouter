@@ -1,10 +1,19 @@
 # ToolRouter MCP
 
-MCP adapter for ToolRouter. It exposes ToolRouter endpoints to MCP-capable agents and calls the ToolRouter API with your API key. Agents run this package with `npx`; they do not need a local ToolRouter repo checkout.
+MCP adapter for ToolRouter. It exposes ToolRouter endpoints to MCP-capable agents and calls the ToolRouter API with your API key.
 
 Create an account, verify World ID, and generate an API key at [toolrouter.world](https://toolrouter.world/).
 
 ## Usage
+
+Remote-capable MCP clients should connect directly to the hosted endpoint:
+
+```text
+https://toolrouter.world/mcp
+Authorization: Bearer tr_...
+```
+
+Use the npm package only for clients that require a local stdio command:
 
 ```sh
 TOOLROUTER_API_KEY=tr_... npx -y @worldcoin/toolrouter
@@ -16,9 +25,36 @@ Optional:
 TOOLROUTER_API_URL=https://toolrouter.world
 ```
 
+By default the adapter asks ToolRouter for a live MCP manifest at startup and
+on tool-list refreshes. That lets newly deployed ToolRouter endpoints appear as
+MCP tools without waiting for a new npm package install. If the API is
+unavailable, or if no API key is configured yet, the adapter falls back to the
+endpoint manifest bundled in the npm package.
+
+For deterministic local debugging against only the bundled manifest:
+
+```sh
+TOOLROUTER_MCP_LIVE_MANIFEST=false
+```
+
 ## MCP Client Config
 
-Most stdio MCP clients can run the adapter with `npx`:
+Remote HTTP MCP:
+
+```json
+{
+  "mcpServers": {
+    "toolrouter": {
+      "url": "https://toolrouter.world/mcp",
+      "headers": {
+        "Authorization": "Bearer tr_..."
+      }
+    }
+  }
+}
+```
+
+Stdio fallback:
 
 ```json
 {
@@ -35,7 +71,7 @@ Most stdio MCP clients can run the adapter with `npx`:
 }
 ```
 
-Claude Code:
+Claude Code stdio fallback:
 
 ```sh
 claude mcp add --scope user \
@@ -44,7 +80,7 @@ claude mcp add --scope user \
   -- toolrouter npx -y @worldcoin/toolrouter
 ```
 
-Codex:
+Codex stdio fallback:
 
 ```sh
 codex mcp add \
@@ -55,12 +91,17 @@ codex mcp add \
 
 The adapter does not load wallet secrets or provider API keys. It only calls ToolRouter's API:
 
+- `POST /mcp`
+- `POST /v1/mcp`
+- `GET /v1/mcp/manifest`
 - `GET /v1/endpoints`
 - `GET /v1/categories`
 - `POST /v1/requests`
 - `GET /v1/requests/:id`
 - `GET /v1/manus/tasks/:task_id/status`
 - `GET /v1/manus/tasks/:task_id/result`
+- `GET /v1/parallel/tasks/:task_id/status`
+- `GET /v1/parallel/tasks/:task_id/result`
 
 Exposed tools include:
 
@@ -74,6 +115,11 @@ Exposed tools include:
 - `manus_research_start`
 - `manus_research_status`
 - `manus_research_result`
+- `parallel_search`
+- `parallel_extract`
+- `parallel_task_start`
+- `parallel_task_status`
+- `parallel_task_result`
 - `toolrouter_get_request`
 - `exa_search`
 - `browserbase_session_create`

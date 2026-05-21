@@ -39,6 +39,53 @@ function hasRequiredAlternative(schema, required) {
   });
 }
 
+function remoteManifest(overrides = {}) {
+  return {
+    schema_version: 2,
+    endpoints: [
+      {
+        id: "live.example",
+        provider: "live",
+        category: "compute",
+        name: "Live Example",
+        description: "Remote-only live tool.",
+        fixture_input: { topic: "live deploy" },
+        mcp: {
+          tool_name: "live_example",
+          title: "Live example",
+          description: "Call a live-deployed example endpoint.",
+          input_kind: "live_example",
+          default_max_usd: "0.04",
+          input_schema: {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+              topic: { type: "string" },
+            },
+            required: ["topic"],
+          },
+        },
+      },
+    ],
+    category_tools: [],
+    enums: {
+      search_type: ["fast"],
+      manus_depth: ["quick", "standard"],
+      parallel_processor: ["ultra"],
+    },
+    manus_pricing: {
+      default_usd_by_depth: { quick: 0.03, standard: 0.05 },
+      env_var_template: "TOOLROUTER_MANUS_RESEARCH_PRICE_<DEPTH>_USD",
+    },
+    parallel_pricing: {
+      default_usd_by_processor: { ultra: 0.31 },
+      markup_usd: 0.01,
+      env_var_template: "TOOLROUTER_PARALLEL_TASK_PRICE_<PROCESSOR>_USD",
+    },
+    ...overrides,
+  };
+}
+
 describe("ToolRouter MCP server", () => {
   it("negotiates MCP initialization and lists tools", async () => {
     const initialized = await handleJsonRpcMessage({
@@ -134,6 +181,82 @@ describe("ToolRouter MCP server", () => {
     assert.equal(payload.result.serverInfo.name, "toolrouter-mcp");
   });
 
+  it("lists tools from the live API manifest when available", async () => {
+    const calls = [];
+    const listed = await handleJsonRpcMessage({
+      jsonrpc: "2.0",
+      id: 2,
+      method: "tools/list",
+    }, {
+      env: {
+        TOOLROUTER_API_URL: "http://router.test",
+        TOOLROUTER_API_KEY: "tr_test",
+        TOOLROUTER_MCP_MANIFEST_CACHE_MS: "0",
+      },
+      fetchImpl: async (url, init) => {
+        calls.push({ url, init });
+        return response(remoteManifest());
+      },
+    });
+
+    assert.equal(calls[0].url, "http://router.test/v1/mcp/manifest");
+    assert.equal(calls[0].init.headers.authorization, "Bearer tr_test");
+    const liveTool = listed.result.tools.find((tool) => tool.name === "live_example");
+    assert.ok(liveTool);
+    assert.equal(liveTool.inputSchema.properties.topic.type, "string");
+    assert.equal(liveTool.inputSchema.required[0], "topic");
+  });
+
+  it("falls back to bundled tools when the live manifest cannot be loaded", async () => {
+    const listed = await handleJsonRpcMessage({
+      jsonrpc: "2.0",
+      id: 2,
+      method: "tools/list",
+    }, {
+      env: {
+        TOOLROUTER_API_URL: "http://router.test",
+        TOOLROUTER_API_KEY: "tr_test",
+        TOOLROUTER_MCP_MANIFEST_CACHE_MS: "0",
+      },
+      fetchImpl: async () => response({ error: { message: "unavailable" } }, { status: 503 }),
+    });
+
+    assert.ok(listed.result.tools.some((tool) => tool.name === "exa_search"));
+    assert.equal(listed.result.tools.some((tool) => tool.name === "live_example"), false);
+  });
+
+  it("keeps remote tools listable when an unknown input kind has no schema", async () => {
+    const [endpoint] = remoteManifest().endpoints;
+    const manifest = remoteManifest({
+      endpoints: [
+        {
+          ...endpoint,
+          mcp: {
+            ...endpoint.mcp,
+            input_schema: undefined,
+          },
+        },
+      ],
+    });
+    const listed = await handleJsonRpcMessage({
+      jsonrpc: "2.0",
+      id: 2,
+      method: "tools/list",
+    }, {
+      env: {
+        TOOLROUTER_API_URL: "http://router.test",
+        TOOLROUTER_API_KEY: "tr_test",
+        TOOLROUTER_MCP_MANIFEST_CACHE_MS: "0",
+      },
+      fetchImpl: async () => response(manifest),
+    });
+
+    const liveTool = listed.result.tools.find((tool) => tool.name === "live_example");
+    assert.ok(liveTool);
+    assert.equal(liveTool.inputSchema.additionalProperties, true);
+    assert.ok(liveTool.inputSchema.properties.input);
+  });
+
   it("calls named endpoint tools through POST /v1/requests", async () => {
     const calls = [];
     const result = await callTool("exa_search", { query: "top sushi places in San Francisco" }, {
@@ -153,6 +276,33 @@ describe("ToolRouter MCP server", () => {
         query: "top sushi places in San Francisco",
       },
       maxUsd: "0.01",
+    });
+  });
+
+  it("calls remote-only named tools through POST /v1/requests", async () => {
+    const calls = [];
+    const result = await callTool("live_example", { topic: "live deploy" }, {
+      env: {
+        TOOLROUTER_API_URL: "http://router.test",
+        TOOLROUTER_API_KEY: "tr_test",
+        TOOLROUTER_MCP_MANIFEST_CACHE_MS: "0",
+      },
+      fetchImpl: async (url, init) => {
+        calls.push({ url, init });
+        if (url === "http://router.test/v1/mcp/manifest") return response(remoteManifest());
+        return response({ id: "req_live", endpoint_id: "live.example", path: "x402", charged: true });
+      },
+    });
+
+    assert.equal(result.isError, false);
+    assert.equal(calls[0].url, "http://router.test/v1/mcp/manifest");
+    assert.equal(calls[1].url, "http://router.test/v1/requests");
+    assert.deepEqual(JSON.parse(calls[1].init.body), {
+      endpoint_id: "live.example",
+      input: {
+        topic: "live deploy",
+      },
+      maxUsd: "0.04",
     });
   });
 

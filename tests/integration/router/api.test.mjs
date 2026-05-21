@@ -268,6 +268,9 @@ describe("router API", () => {
 
     const categoryResponse = await fetch(`${baseUrl}/v1/categories`);
     assert.equal(categoryResponse.status, 401);
+
+    const mcpManifestResponse = await fetch(`${baseUrl}/v1/mcp/manifest`);
+    assert.equal(mcpManifestResponse.status, 401);
   });
 
   it("lists endpoints with API-key auth and dashboard session auth", async () => {
@@ -313,6 +316,104 @@ describe("router API", () => {
         "agentmail.reply_to_message",
       ],
     );
+  });
+
+  it("serves a live MCP manifest with concrete input schemas", async () => {
+    const response = await fetch(`${baseUrl}/v1/mcp/manifest`, { headers: authHeaders() });
+    assert.equal(response.status, 200);
+    const manifest = await response.json();
+    assert.equal(manifest.schema_version, 2);
+    assert.ok(manifest.endpoints.some((endpoint) => endpoint.mcp.tool_name === "exa_search"));
+    const exa = manifest.endpoints.find((endpoint) => endpoint.id === "exa.search");
+    assert.equal(exa.mcp.input_schema.type, "object");
+    assert.equal(exa.mcp.input_schema.properties.query.type, "string");
+    assert.equal(exa.mcp.default_max_usd, "0.01");
+    const sendEmail = manifest.category_tools.find((tool) => tool.tool_name === "toolrouter_send_email");
+    assert.equal(sendEmail.category, "email");
+    assert.equal(sendEmail.recommended_endpoint_id, "agentmail.send_message");
+    assert.ok(sendEmail.input_schema.anyOf.some((alternative) => alternative.required.includes("inboxId")));
+  });
+
+  it("serves hosted MCP JSON-RPC over HTTP without requiring the npm adapter", async () => {
+    const executorCalls = [];
+    await withIsolatedApp("toolrouter-hosted-mcp-", {
+      executor: async (payload) => {
+        executorCalls.push(payload);
+        return executorResult(payload, {
+          path: "x402",
+          charged: true,
+          amount_usd: "0.007",
+          payment_reference: "pay_hosted_mcp",
+          body: { results: [{ title: "ToolRouter", url: "https://toolrouter.world" }] },
+        });
+      },
+    }, async ({ app }) => {
+      const initialize = await app.inject({
+        method: "POST",
+        url: "/mcp",
+        payload: {
+          jsonrpc: "2.0",
+          id: 1,
+          method: "initialize",
+          params: { protocolVersion: "2025-11-25" },
+        },
+      });
+      assert.equal(initialize.statusCode, 200);
+      assert.equal(initialize.json().result.serverInfo.name, "toolrouter-mcp");
+
+      const unauthenticatedList = await app.inject({
+        method: "POST",
+        url: "/mcp",
+        payload: { jsonrpc: "2.0", id: 2, method: "tools/list" },
+      });
+      assert.equal(unauthenticatedList.statusCode, 401);
+
+      const listed = await app.inject({
+        method: "POST",
+        url: "/mcp",
+        headers: authHeaders(),
+        payload: { jsonrpc: "2.0", id: 3, method: "tools/list" },
+      });
+      assert.equal(listed.statusCode, 200);
+      const toolNames = listed.json().result.tools.map((tool) => tool.name);
+      assert.ok(toolNames.includes("toolrouter_call_endpoint"));
+      assert.ok(toolNames.includes("exa_search"));
+
+      const aliasListed = await app.inject({
+        method: "POST",
+        url: "/v1/mcp",
+        headers: authHeaders(),
+        payload: { jsonrpc: "2.0", id: 4, method: "tools/list" },
+      });
+      assert.equal(aliasListed.statusCode, 200);
+
+      const called = await app.inject({
+        method: "POST",
+        url: "/mcp",
+        headers: authHeaders(),
+        payload: {
+          jsonrpc: "2.0",
+          id: 5,
+          method: "tools/call",
+          params: {
+            name: "exa_search",
+            arguments: {
+              query: "agent payment routers",
+              payment_mode: "x402_only",
+              maxUsd: "0.01",
+            },
+          },
+        },
+      });
+      assert.equal(called.statusCode, 200);
+      const result = called.json().result;
+      assert.equal(result.isError, false);
+      assert.equal(result.structuredContent.endpoint_id, "exa.search");
+      assert.equal(result.structuredContent.body.results[0].title, "ToolRouter");
+      assert.equal(executorCalls.length, 1);
+      assert.equal(executorCalls[0].endpoint.id, "exa.search");
+      assert.equal(executorCalls[0].paymentMode, "x402_only");
+    });
   });
 
   it("lists generic categories with recommended endpoints", async () => {

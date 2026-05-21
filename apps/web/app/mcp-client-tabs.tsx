@@ -41,14 +41,15 @@ export function McpClientTabs({ apiKey = "", compact = false }: McpClientTabsPro
         </div>
         {hasInjectedKey ? (
           <p>
-            Your API key is filled in. These snippets run the published{" "}
-            <code>@worldcoin/toolrouter</code> MCP package with npx.
-            After updating MCP config, reload MCP from your client or start a
-            fresh session.
+            Your API key is filled in. Use the hosted MCP URL when your client
+            supports remote servers; use the npx fallback only for stdio-only
+            clients. After updating MCP config, reload MCP from your client or
+            start a fresh session.
           </p>
         ) : (
           <p>
-            Generate an API key, then replace <code>tr_...</code>.
+            Generate an API key, then replace <code>tr_...</code>. Remote MCP
+            clients connect to <code>https://toolrouter.world/mcp</code>.
           </p>
         )}
       </div>
