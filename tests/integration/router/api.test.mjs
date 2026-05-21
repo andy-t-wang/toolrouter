@@ -390,7 +390,7 @@ describe("router API", () => {
     assert.equal(response.status, 200);
     const body = await response.json();
     assert.equal(body.status, "unverified");
-    assert.equal(body.summary.endpoint_count, 11);
+    assert.equal(body.summary.endpoint_count, 10);
     assert.equal(body.summary.operational_count, 1);
     assert.deepEqual(
       body.endpoints.map((endpoint) => endpoint.id).sort(),
@@ -401,7 +401,6 @@ describe("router API", () => {
         "parallel.extract",
         "parallel.search",
         "parallel.task",
-        "agentmail.create_inbox",
         "agentmail.list_messages",
         "agentmail.get_message",
         "agentmail.send_message",
@@ -1804,8 +1803,8 @@ describe("router API", () => {
     const body = await response.json();
     assert.ok(body.monitoring.requests_24h.total >= 1);
     assert.equal(body.monitoring.requests_24h.errors, 0);
-    assert.equal(body.monitoring.endpoint_health.total, 11);
-    assert.equal(body.monitoring.endpoint_health.unverified, 10);
+    assert.equal(body.monitoring.endpoint_health.total, 10);
+    assert.equal(body.monitoring.endpoint_health.unverified, 9);
     assert.ok("error_rate" in body.monitoring.requests_24h);
   });
 
