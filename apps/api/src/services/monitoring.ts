@@ -5,17 +5,18 @@
 // `/v1/dashboard/monitoring`, `/v1/endpoints`, `/v1/categories`,
 // `/v1/requests`, `/v1/top-ups`, and the dashboard variants.
 
-import { countsAsAgentKitEvidence, listCategories, listEndpoints } from "@toolrouter/router-core";
+import {
+  countsAsAgentKitEvidence,
+  getEndpointCategoryDefinition,
+  listCategories,
+  listEndpoints,
+  mcpCategoryToolName,
+  mcpToolNameForEndpoint,
+  mcpToolsForEndpointId,
+} from "@toolrouter/router-core";
 
 import { agentRequestLabel, attributeFailure } from "./attribution.ts";
-import { MANUS_NEXT_MCP_TOOLS, MANUS_RESEARCH_ENDPOINT_ID } from "./manus-tasks.ts";
-
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
-
-const MANUS_MCP_TOOLS = Object.freeze({
-  start: "manus_research_start",
-  ...MANUS_NEXT_MCP_TOOLS,
-});
 
 const STATUS_RANK: Record<string, number> = {
   healthy: 0,
@@ -129,47 +130,20 @@ export function publicRequestError(row: any) {
 }
 
 export function recommendedMcpToolForCategory(categoryId: string) {
-  if (categoryId === "research") return "manus_research_start";
-  if (categoryId === "search") return "toolrouter_search";
-  if (categoryId === "email") return "toolrouter_send_email";
-  if (categoryId === "browser_usage") return "toolrouter_browser_use";
-  return null;
+  const categoryTool = mcpCategoryToolName(categoryId);
+  if (categoryTool) return categoryTool;
+  const category = getEndpointCategoryDefinition(categoryId);
+  return category?.recommended_endpoint_id
+    ? mcpToolNameForEndpoint(category.recommended_endpoint_id)
+    : null;
 }
 
 export function recommendedMcpToolForEndpoint(endpointId: string) {
-  if (endpointId === MANUS_RESEARCH_ENDPOINT_ID) return MANUS_MCP_TOOLS.start;
-  if (endpointId === "exa.search") return "exa_search";
-  if (endpointId === "browserbase.session") return "browserbase_session_create";
-  if (endpointId === "agentmail.create_inbox") return "agentmail_create_inbox";
-  if (endpointId === "agentmail.list_messages") return "agentmail_list_messages";
-  if (endpointId === "agentmail.get_message") return "agentmail_get_message";
-  if (endpointId === "agentmail.send_message") return "agentmail_send_message";
-  if (endpointId === "agentmail.reply_to_message") return "agentmail_reply_to_message";
-  return null;
+  return mcpToolNameForEndpoint(endpointId);
 }
 
 export function mcpToolsForEndpoint(endpointId: string) {
-  if (endpointId === MANUS_RESEARCH_ENDPOINT_ID) return MANUS_MCP_TOOLS;
-  if (endpointId === "exa.search") {
-    return {
-      call: "exa_search",
-      category: "toolrouter_search",
-    };
-  }
-  if (endpointId === "browserbase.session") {
-    return {
-      call: "browserbase_session_create",
-      category: "toolrouter_browser_use",
-    };
-  }
-  const agentmailTool = recommendedMcpToolForEndpoint(endpointId);
-  if (agentmailTool?.startsWith("agentmail_")) {
-    return {
-      call: agentmailTool,
-      ...(endpointId === "agentmail.send_message" ? { category: "toolrouter_send_email" } : {}),
-    };
-  }
-  return null;
+  return mcpToolsForEndpointId(endpointId);
 }
 
 export function endpointDto(endpoint: any) {

@@ -35,6 +35,7 @@ const AUTHED_ROUTES = [
   { method: "GET", url: "/v1/endpoints" },
   { method: "GET", url: "/v1/dashboard/endpoints" },
   { method: "GET", url: "/v1/categories" },
+  { method: "GET", url: "/v1/mcp/manifest" },
   { method: "GET", url: "/v1/dashboard/categories" },
   // requests.routes.ts
   { method: "GET", url: "/v1/requests" },

@@ -44,6 +44,7 @@ type EndpointsManifest = {
       description: string;
       input_kind: string;
       default_max_usd: string | null;
+      input_schema?: any;
     };
   }>;
   category_tools: Array<{
@@ -52,6 +53,8 @@ type EndpointsManifest = {
     description: string;
     input_kind: string;
     category: string;
+    input_schema?: any;
+    recommended_endpoint_id?: string | null;
   }>;
   enums: {
     search_type: string[];
@@ -70,6 +73,13 @@ type EndpointsManifest = {
 };
 
 let cachedManifest: EndpointsManifest | null = null;
+let cachedRemoteManifest:
+  | {
+      cacheKey: string;
+      expiresAt: number;
+      manifest: EndpointsManifest;
+    }
+  | null = null;
 
 function resolveManifestPath() {
   // Walk up from this file's location to find dist/endpoints.json. The
@@ -121,6 +131,82 @@ export function loadEndpointsManifest(): EndpointsManifest {
   const raw = readFileSync(manifestPath, "utf8");
   cachedManifest = JSON.parse(raw) as EndpointsManifest;
   return cachedManifest;
+}
+
+function manifestCacheTtlMs(env: any) {
+  const raw = env.TOOLROUTER_MCP_MANIFEST_CACHE_MS;
+  if (raw === undefined || raw === null || raw === "") return 60_000;
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) ? Math.max(0, parsed) : 60_000;
+}
+
+function isUsableRemoteManifest(value: any): value is EndpointsManifest {
+  return (
+    value &&
+    typeof value === "object" &&
+    Array.isArray(value.endpoints) &&
+    Array.isArray(value.category_tools) &&
+    value.enums &&
+    Array.isArray(value.enums.search_type) &&
+    Array.isArray(value.enums.manus_depth)
+  );
+}
+
+async function loadRemoteEndpointsManifest({ env, fetchImpl }: any): Promise<EndpointsManifest | null> {
+  if (env.TOOLROUTER_MCP_LIVE_MANIFEST === "false") return null;
+  const { apiBase, apiKey } = apiConfig(env);
+  if (!apiKey) return null;
+
+  const cacheTtlMs = manifestCacheTtlMs(env);
+  const cacheKey = `${apiBase}|${apiKey}`;
+  const now = Date.now();
+  if (
+    cacheTtlMs > 0 &&
+    cachedRemoteManifest?.cacheKey === cacheKey &&
+    cachedRemoteManifest.expiresAt > now
+  ) {
+    return cachedRemoteManifest.manifest;
+  }
+
+  try {
+    const manifest = await routerFetch("/v1/mcp/manifest", { env, fetchImpl });
+    if (!isUsableRemoteManifest(manifest)) return null;
+    if (cacheTtlMs > 0) {
+      cachedRemoteManifest = {
+        cacheKey,
+        expiresAt: now + cacheTtlMs,
+        manifest,
+      };
+    }
+    return manifest;
+  } catch {
+    return null;
+  }
+}
+
+async function endpointsManifestForEnvironment(options: any = {}): Promise<EndpointsManifest> {
+  const env = options.env || process.env;
+  const fetchImpl = options.fetchImpl || fetch;
+  return (await loadRemoteEndpointsManifest({ env, fetchImpl })) || loadEndpointsManifest();
+}
+
+function cachedRemoteManifestForEnv(env: any): EndpointsManifest | null {
+  if (env.TOOLROUTER_MCP_LIVE_MANIFEST === "false") return null;
+  const { apiBase, apiKey } = apiConfig(env);
+  const cacheKey = `${apiBase}|${apiKey}`;
+  if (!apiKey || cachedRemoteManifest?.cacheKey !== cacheKey) return null;
+  if (cachedRemoteManifest.expiresAt <= Date.now()) return null;
+  return cachedRemoteManifest.manifest;
+}
+
+async function endpointsManifestForToolName(name: string, { env, fetchImpl }: any): Promise<EndpointsManifest> {
+  const cachedRemote = cachedRemoteManifestForEnv(env);
+  if (cachedRemote && endpointToolByName(cachedRemote).has(name)) return cachedRemote;
+
+  const bundled = loadEndpointsManifest();
+  if (endpointToolByName(bundled).has(name)) return bundled;
+
+  return endpointsManifestForEnvironment({ env, fetchImpl });
 }
 
 function envValue(env: any, names: string[]) {
@@ -191,8 +277,7 @@ const PAYMENT_PROPERTIES = Object.freeze({
   },
 });
 
-function inputPropertiesForKind(kind: string) {
-  const manifest = loadEndpointsManifest();
+function inputPropertiesForKind(kind: string, manifest = loadEndpointsManifest()) {
   if (kind === "search") {
     return {
       properties: {
@@ -422,11 +507,34 @@ function inputPropertiesForKind(kind: string) {
   throw new Error(`unknown MCP input_kind: ${kind}`);
 }
 
-function schemaForKind(kind: string) {
-  const spec = inputPropertiesForKind(kind);
+function schemaForKind(kind: string, manifest = loadEndpointsManifest()) {
+  const spec = inputPropertiesForKind(kind, manifest);
   return spec.requiredAlternatives
     ? jsonSchemaAnyOf(spec.properties, spec.requiredAlternatives)
     : jsonSchema(spec.properties, spec.required);
+}
+
+function genericLiveToolSchema() {
+  return {
+    type: "object",
+    additionalProperties: true,
+    properties: {
+      input: {
+        oneOf: [{ type: "string" }, { type: "object" }],
+        description: "Endpoint-specific input. Top-level fields are also accepted and forwarded as input.",
+      },
+      ...PAYMENT_PROPERTIES,
+    },
+  };
+}
+
+function schemaForToolInput(kind: string, providedSchema: any, manifest: EndpointsManifest) {
+  if (providedSchema) return providedSchema;
+  try {
+    return schemaForKind(kind, manifest);
+  } catch {
+    return genericLiveToolSchema();
+  }
 }
 
 type EndpointToolSpec = {
@@ -439,8 +547,7 @@ type EndpointToolSpec = {
   inputSchema: any;
 };
 
-function endpointToolSpecs(): EndpointToolSpec[] {
-  const manifest = loadEndpointsManifest();
+function endpointToolSpecs(manifest = loadEndpointsManifest()): EndpointToolSpec[] {
   const specs: EndpointToolSpec[] = [];
   for (const tool of manifest.category_tools) {
     specs.push({
@@ -449,7 +556,7 @@ function endpointToolSpecs(): EndpointToolSpec[] {
       description: tool.description,
       category: tool.category,
       inputKind: tool.input_kind,
-      inputSchema: schemaForKind(tool.input_kind),
+      inputSchema: schemaForToolInput(tool.input_kind, tool.input_schema, manifest),
     });
   }
   for (const endpoint of manifest.endpoints) {
@@ -459,20 +566,19 @@ function endpointToolSpecs(): EndpointToolSpec[] {
       description: endpoint.mcp.description,
       endpointId: endpoint.id,
       inputKind: endpoint.mcp.input_kind,
-      inputSchema: schemaForKind(endpoint.mcp.input_kind),
+      inputSchema: schemaForToolInput(endpoint.mcp.input_kind, endpoint.mcp.input_schema, manifest),
     });
   }
   return specs;
 }
 
-function endpointToolByName() {
+function endpointToolByName(manifest = loadEndpointsManifest()) {
   const map = new Map<string, EndpointToolSpec>();
-  for (const spec of endpointToolSpecs()) map.set(spec.name, spec);
+  for (const spec of endpointToolSpecs(manifest)) map.set(spec.name, spec);
   return map;
 }
 
-function defaultManusMaxUsd(depth: any, env: any) {
-  const manifest = loadEndpointsManifest();
+function defaultManusMaxUsd(depth: any, env: any, manifest = loadEndpointsManifest()) {
   const validDepths = manifest.enums.manus_depth;
   const fallbackDepth = validDepths.includes("standard") ? "standard" : validDepths[0];
   const normalized = validDepths.includes(depth) ? depth : fallbackDepth;
@@ -483,8 +589,7 @@ function defaultManusMaxUsd(depth: any, env: any) {
   return /^\d+(\.\d+)?$/u.test(raw) ? raw : fallbackUsdStr;
 }
 
-function defaultParallelTaskMaxUsd(processor: any, env: any) {
-  const manifest = loadEndpointsManifest();
+function defaultParallelTaskMaxUsd(processor: any, env: any, manifest = loadEndpointsManifest()) {
   if (!manifest.parallel_pricing || !manifest.enums.parallel_processor) return "";
   const valid = manifest.enums.parallel_processor;
   const fallback = valid.includes("ultra") ? "ultra" : valid[0];
@@ -548,8 +653,7 @@ function genericEndpointPayload(args: any) {
   };
 }
 
-export function tools(): McpTool[] {
-  const manifest = loadEndpointsManifest();
+function toolsFromManifest(manifest = loadEndpointsManifest()): McpTool[] {
   return [
     {
       name: "toolrouter_list_endpoints",
@@ -606,7 +710,7 @@ export function tools(): McpTool[] {
         id: { type: "string", description: "ToolRouter request id." },
       }, ["id"]),
     },
-    ...endpointToolSpecs().map(({ name, title, description, inputSchema }) => {
+    ...endpointToolSpecs(manifest).map(({ name, title, description, inputSchema }) => {
       const tool: McpTool = { name, title, description, inputSchema };
       if (name === "manus_research_start" || name === "parallel_task_start") {
         tool.outputSchema = jsonSchema({
@@ -720,6 +824,14 @@ export function tools(): McpTool[] {
       annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
     },
   ];
+}
+
+export function tools(): McpTool[] {
+  return toolsFromManifest(loadEndpointsManifest());
+}
+
+async function toolsForEnvironment(options: any = {}) {
+  return toolsFromManifest(await endpointsManifestForEnvironment(options));
 }
 
 function textResult(text: string, structuredContent?: any, isError = false) {
@@ -1042,10 +1154,9 @@ function requestedParallelProcessor(args: any) {
   return args.processor || input.processor || "ultra";
 }
 
-function defaultMaxUsd(endpointId: string, args: any, env: any) {
-  const manifest = loadEndpointsManifest();
-  if (endpointId === "manus.research") return defaultManusMaxUsd(requestedManusDepth(args), env);
-  if (endpointId === "parallel.task") return defaultParallelTaskMaxUsd(requestedParallelProcessor(args), env);
+function defaultMaxUsd(endpointId: string, args: any, env: any, manifest = loadEndpointsManifest()) {
+  if (endpointId === "manus.research") return defaultManusMaxUsd(requestedManusDepth(args), env, manifest);
+  if (endpointId === "parallel.task") return defaultParallelTaskMaxUsd(requestedParallelProcessor(args), env, manifest);
   if (endpointId === "parallel.extract") return defaultParallelExtractMaxUsd(args);
   const endpoint = manifest.endpoints.find((candidate) => candidate.id === endpointId);
   if (endpoint && endpoint.mcp.default_max_usd) return endpoint.mcp.default_max_usd;
@@ -1067,11 +1178,12 @@ function endpointInputForName(name: string, args: any) {
 }
 
 async function endpointPayload(name: string, args: any, { env, fetchImpl }: any) {
-  const spec = endpointToolByName().get(name);
+  const manifest = await endpointsManifestForToolName(name, { env, fetchImpl });
+  const spec = endpointToolByName(manifest).get(name);
   if (!spec) return null;
   const endpointId = spec.endpointId || await recommendedEndpointId(spec.category as string, { env, fetchImpl });
   const paymentMode = args.payment_mode ?? args.paymentMode;
-  const maxUsd = args.maxUsd ?? args.max_usd ?? defaultMaxUsd(endpointId, args, env);
+  const maxUsd = args.maxUsd ?? args.max_usd ?? defaultMaxUsd(endpointId, args, env, manifest);
   const forceNew = args.force_new ?? args.forceNew;
   return {
     endpoint_id: endpointId,
@@ -1180,7 +1292,7 @@ export async function handleJsonRpcMessage(message: JsonRpcRequest, options: any
     });
   }
   if (message.method === "ping") return response(message.id, {});
-  if (message.method === "tools/list") return response(message.id, { tools: tools() });
+  if (message.method === "tools/list") return response(message.id, { tools: await toolsForEnvironment(options) });
   if (message.method === "tools/call") {
     const result = await callTool(message.params?.name, message.params?.arguments || {}, options);
     return response(message.id, result);

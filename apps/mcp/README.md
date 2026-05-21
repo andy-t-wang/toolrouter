@@ -16,6 +16,18 @@ Optional:
 TOOLROUTER_API_URL=https://toolrouter.world
 ```
 
+By default the adapter asks ToolRouter for a live MCP manifest at startup and
+on tool-list refreshes. That lets newly deployed ToolRouter endpoints appear as
+MCP tools without waiting for a new npm package install. If the API is
+unavailable, or if no API key is configured yet, the adapter falls back to the
+endpoint manifest bundled in the npm package.
+
+For deterministic local debugging against only the bundled manifest:
+
+```sh
+TOOLROUTER_MCP_LIVE_MANIFEST=false
+```
+
 ## MCP Client Config
 
 Most stdio MCP clients can run the adapter with `npx`:
@@ -55,12 +67,15 @@ codex mcp add \
 
 The adapter does not load wallet secrets or provider API keys. It only calls ToolRouter's API:
 
+- `GET /v1/mcp/manifest`
 - `GET /v1/endpoints`
 - `GET /v1/categories`
 - `POST /v1/requests`
 - `GET /v1/requests/:id`
 - `GET /v1/manus/tasks/:task_id/status`
 - `GET /v1/manus/tasks/:task_id/result`
+- `GET /v1/parallel/tasks/:task_id/status`
+- `GET /v1/parallel/tasks/:task_id/result`
 
 Exposed tools include:
 
@@ -74,6 +89,11 @@ Exposed tools include:
 - `manus_research_start`
 - `manus_research_status`
 - `manus_research_result`
+- `parallel_search`
+- `parallel_extract`
+- `parallel_task_start`
+- `parallel_task_status`
+- `parallel_task_result`
 - `toolrouter_get_request`
 - `exa_search`
 - `browserbase_session_create`

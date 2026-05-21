@@ -5,6 +5,7 @@
 // require a Supabase user.
 
 import { authenticateApiKey, authenticateSupabaseUser } from "@toolrouter/auth";
+import { buildMcpManifest } from "@toolrouter/router-core";
 
 import {
   categoryRows,
@@ -39,6 +40,11 @@ export async function statusRoutes(app: any) {
         request.query?.include_empty === "true",
       ),
     };
+  });
+
+  app.get("/v1/mcp/manifest", async (request: any) => {
+    await authenticateApiKey(request.headers, store);
+    return buildMcpManifest();
   });
 
   app.get("/v1/dashboard/categories", async (request: any) => {

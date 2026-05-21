@@ -17,7 +17,7 @@ const distManifestPath = resolve(here, "../../../apps/mcp/dist/endpoints.json");
 describe("ToolRouter MCP endpoints codegen", () => {
   it("emits one MCP entry per registered endpoint with stable shape", () => {
     const fresh = endpointsManifestSnapshot();
-    assert.equal(fresh.schema_version, 1);
+    assert.equal(fresh.schema_version, 2);
     assert.equal(fresh.endpoints.length, endpointRegistry.length);
     for (const endpoint of endpointRegistry) {
       const entry = fresh.endpoints.find((candidate) => candidate.id === endpoint.id);
@@ -26,9 +26,11 @@ describe("ToolRouter MCP endpoints codegen", () => {
       assert.equal(entry.name, endpoint.name);
       assert.ok(entry.mcp.tool_name, `endpoint ${endpoint.id} missing mcp.tool_name`);
       assert.equal(typeof entry.mcp.input_kind, "string");
+      assert.equal(entry.mcp.input_schema.type, "object");
     }
     assert.ok(Array.isArray(fresh.category_tools));
     assert.ok(fresh.category_tools.length >= 2);
+    assert.ok(fresh.category_tools.every((tool) => tool.input_schema?.type === "object"));
     assert.ok(Array.isArray(fresh.enums.manus_depth));
     assert.ok(Array.isArray(fresh.enums.search_type));
     assert.ok(fresh.manus_pricing.env_var_template.includes("<DEPTH>"));

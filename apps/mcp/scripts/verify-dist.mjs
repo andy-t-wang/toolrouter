@@ -24,6 +24,16 @@ const REQUIRED_TOOL_NAMES = [
   "manus_research_start",
   "manus_research_status",
   "manus_research_result",
+  "parallel_search",
+  "parallel_extract",
+  "parallel_task_start",
+  "parallel_task_status",
+  "parallel_task_result",
+  "agentmail_create_inbox",
+  "agentmail_list_messages",
+  "agentmail_get_message",
+  "agentmail_send_message",
+  "agentmail_reply_to_message",
 ];
 
 const pkgDir = fileURLToPath(new URL("..", import.meta.url));

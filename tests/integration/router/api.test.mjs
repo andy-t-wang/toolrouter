@@ -268,6 +268,9 @@ describe("router API", () => {
 
     const categoryResponse = await fetch(`${baseUrl}/v1/categories`);
     assert.equal(categoryResponse.status, 401);
+
+    const mcpManifestResponse = await fetch(`${baseUrl}/v1/mcp/manifest`);
+    assert.equal(mcpManifestResponse.status, 401);
   });
 
   it("lists endpoints with API-key auth and dashboard session auth", async () => {
@@ -313,6 +316,22 @@ describe("router API", () => {
         "agentmail.reply_to_message",
       ],
     );
+  });
+
+  it("serves a live MCP manifest with concrete input schemas", async () => {
+    const response = await fetch(`${baseUrl}/v1/mcp/manifest`, { headers: authHeaders() });
+    assert.equal(response.status, 200);
+    const manifest = await response.json();
+    assert.equal(manifest.schema_version, 2);
+    assert.ok(manifest.endpoints.some((endpoint) => endpoint.mcp.tool_name === "exa_search"));
+    const exa = manifest.endpoints.find((endpoint) => endpoint.id === "exa.search");
+    assert.equal(exa.mcp.input_schema.type, "object");
+    assert.equal(exa.mcp.input_schema.properties.query.type, "string");
+    assert.equal(exa.mcp.default_max_usd, "0.01");
+    const sendEmail = manifest.category_tools.find((tool) => tool.tool_name === "toolrouter_send_email");
+    assert.equal(sendEmail.category, "email");
+    assert.equal(sendEmail.recommended_endpoint_id, "agentmail.send_message");
+    assert.ok(sendEmail.input_schema.anyOf.some((alternative) => alternative.required.includes("inboxId")));
   });
 
   it("lists generic categories with recommended endpoints", async () => {
