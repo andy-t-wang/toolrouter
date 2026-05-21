@@ -18,8 +18,8 @@ export interface EndpointSnapshot {
   description: string;
   url_host: string;
   method: string;
-  agentkit_value_type: string;
-  agentkit_value_label: string;
+  agentkit_value_type: string | null;
+  agentkit_value_label: string | null;
   agentkit_proof_header: boolean;
   estimated_cost_usd: number;
   default_payment_mode: string;

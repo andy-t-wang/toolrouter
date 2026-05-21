@@ -34,6 +34,11 @@ import { createAlertClient } from "./services/alerts.ts";
 import { createCrossmintClient } from "./services/crossmint.ts";
 import { createDatadogClient } from "./services/datadog.ts";
 import { createStripeClient } from "./services/stripe-checkout.ts";
+import {
+  registerAgentmailCreateInboxSellerService,
+  registerAgentmailReplyToMessageSellerService,
+  registerAgentmailSendMessageSellerService,
+} from "./sellers/agentmail/index.ts";
 import { registerManusSellerService } from "./sellers/manus/index.ts";
 import {
   registerParallelExtractSellerService,
@@ -73,15 +78,22 @@ export interface CreateApiAppDeps {
    * `/v1/parallel/tasks/...` polling routes. Mirrors `manusFetch` for tests.
    */
   parallelFetch?: typeof fetch;
+  /** Override fetch implementation used by AgentMail seller wrappers. */
+  agentmailFetch?: typeof fetch;
   /** Optional override for the Parallel seller factories (test injection). */
   registerParallelSearchSeller?: typeof registerParallelSearchSellerService;
   registerParallelExtractSeller?: typeof registerParallelExtractSellerService;
   registerParallelTaskSeller?: typeof registerParallelTaskSellerService;
+  /** Optional override for the AgentMail seller factories (test injection). */
+  registerAgentmailCreateInboxSeller?: typeof registerAgentmailCreateInboxSellerService;
+  registerAgentmailSendMessageSeller?: typeof registerAgentmailSendMessageSellerService;
+  registerAgentmailReplyToMessageSeller?: typeof registerAgentmailReplyToMessageSellerService;
   /**
    * Skip Parallel seller registration entirely. Tests that don't set
    * `PARALLEL_API_KEY` use this to keep the API app bootable.
    */
   disableParallelSellers?: boolean;
+  disableAgentmailSellers?: boolean;
   logger?: any;
 }
 
@@ -103,10 +115,15 @@ export function createApiApp(deps: CreateApiAppDeps = {}) {
     eagerSellerInit = false,
     manusFetch = fetch,
     parallelFetch = fetch,
+    agentmailFetch = fetch,
     registerParallelSearchSeller = registerParallelSearchSellerService,
     registerParallelExtractSeller = registerParallelExtractSellerService,
     registerParallelTaskSeller = registerParallelTaskSellerService,
+    registerAgentmailCreateInboxSeller = registerAgentmailCreateInboxSellerService,
+    registerAgentmailSendMessageSeller = registerAgentmailSendMessageSellerService,
+    registerAgentmailReplyToMessageSeller = registerAgentmailReplyToMessageSellerService,
     disableParallelSellers = false,
+    disableAgentmailSellers = false,
     logger = true,
   } = deps;
 
@@ -144,6 +161,7 @@ export function createApiApp(deps: CreateApiAppDeps = {}) {
   app.decorate("agentBookRegistration", agentBookRegistration);
   app.decorate("manusFetch", manusFetch);
   app.decorate("parallelFetch", parallelFetch);
+  app.decorate("agentmailFetch", agentmailFetch);
 
   // 3. CORS — onRequest hook + OPTIONS short-circuit. Inline so the hook
   //    propagates to sibling plugins (Fastify plugins are encapsulated by
@@ -178,10 +196,15 @@ export function createApiApp(deps: CreateApiAppDeps = {}) {
     createManusWrapper,
     eagerSellerInit,
     parallelFetch,
+    agentmailFetch,
     registerParallelSearchSeller,
     registerParallelExtractSeller,
     registerParallelTaskSeller,
+    registerAgentmailCreateInboxSeller,
+    registerAgentmailSendMessageSeller,
+    registerAgentmailReplyToMessageSeller,
     disableParallelSellers,
+    disableAgentmailSellers,
   });
 
   return app;

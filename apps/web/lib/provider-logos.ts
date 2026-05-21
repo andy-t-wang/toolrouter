@@ -12,6 +12,7 @@
 
 const PROVIDER_LOGOS: Readonly<Record<string, string>> = Object.freeze({
   browserbase: "/browserbase-logomark.svg",
+  agentmail: "/agentmail-logomark.svg",
   exa: "/exa-logomark.svg",
   manus: "/manus-logomark.svg",
   parallel: "/parallel-logomark.svg",

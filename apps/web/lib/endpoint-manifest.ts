@@ -45,8 +45,8 @@ export type LandingEndpointFallback = {
   provider: string;
   category: string;
   name: string;
-  agentkit_value_type: string;
-  agentkit_value_label: string;
+  agentkit_value_type: string | null;
+  agentkit_value_label: string | null;
   status: string;
   last_checked_at: null;
   latency_ms: null;

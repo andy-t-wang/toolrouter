@@ -19,6 +19,11 @@
 
 import { loadAgentBookVerifier } from "../services/agentkit-account.ts";
 import { registerSellerServices, type SellerService } from "../sellers/createSellerService.ts";
+import {
+  registerAgentmailCreateInboxSellerService,
+  registerAgentmailReplyToMessageSellerService,
+  registerAgentmailSendMessageSellerService,
+} from "../sellers/agentmail/index.ts";
 import { registerManusSellerService } from "../sellers/manus/index.ts";
 import {
   registerParallelExtractSellerService,
@@ -51,10 +56,18 @@ export interface SellerRoutesOpts {
   registerParallelSearchSeller?: typeof registerParallelSearchSellerService;
   registerParallelExtractSeller?: typeof registerParallelExtractSellerService;
   registerParallelTaskSeller?: typeof registerParallelTaskSellerService;
+  /** Optional AgentMail seller factories — `createApiApp` passes defaults. */
+  registerAgentmailCreateInboxSeller?: typeof registerAgentmailCreateInboxSellerService;
+  registerAgentmailSendMessageSeller?: typeof registerAgentmailSendMessageSellerService;
+  registerAgentmailReplyToMessageSeller?: typeof registerAgentmailReplyToMessageSellerService;
   /** Mirror of `manusFetch` for the Parallel sellers' upstream forwarders. */
   parallelFetch?: typeof fetch;
+  /** Mirror of `manusFetch` for the AgentMail sellers' upstream forwarders. */
+  agentmailFetch?: typeof fetch;
   /** Skip Parallel seller registration (tests + local dev without a key). */
   disableParallelSellers?: boolean;
+  /** Skip AgentMail seller registration (tests + local dev without wallet env). */
+  disableAgentmailSellers?: boolean;
 }
 
 function manusWrapperToService(wrapper: any): SellerService {
@@ -140,6 +153,32 @@ async function parallelSellerServices(
   return Promise.all([search, extract, task]);
 }
 
+async function agentmailSellerServices(
+  app: any,
+  opts: SellerRoutesOpts,
+): Promise<SellerService[]> {
+  if (opts.disableAgentmailSellers) return [];
+  const cache = app.cache;
+  const agentBook = app.agentBookVerifier || (await loadAgentBookVerifier());
+  const fetchImpl = opts.agentmailFetch || fetch;
+  const createInbox = (opts.registerAgentmailCreateInboxSeller || registerAgentmailCreateInboxSellerService)({
+    cache,
+    agentBook,
+    fetchImpl,
+  });
+  const sendMessage = (opts.registerAgentmailSendMessageSeller || registerAgentmailSendMessageSellerService)({
+    cache,
+    agentBook,
+    fetchImpl,
+  });
+  const replyToMessage = (opts.registerAgentmailReplyToMessageSeller || registerAgentmailReplyToMessageSellerService)({
+    cache,
+    agentBook,
+    fetchImpl,
+  });
+  return Promise.all([createInbox, sendMessage, replyToMessage]);
+}
+
 export async function sellersRoutes(app: any, opts: SellerRoutesOpts = {}) {
   if (opts.services) {
     await registerSellerServices(app, opts.services);
@@ -150,6 +189,7 @@ export async function sellersRoutes(app: any, opts: SellerRoutesOpts = {}) {
     // stays lazy so tests that don't set `PARALLEL_API_KEY` keep working.
     await registerSellerServices(app, [manusWrapperToService(opts.manusWrapper)]);
     registerLazyParallelProxies(app, opts);
+    registerLazyAgentmailProxies(app, opts);
     return;
   }
   const factory = opts.createManusWrapper || registerManusSellerService;
@@ -168,6 +208,9 @@ export async function sellersRoutes(app: any, opts: SellerRoutesOpts = {}) {
     if (!opts.disableParallelSellers) {
       sellers.push(...(await parallelSellerServices(app, opts)));
     }
+    if (!opts.disableAgentmailSellers) {
+      sellers.push(...(await agentmailSellerServices(app, opts)));
+    }
     await registerSellerServices(app, sellers);
     return;
   }
@@ -183,6 +226,7 @@ export async function sellersRoutes(app: any, opts: SellerRoutesOpts = {}) {
   // so apps that don't set PARALLEL_API_KEY can still boot. Each request
   // builds the seller on first hit and reuses it after that.
   registerLazyParallelProxies(app, opts);
+  registerLazyAgentmailProxies(app, opts);
 }
 
 function registerLazyParallelProxies(app: any, opts: SellerRoutesOpts) {
@@ -203,6 +247,50 @@ function registerLazyParallelProxies(app: any, opts: SellerRoutesOpts) {
     {
       path: "/x402/parallel/task",
       factory: opts.registerParallelTaskSeller || registerParallelTaskSellerService,
+    },
+  ];
+  for (const { path, factory } of factories) {
+    let inFlight: Promise<SellerService> | null = null;
+    async function getSeller() {
+      if (inFlight) return inFlight;
+      const attempt = factory({
+        cache: app.cache,
+        agentBook: app.agentBookVerifier || (await loadAgentBookVerifier()),
+        fetchImpl,
+      });
+      inFlight = attempt;
+      try {
+        return await attempt;
+      } catch (error) {
+        if (inFlight === attempt) inFlight = null;
+        throw error;
+      }
+    }
+    app.post(path, async (request: any, reply: any) => {
+      const seller = await getSeller();
+      return seller.handle(request, reply);
+    });
+  }
+}
+
+function registerLazyAgentmailProxies(app: any, opts: SellerRoutesOpts) {
+  if (opts.disableAgentmailSellers) return;
+  const fetchImpl = opts.agentmailFetch || fetch;
+  const factories: Array<{
+    path: string;
+    factory: (deps: any) => Promise<SellerService>;
+  }> = [
+    {
+      path: "/x402/agentmail/inboxes",
+      factory: opts.registerAgentmailCreateInboxSeller || registerAgentmailCreateInboxSellerService,
+    },
+    {
+      path: "/x402/agentmail/messages/send",
+      factory: opts.registerAgentmailSendMessageSeller || registerAgentmailSendMessageSellerService,
+    },
+    {
+      path: "/x402/agentmail/messages/reply",
+      factory: opts.registerAgentmailReplyToMessageSeller || registerAgentmailReplyToMessageSellerService,
     },
   ];
   for (const { path, factory } of factories) {

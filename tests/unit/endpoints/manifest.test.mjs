@@ -129,6 +129,107 @@ const SNAPSHOT_BASELINE = Object.freeze({
     },
     field_order: ["input", "processor"],
   },
+  "agentmail.create_inbox": {
+    id: "agentmail.create_inbox",
+    provider: "agentmail",
+    category: "productivity",
+    name: "AgentMail Create Inbox",
+    description: "Create a new AgentMail inbox through ToolRouter's x402 AgentMail wrapper.",
+    method: "POST",
+    agentkit_value_type: null,
+    agentkit_value_label: null,
+    agentkit_proof_header: false,
+    estimated_cost_usd: 2.01,
+    default_payment_mode: "x402_only",
+    ui_badge: "Email",
+    fixture_input: {
+      username: "toolrouter-demo",
+      display_name: "ToolRouter Demo",
+      client_id: "toolrouter-demo-inbox",
+    },
+    field_order: ["username", "display_name", "client_id"],
+  },
+  "agentmail.list_messages": {
+    id: "agentmail.list_messages",
+    provider: "agentmail",
+    category: "productivity",
+    name: "AgentMail List Messages",
+    description: "List messages in an AgentMail inbox over x402.",
+    url_host: "x402.api.agentmail.to",
+    method: "GET",
+    agentkit_value_type: null,
+    agentkit_value_label: null,
+    agentkit_proof_header: false,
+    estimated_cost_usd: 0,
+    default_payment_mode: "x402_only",
+    ui_badge: "Email",
+    fixture_input: {
+      inbox_id: "agent@example.com",
+      limit: 10,
+    },
+    field_order: ["inbox_id", "limit"],
+  },
+  "agentmail.get_message": {
+    id: "agentmail.get_message",
+    provider: "agentmail",
+    category: "productivity",
+    name: "AgentMail Get Message",
+    description: "Fetch a single AgentMail message over x402.",
+    url_host: "x402.api.agentmail.to",
+    method: "GET",
+    agentkit_value_type: null,
+    agentkit_value_label: null,
+    agentkit_proof_header: false,
+    estimated_cost_usd: 0,
+    default_payment_mode: "x402_only",
+    ui_badge: "Email",
+    fixture_input: {
+      inbox_id: "agent@example.com",
+      message_id: "msg_123",
+    },
+    field_order: ["inbox_id", "message_id"],
+  },
+  "agentmail.send_message": {
+    id: "agentmail.send_message",
+    provider: "agentmail",
+    category: "productivity",
+    name: "AgentMail Send Message",
+    description: "Send an email from an AgentMail inbox through ToolRouter's x402 AgentMail wrapper.",
+    method: "POST",
+    agentkit_value_type: null,
+    agentkit_value_label: null,
+    agentkit_proof_header: false,
+    estimated_cost_usd: 0.02,
+    default_payment_mode: "x402_only",
+    ui_badge: "Email",
+    fixture_input: {
+      inbox_id: "agent@example.com",
+      to: "recipient@example.com",
+      subject: "Hello from ToolRouter",
+      text: "Hello from AgentMail via ToolRouter.",
+    },
+    field_order: ["inbox_id", "to", "subject", "text"],
+  },
+  "agentmail.reply_to_message": {
+    id: "agentmail.reply_to_message",
+    provider: "agentmail",
+    category: "productivity",
+    name: "AgentMail Reply To Message",
+    description: "Reply to an AgentMail message through ToolRouter's x402 AgentMail wrapper.",
+    method: "POST",
+    agentkit_value_type: null,
+    agentkit_value_label: null,
+    agentkit_proof_header: false,
+    estimated_cost_usd: 0.02,
+    default_payment_mode: "x402_only",
+    ui_badge: "Email",
+    fixture_input: {
+      inbox_id: "agent@example.com",
+      message_id: "msg_123",
+      text: "Thanks for the note.",
+    },
+    field_order: ["inbox_id", "message_id", "text"],
+  },
 });
 
 const VARIABLE_URL_HOST_IDS = new Set([
@@ -136,6 +237,9 @@ const VARIABLE_URL_HOST_IDS = new Set([
   "parallel.search",
   "parallel.extract",
   "parallel.task",
+  "agentmail.create_inbox",
+  "agentmail.send_message",
+  "agentmail.reply_to_message",
 ]);
 
 describe("EndpointManifest snapshot", () => {
@@ -165,6 +269,11 @@ describe("EndpointManifest snapshot", () => {
       "parallel.extract",
       "manus.research",
       "parallel.task",
+      "agentmail.create_inbox",
+      "agentmail.list_messages",
+      "agentmail.get_message",
+      "agentmail.send_message",
+      "agentmail.reply_to_message",
     ]);
   });
 
@@ -175,8 +284,11 @@ describe("EndpointManifest snapshot", () => {
       assert.equal(typeof snapshot.provider, "string");
       assert.equal(typeof snapshot.name, "string");
       assert.equal(typeof snapshot.description, "string");
-      assert.equal(snapshot.method, "POST");
-      assert.ok(["free_trial", "access", "discount"].includes(snapshot.agentkit_value_type));
+      assert.ok(["GET", "POST"].includes(snapshot.method));
+      assert.ok(
+        snapshot.agentkit_value_type === null ||
+          ["free_trial", "access", "discount"].includes(snapshot.agentkit_value_type),
+      );
       assert.equal(typeof snapshot.agentkit_proof_header, "boolean");
       assert.equal(typeof snapshot.estimated_cost_usd, "number");
       assert.ok(Array.isArray(snapshot.field_order));

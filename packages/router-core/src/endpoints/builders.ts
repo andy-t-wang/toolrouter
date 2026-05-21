@@ -83,6 +83,16 @@ const PARALLEL_TASK_PROCESSOR_ENV = Object.freeze({
   ultra: "TOOLROUTER_PARALLEL_TASK_PRICE_ULTRA_USD",
 });
 
+export const AGENTMAIL_X402_API_BASE = "https://x402.api.agentmail.to";
+export const AGENTMAIL_MARKUP_USD = 0.01;
+export const AGENTMAIL_BASE_PRICES_USD = Object.freeze({
+  create_inbox: 2,
+  list_messages: 0,
+  get_message: 0,
+  send_message: 0.01,
+  reply_to_message: 0.01,
+});
+
 const DEFAULT_HEADERS = Object.freeze({
   "content-type": "application/json",
 });
@@ -122,6 +132,12 @@ function readBoolean(input, names, label, defaultValue = false) {
   throw new TypeError(`${label} must be a boolean`);
 }
 
+function readOptionalBoolean(input, names, label) {
+  const value = firstDefined(input, names);
+  if (value === undefined) return undefined;
+  return readBoolean(input, names, label, false);
+}
+
 function readInteger(input, names, label, { defaultValue, min, max }) {
   const value = firstDefined(input, names);
   const resolved = value === undefined ? defaultValue : value;
@@ -143,6 +159,54 @@ function readStringArray(input, names, label, { defaultValue = [], max = 10 } = 
     if (!trimmed) throw new TypeError(`${label}[${index}] must be non-empty`);
     return trimmed;
   });
+}
+
+function readStringOrArray(input, names, label, { required = false, max = 50 } = {}) {
+  const value = firstDefined(input, names);
+  if (value === undefined) {
+    if (required) throw new TypeError(`${label} is required`);
+    return undefined;
+  }
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed) throw new TypeError(`${label} must be non-empty`);
+    return trimmed;
+  }
+  if (!Array.isArray(value)) throw new TypeError(`${label} must be a string or array`);
+  if (value.length > max) throw new RangeError(`${label} must include at most ${max} items`);
+  return value.map((item, index) => {
+    if (typeof item !== "string") throw new TypeError(`${label}[${index}] must be a string`);
+    const trimmed = item.trim();
+    if (!trimmed) throw new TypeError(`${label}[${index}] must be non-empty`);
+    return trimmed;
+  });
+}
+
+function recipientCount(value) {
+  if (value === undefined) return 0;
+  return Array.isArray(value) ? value.length : 1;
+}
+
+function readPlainObject(input, names, label) {
+  const value = firstDefined(input, names);
+  if (value === undefined) return undefined;
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new TypeError(`${label} must be an object`);
+  }
+  return value;
+}
+
+function readObjectArray(input, names, label, { max = 10 } = {}) {
+  const value = firstDefined(input, names);
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value)) throw new TypeError(`${label} must be an array`);
+  if (value.length > max) throw new RangeError(`${label} must include at most ${max} items`);
+  for (const [index, item] of value.entries()) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) {
+      throw new TypeError(`${label}[${index}] must be an object`);
+    }
+  }
+  return value;
 }
 
 function readHttpsUrlArray(input, names, label, options = {}) {
@@ -203,6 +267,14 @@ export function parallelExtractPriceUsd(urlCount) {
   return toUsdString(PARALLEL_EXTRACT_PER_URL_USD * count + PARALLEL_MARKUP_USD);
 }
 
+export function agentmailPriceUsd(kind) {
+  if (!Object.hasOwn(AGENTMAIL_BASE_PRICES_USD, kind)) {
+    throw new RangeError(`unsupported AgentMail price kind: ${kind}`);
+  }
+  const base = AGENTMAIL_BASE_PRICES_USD[kind];
+  return toUsdString(base > 0 ? base + AGENTMAIL_MARKUP_USD : 0);
+}
+
 function providerRequest(endpoint, json, estimatedUsd) {
   return {
     method: endpoint.method,
@@ -211,6 +283,31 @@ function providerRequest(endpoint, json, estimatedUsd) {
     json,
     estimatedUsd: toUsdString(estimatedUsd),
   };
+}
+
+function providerGetRequest(url, estimatedUsd) {
+  return {
+    method: "GET",
+    url,
+    headers: {},
+    estimatedUsd: toUsdString(estimatedUsd),
+  };
+}
+
+function encodedPathPart(value) {
+  return encodeURIComponent(value).replace(/%40/giu, "@");
+}
+
+function addQueryParams(url, params) {
+  for (const [key, value] of Object.entries(params)) {
+    if (value === undefined || value === null || value === "") continue;
+    if (Array.isArray(value)) {
+      for (const item of value) url.searchParams.append(key, item);
+      continue;
+    }
+    url.searchParams.set(key, String(value));
+  }
+  return url.toString();
 }
 
 /**
@@ -442,4 +539,151 @@ export function buildParallelTaskRequest(input, endpoint) {
   if (sourcePolicy) json.source_policy = sourcePolicy;
   if (webhook) json.webhook = webhook;
   return providerRequest(endpoint, json, Number(parallelTaskPriceForProcessor(processor)));
+}
+
+function agentmailMessageBody(data, { requireSubject = false } = {}) {
+  const to = readStringOrArray(data, ["to"], "to", { required: false, max: 50 });
+  const cc = readStringOrArray(data, ["cc"], "cc", { max: 50 });
+  const bcc = readStringOrArray(data, ["bcc"], "bcc", { max: 50 });
+  const replyTo = readStringOrArray(data, ["reply_to", "replyTo"], "reply_to", { max: 50 });
+  const recipientTotal = recipientCount(to) + recipientCount(cc) + recipientCount(bcc);
+  if (recipientTotal > 50) throw new RangeError("to, cc, and bcc must include at most 50 total recipients");
+
+  const subject = readString(data, ["subject"], "subject", { required: requireSubject });
+  const text = readString(data, ["text"], "text", { defaultValue: undefined });
+  const html = readString(data, ["html"], "html", { defaultValue: undefined });
+  if (!text && !html) throw new TypeError("text or html is required");
+
+  const labels = readStringArray(data, ["labels"], "labels", { max: 20 });
+  const attachments = readObjectArray(data, ["attachments"], "attachments", { max: 10 });
+  const headers = readPlainObject(data, ["headers"], "headers");
+  const body: Record<string, unknown> = {};
+  if (to !== undefined) body.to = to;
+  if (cc !== undefined) body.cc = cc;
+  if (bcc !== undefined) body.bcc = bcc;
+  if (replyTo !== undefined) body.reply_to = replyTo;
+  if (subject) body.subject = subject;
+  if (text) body.text = text;
+  if (html) body.html = html;
+  if (labels.length > 0) body.labels = labels;
+  if (attachments) body.attachments = attachments;
+  if (headers) body.headers = headers;
+  return body;
+}
+
+/**
+ * @param {object} input
+ * @param {{ method: "POST", url: string }} endpoint
+ * @returns {ProviderRequest}
+ */
+export function buildAgentmailCreateInboxRequest(input, endpoint) {
+  const data = assertInputRecord(input);
+  const username = readString(data, ["username"], "username", { defaultValue: undefined });
+  const domain = readString(data, ["domain"], "domain", { defaultValue: undefined });
+  const displayName = readString(data, ["display_name", "displayName"], "display_name", {
+    defaultValue: undefined,
+  });
+  const clientId = readString(data, ["client_id", "clientId"], "client_id", {
+    defaultValue: undefined,
+  });
+  const json: Record<string, unknown> = {};
+  if (username) json.username = username;
+  if (domain) json.domain = domain;
+  if (displayName) json.display_name = displayName;
+  if (clientId) json.client_id = clientId;
+  return providerRequest(endpoint, json, Number(agentmailPriceUsd("create_inbox")));
+}
+
+/**
+ * @param {object} input
+ * @returns {ProviderRequest}
+ */
+export function buildAgentmailListMessagesRequest(input) {
+  const data = assertInputRecord(input);
+  const inboxId = readString(data, ["inbox_id", "inboxId"], "inbox_id", { required: true });
+  const limit = readInteger(data, ["limit"], "limit", { defaultValue: 10, min: 1, max: 100 });
+  const pageToken = readString(data, ["page_token", "pageToken"], "page_token", {
+    defaultValue: undefined,
+  });
+  const labels = readStringArray(data, ["labels"], "labels", { max: 20 });
+  const before = readString(data, ["before"], "before", { defaultValue: undefined });
+  const after = readString(data, ["after"], "after", { defaultValue: undefined });
+  const ascending = readOptionalBoolean(data, ["ascending"], "ascending");
+  const includeSpam = readOptionalBoolean(data, ["include_spam", "includeSpam"], "include_spam");
+  const includeBlocked = readOptionalBoolean(data, ["include_blocked", "includeBlocked"], "include_blocked");
+  const includeUnauthenticated = readOptionalBoolean(
+    data,
+    ["include_unauthenticated", "includeUnauthenticated"],
+    "include_unauthenticated",
+  );
+  const includeTrash = readOptionalBoolean(data, ["include_trash", "includeTrash"], "include_trash");
+  const url = new URL(`${AGENTMAIL_X402_API_BASE}/v0/inboxes/${encodedPathPart(inboxId)}/messages`);
+  return providerGetRequest(
+    addQueryParams(url, {
+      limit,
+      page_token: pageToken,
+      labels,
+      before,
+      after,
+      ascending,
+      include_spam: includeSpam,
+      include_blocked: includeBlocked,
+      include_unauthenticated: includeUnauthenticated,
+      include_trash: includeTrash,
+    }),
+    Number(agentmailPriceUsd("list_messages")),
+  );
+}
+
+/**
+ * @param {object} input
+ * @returns {ProviderRequest}
+ */
+export function buildAgentmailGetMessageRequest(input) {
+  const data = assertInputRecord(input);
+  const inboxId = readString(data, ["inbox_id", "inboxId"], "inbox_id", { required: true });
+  const messageId = readString(data, ["message_id", "messageId"], "message_id", { required: true });
+  return providerGetRequest(
+    `${AGENTMAIL_X402_API_BASE}/v0/inboxes/${encodedPathPart(inboxId)}/messages/${encodedPathPart(messageId)}`,
+    Number(agentmailPriceUsd("get_message")),
+  );
+}
+
+/**
+ * @param {object} input
+ * @param {{ method: "POST", url: string }} endpoint
+ * @returns {ProviderRequest}
+ */
+export function buildAgentmailSendMessageRequest(input, endpoint) {
+  const data = assertInputRecord(input);
+  const inboxId = readString(data, ["inbox_id", "inboxId"], "inbox_id", { required: true });
+  const body = agentmailMessageBody(data, { requireSubject: true });
+  if (body.to === undefined) throw new TypeError("to is required");
+  return providerRequest(
+    endpoint,
+    { inbox_id: inboxId, ...body },
+    Number(agentmailPriceUsd("send_message")),
+  );
+}
+
+/**
+ * @param {object} input
+ * @param {{ method: "POST", url: string }} endpoint
+ * @returns {ProviderRequest}
+ */
+export function buildAgentmailReplyToMessageRequest(input, endpoint) {
+  const data = assertInputRecord(input);
+  const inboxId = readString(data, ["inbox_id", "inboxId"], "inbox_id", { required: true });
+  const messageId = readString(data, ["message_id", "messageId"], "message_id", { required: true });
+  const replyAll = readBoolean(data, ["reply_all", "replyAll"], "reply_all", false);
+  return providerRequest(
+    endpoint,
+    {
+      inbox_id: inboxId,
+      message_id: messageId,
+      ...agentmailMessageBody(data),
+      ...(replyAll ? { reply_all: true } : {}),
+    },
+    Number(agentmailPriceUsd("reply_to_message")),
+  );
 }

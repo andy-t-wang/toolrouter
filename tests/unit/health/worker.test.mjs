@@ -765,4 +765,78 @@ describe("endpoint health worker", () => {
     assert.equal(written.layer_facilitator_status, undefined);
     assert.equal(written.layer_upstream_status, undefined);
   });
+
+  it("marks AgentMail create-inbox as manual-only instead of running recurring worker probes", async () => {
+    const endpoint = getEndpoint("agentmail.create_inbox");
+    const db = createDb();
+    let executed = false;
+
+    const result = await runEndpointHealthCheck({
+      endpoint,
+      db,
+      executor: async () => {
+        executed = true;
+        return { ok: true, status_code: 200, path: "x402", charged: true };
+      },
+      now: () => new Date("2026-05-20T11:00:00.000Z"),
+      useRecentRequests: false,
+    });
+
+    assert.equal(executed, false);
+    assert.equal(result.status, "unverified");
+    assert.equal(db.insertedHealthChecks[0].error, "manual health probe");
+    assert.equal(db.upsertedStatuses[0].status, "unverified");
+  });
+
+  it("skips AgentMail health probes when the configured test inbox env is missing", async () => {
+    const previous = process.env.AGENTMAIL_HEALTH_INBOX_ID;
+    delete process.env.AGENTMAIL_HEALTH_INBOX_ID;
+    const endpoint = getEndpoint("agentmail.list_messages");
+    const db = createDb();
+    let executed = false;
+
+    try {
+      const result = await runEndpointHealthCheck({
+        endpoint,
+        db,
+        executor: async () => {
+          executed = true;
+          return { ok: true, status_code: 200, path: "x402", charged: false };
+        },
+        now: () => new Date("2026-05-20T11:00:00.000Z"),
+        useRecentRequests: false,
+      });
+
+      assert.equal(executed, false);
+      assert.equal(result.status, "unverified");
+      assert.equal(db.insertedHealthChecks[0].error, "missing health env: AGENTMAIL_HEALTH_INBOX_ID");
+    } finally {
+      if (previous === undefined) delete process.env.AGENTMAIL_HEALTH_INBOX_ID;
+      else process.env.AGENTMAIL_HEALTH_INBOX_ID = previous;
+    }
+  });
+
+  it("does not run AgentKit benefit probes for x402-only AgentMail endpoints", async () => {
+    const endpoint = getEndpoint("agentmail.send_message");
+    const db = createDb();
+    let executed = false;
+
+    const result = await runEndpointHealthCheck({
+      endpoint,
+      db,
+      executor: async () => {
+        executed = true;
+        return { ok: true, status_code: 200, path: "agentkit" };
+      },
+      now: () => new Date("2026-05-20T11:00:00.000Z"),
+      useRecentRequests: false,
+      probeKind: "agentkit",
+      updateEndpointStatus: false,
+    });
+
+    assert.equal(executed, false);
+    assert.equal(result.status, "unverified");
+    assert.equal(db.insertedHealthChecks[0].error, "agentkit probe not supported");
+    assert.equal(db.upsertedStatuses.length, 0);
+  });
 });

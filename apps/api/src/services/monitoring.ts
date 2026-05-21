@@ -139,6 +139,11 @@ export function recommendedMcpToolForEndpoint(endpointId: string) {
   if (endpointId === MANUS_RESEARCH_ENDPOINT_ID) return MANUS_MCP_TOOLS.start;
   if (endpointId === "exa.search") return "exa_search";
   if (endpointId === "browserbase.session") return "browserbase_session_create";
+  if (endpointId === "agentmail.create_inbox") return "agentmail_create_inbox";
+  if (endpointId === "agentmail.list_messages") return "agentmail_list_messages";
+  if (endpointId === "agentmail.get_message") return "agentmail_get_message";
+  if (endpointId === "agentmail.send_message") return "agentmail_send_message";
+  if (endpointId === "agentmail.reply_to_message") return "agentmail_reply_to_message";
   return null;
 }
 
@@ -155,6 +160,10 @@ export function mcpToolsForEndpoint(endpointId: string) {
       call: "browserbase_session_create",
       category: "toolrouter_browser_use",
     };
+  }
+  const agentmailTool = recommendedMcpToolForEndpoint(endpointId);
+  if (agentmailTool?.startsWith("agentmail_")) {
+    return { call: agentmailTool };
   }
   return null;
 }

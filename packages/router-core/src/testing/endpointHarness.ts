@@ -55,24 +55,35 @@ export function validateEndpointConfig(endpoint) {
     errors.push("description is required");
   }
   if (!isHttpsUrl(endpoint.url)) errors.push("url must be an https URL");
-  if (endpoint.method !== "POST") errors.push("method must be POST for MVP endpoints");
-  if (endpoint.agentkit !== true) errors.push("agentkit must be true");
+  if (!["GET", "POST"].includes(endpoint.method)) errors.push("method must be GET or POST");
+  if (typeof endpoint.agentkit !== "boolean") errors.push("agentkit must be a boolean");
   if (endpoint.x402 !== true) errors.push("x402 must be true");
-  if (!["free_trial", "discount", "access"].includes(endpoint.agentkit_value_type)) {
-    errors.push("agentkit_value_type must be free_trial, discount, or access");
+  if (endpoint.agentkit === true) {
+    if (!["free_trial", "discount", "access"].includes(endpoint.agentkit_value_type)) {
+      errors.push("agentkit_value_type must be free_trial, discount, or access");
+    }
+    if (typeof endpoint.agentkit_value_label !== "string" || endpoint.agentkit_value_label.length === 0) {
+      errors.push("agentkit_value_label is required");
+    }
+  } else {
+    if (endpoint.agentkit_value_type !== null && endpoint.agentkit_value_type !== undefined) {
+      errors.push("agentkit_value_type must be null when agentkit is false");
+    }
+    if (endpoint.agentkit_value_label !== null && endpoint.agentkit_value_label !== undefined) {
+      errors.push("agentkit_value_label must be null when agentkit is false");
+    }
   }
-  if (typeof endpoint.agentkit_value_label !== "string" || endpoint.agentkit_value_label.length === 0) {
-    errors.push("agentkit_value_label is required");
-  }
-  if (!Number.isFinite(endpoint.estimated_cost_usd) || endpoint.estimated_cost_usd <= 0) {
-    errors.push("estimated_cost_usd must be a positive number");
+  if (!Number.isFinite(endpoint.estimated_cost_usd) || endpoint.estimated_cost_usd < 0) {
+    errors.push("estimated_cost_usd must be a non-negative number");
   }
   if (typeof endpoint.buildRequest !== "function") errors.push("buildRequest function is required");
 
   if (!isPlainObject(endpoint.healthProbe)) {
     errors.push("healthProbe is required");
   } else {
-    if (endpoint.healthProbe.mode !== "paid_availability") errors.push("healthProbe.mode must be paid_availability");
+    if (!["paid_availability", "free_availability", "manual_only"].includes(endpoint.healthProbe.mode)) {
+      errors.push("healthProbe.mode must be paid_availability, free_availability, or manual_only");
+    }
     if (!isPlainObject(endpoint.healthProbe.input)) errors.push("healthProbe.input must be an object");
     if (!validUsdString(endpoint.healthProbe.maxUsd)) errors.push("healthProbe.maxUsd must be a USD string");
     if (endpoint.healthProbe.paymentMode !== "x402_only") {
@@ -92,7 +103,11 @@ export function validateEndpointConfig(endpoint) {
     }
   }
 
-  if (!isPlainObject(endpoint.agentkitHealthProbe)) {
+  if (endpoint.agentkit !== true) {
+    if (endpoint.agentkitHealthProbe !== null && endpoint.agentkitHealthProbe !== undefined) {
+      errors.push("agentkitHealthProbe must be null when agentkit is false");
+    }
+  } else if (!isPlainObject(endpoint.agentkitHealthProbe)) {
     errors.push("agentkitHealthProbe is required");
   } else {
     if (endpoint.agentkitHealthProbe.mode !== "agentkit_benefit") {

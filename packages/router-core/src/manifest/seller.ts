@@ -51,7 +51,7 @@ export interface SellerManifest {
   readonly secrets: readonly string[];
   /** Pricing function: `(input) => USD decimal string`. */
   readonly pricing: (input: any) => string;
-  readonly agentkit: SellerAgentkitMode;
+  readonly agentkit?: SellerAgentkitMode | null;
   /** Env var name precedence for the seller's payTo wallet address. Resolved
    *  at registration. */
   readonly pay_to_env_order: readonly string[];

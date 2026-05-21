@@ -294,6 +294,100 @@ function inputPropertiesForKind(kind: string) {
       requiredAlternatives: [["input"], ["query"], ["prompt"]] as string[][],
     };
   }
+  if (kind === "agentmail_create_inbox") {
+    return {
+      properties: {
+        username: { type: "string", description: "Optional inbox username." },
+        domain: { type: "string", description: "Optional verified domain. Defaults to agentmail.to." },
+        display_name: { type: "string", description: "Display name for the inbox." },
+        displayName: { type: "string", description: "Compatibility alias for display_name." },
+        client_id: { type: "string", description: "Idempotency key for safe retries." },
+        clientId: { type: "string", description: "Compatibility alias for client_id." },
+        ...PAYMENT_PROPERTIES,
+      },
+      required: [] as string[],
+      requiredAlternatives: undefined as string[][] | undefined,
+    };
+  }
+  if (kind === "agentmail_list_messages") {
+    return {
+      properties: {
+        inbox_id: { type: "string", description: "AgentMail inbox id or address." },
+        inboxId: { type: "string", description: "Compatibility alias for inbox_id." },
+        limit: { type: "integer", minimum: 1, maximum: 100 },
+        page_token: { type: "string" },
+        pageToken: { type: "string", description: "Compatibility alias for page_token." },
+        labels: { type: "array", items: { type: "string" }, maxItems: 20 },
+        before: { type: "string", description: "ISO timestamp upper bound." },
+        after: { type: "string", description: "ISO timestamp lower bound." },
+        ascending: { type: "boolean" },
+        include_spam: { type: "boolean" },
+        include_blocked: { type: "boolean" },
+        include_unauthenticated: { type: "boolean" },
+        include_trash: { type: "boolean" },
+        ...PAYMENT_PROPERTIES,
+      },
+      required: ["inbox_id"] as string[],
+      requiredAlternatives: undefined as string[][] | undefined,
+    };
+  }
+  if (kind === "agentmail_get_message") {
+    return {
+      properties: {
+        inbox_id: { type: "string", description: "AgentMail inbox id or address." },
+        inboxId: { type: "string", description: "Compatibility alias for inbox_id." },
+        message_id: { type: "string", description: "AgentMail message id." },
+        messageId: { type: "string", description: "Compatibility alias for message_id." },
+        ...PAYMENT_PROPERTIES,
+      },
+      required: ["inbox_id", "message_id"] as string[],
+      requiredAlternatives: undefined as string[][] | undefined,
+    };
+  }
+  if (kind === "agentmail_send_message") {
+    return {
+      properties: {
+        inbox_id: { type: "string", description: "AgentMail inbox id or address to send from." },
+        inboxId: { type: "string", description: "Compatibility alias for inbox_id." },
+        to: { oneOf: [{ type: "string" }, { type: "array", items: { type: "string" }, maxItems: 50 }] },
+        cc: { oneOf: [{ type: "string" }, { type: "array", items: { type: "string" }, maxItems: 50 }] },
+        bcc: { oneOf: [{ type: "string" }, { type: "array", items: { type: "string" }, maxItems: 50 }] },
+        reply_to: { oneOf: [{ type: "string" }, { type: "array", items: { type: "string" }, maxItems: 50 }] },
+        subject: { type: "string" },
+        text: { type: "string" },
+        html: { type: "string" },
+        labels: { type: "array", items: { type: "string" }, maxItems: 20 },
+        attachments: { type: "array", items: { type: "object" }, maxItems: 10 },
+        headers: { type: "object", additionalProperties: { type: "string" } },
+        ...PAYMENT_PROPERTIES,
+      },
+      required: ["inbox_id", "to", "subject"] as string[],
+      requiredAlternatives: undefined as string[][] | undefined,
+    };
+  }
+  if (kind === "agentmail_reply_to_message") {
+    return {
+      properties: {
+        inbox_id: { type: "string", description: "AgentMail inbox id or address to reply from." },
+        inboxId: { type: "string", description: "Compatibility alias for inbox_id." },
+        message_id: { type: "string", description: "Message id being replied to." },
+        messageId: { type: "string", description: "Compatibility alias for message_id." },
+        to: { oneOf: [{ type: "string" }, { type: "array", items: { type: "string" }, maxItems: 50 }] },
+        cc: { oneOf: [{ type: "string" }, { type: "array", items: { type: "string" }, maxItems: 50 }] },
+        bcc: { oneOf: [{ type: "string" }, { type: "array", items: { type: "string" }, maxItems: 50 }] },
+        reply_to: { oneOf: [{ type: "string" }, { type: "array", items: { type: "string" }, maxItems: 50 }] },
+        reply_all: { type: "boolean" },
+        text: { type: "string" },
+        html: { type: "string" },
+        labels: { type: "array", items: { type: "string" }, maxItems: 20 },
+        attachments: { type: "array", items: { type: "object" }, maxItems: 10 },
+        headers: { type: "object", additionalProperties: { type: "string" } },
+        ...PAYMENT_PROPERTIES,
+      },
+      required: ["inbox_id", "message_id"] as string[],
+      requiredAlternatives: undefined as string[][] | undefined,
+    };
+  }
   throw new Error(`unknown MCP input_kind: ${kind}`);
 }
 
@@ -607,6 +701,50 @@ function textResult(text: string, structuredContent?: any, isError = false) {
 
 function valueFrom(data: any, key: string) {
   return data?.[key] ?? data?.body?.[key] ?? null;
+}
+
+function agentmailPayload(data: any) {
+  return data?.body?.result ?? data?.body ?? data;
+}
+
+function nestedValueFrom(data: any, keys: string[]) {
+  for (const key of keys) {
+    const value =
+      data?.[key] ??
+      data?.inbox?.[key] ??
+      data?.message?.[key] ??
+      data?.email?.[key] ??
+      data?.result?.[key];
+    if (value !== undefined && value !== null) return value;
+  }
+  return null;
+}
+
+function agentmailToolResult(data: any) {
+  const payload = agentmailPayload(data);
+  const structuredContent = {
+    id: data?.id || null,
+    endpoint_id: data?.endpoint_id || null,
+    path: data?.path || null,
+    charged: data?.charged ?? null,
+    status_code: data?.status_code ?? null,
+    credit_reserved_usd: data?.credit_reserved_usd ?? null,
+    credit_captured_usd: data?.credit_captured_usd ?? null,
+    credit_released_usd: data?.credit_released_usd ?? null,
+    inbox_id: nestedValueFrom(payload, ["inbox_id", "inboxId", "id"]),
+    email: nestedValueFrom(payload, ["email", "email_address", "address"]),
+    message_id: nestedValueFrom(payload, ["message_id", "messageId", "id"]),
+    thread_id: nestedValueFrom(payload, ["thread_id", "threadId"]),
+    body: data?.body ?? null,
+  };
+  const text = JSON.stringify(
+    Object.fromEntries(
+      Object.entries(structuredContent).filter(([, value]) => value !== null && value !== undefined),
+    ),
+    null,
+    2,
+  );
+  return textResult(text, structuredContent);
 }
 
 function manusNextApiRoutes(taskId: string) {
@@ -974,6 +1112,9 @@ export async function callTool(name: string, args: any = {}, options: any = {}) 
     }
     if (name === "parallel_task_start") {
       return parallelTaskStartResult(data);
+    }
+    if (name.startsWith("agentmail_")) {
+      return agentmailToolResult(data);
     }
     return textResult(JSON.stringify(data, null, 2), data);
   } catch (error) {

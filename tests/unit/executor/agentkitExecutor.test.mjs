@@ -388,6 +388,33 @@ describe("AgentKit/x402 executor", () => {
     assert.equal(seen.x402Calls.length, 1);
   });
 
+  it("does not mark zero-dollar x402 selections as charged", async () => {
+    const seen = captures();
+    const result = await executeEndpoint({
+      endpoint: baseEndpoint(),
+      request: providerRequest(),
+      maxUsd: "0",
+      traceId: "trace_x402_zero",
+      paymentMode: "x402_only",
+      paymentDeps: fakePaymentDeps({
+        captures: seen,
+        agentkitResponse: jsonResponse({ shouldNotBeUsed: true }),
+        x402Response: jsonResponse({ messages: [] }),
+        selectedRequirements: {
+          network: "eip155:8453",
+          amount: "0",
+          scheme: "exact",
+        },
+      }),
+    });
+
+    assert.equal(result.path, "x402");
+    assert.equal(result.ok, true);
+    assert.equal(result.amount_usd, "0");
+    assert.equal(result.charged, false);
+    assert.equal(seen.x402Calls.length, 1);
+  });
+
   it("derives allowed x402 hosts from the endpoint registry when no env allowlist is set", async () => {
     delete process.env.X402_ALLOWED_HOSTS;
     const seen = captures();

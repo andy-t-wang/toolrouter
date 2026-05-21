@@ -11,6 +11,7 @@ import {
   validateRegistry,
 } from "../../../packages/router-core/src/endpoints/index.ts";
 import {
+  agentmailPriceUsd,
   manusResearchPriceForDepth,
   parallelExtractPriceUsd,
   parallelSearchPriceUsd,
@@ -34,6 +35,11 @@ describe("endpoint registry", () => {
         "parallel.extract",
         "manus.research",
         "parallel.task",
+        "agentmail.create_inbox",
+        "agentmail.list_messages",
+        "agentmail.get_message",
+        "agentmail.send_message",
+        "agentmail.reply_to_message",
       ],
     );
     assertValidEndpointRegistry(endpointRegistry);
@@ -47,7 +53,7 @@ describe("endpoint registry", () => {
     const categories = listCategories();
     assert.deepEqual(
       categories.map((category) => category.id),
-      ["search", "research", "extract", "browser_usage"],
+      ["search", "research", "extract", "productivity", "browser_usage"],
     );
 
     const search = categories.find((category) => category.id === "search");
@@ -66,6 +72,21 @@ describe("endpoint registry", () => {
 
     const extract = recommendEndpoint("extract");
     assert.equal(extract.id, "parallel.extract");
+
+    const productivity = categories.find((category) => category.id === "productivity");
+    assert.equal(productivity.recommended_endpoint_id, null);
+    assert.equal(productivity.recommended_endpoint, null);
+    assert.deepEqual(
+      productivity.endpoints.map((endpoint) => endpoint.id),
+      [
+        "agentmail.create_inbox",
+        "agentmail.list_messages",
+        "agentmail.get_message",
+        "agentmail.send_message",
+        "agentmail.reply_to_message",
+      ],
+    );
+    assert.throws(() => recommendEndpoint("productivity"), /category has no recommended endpoint yet/u);
   });
 
   it("builds Parallel Search requests with the per-call markup price", () => {
@@ -301,5 +322,112 @@ describe("endpoint registry", () => {
       if (previous === undefined) delete process.env.TOOLROUTER_MANUS_RESEARCH_PRICE_QUICK_USD;
       else process.env.TOOLROUTER_MANUS_RESEARCH_PRICE_QUICK_USD = previous;
     }
+  });
+
+  it("builds AgentMail x402-only inbox and message requests", () => {
+    const create = buildEndpointRequest("agentmail.create_inbox", {
+      username: "toolrouter-test",
+      displayName: "ToolRouter Test",
+      clientId: "tr-test-inbox",
+    });
+    assert.equal(create.method, "POST");
+    assert.ok(create.url.endsWith("/x402/agentmail/inboxes"));
+    assert.deepEqual(create.json, {
+      username: "toolrouter-test",
+      display_name: "ToolRouter Test",
+      client_id: "tr-test-inbox",
+    });
+    assert.equal(create.estimatedUsd, "2.01");
+    assert.equal(agentmailPriceUsd("create_inbox"), "2.01");
+
+    const list = buildEndpointRequest("agentmail.list_messages", {
+      inbox_id: "agent@agentmail.to",
+      limit: 5,
+      labels: ["toolrouter"],
+      include_trash: true,
+    });
+    assert.equal(list.method, "GET");
+    assert.match(list.url, /^https:\/\/x402\.api\.agentmail\.to\/v0\/inboxes\/agent@agentmail\.to\/messages/u);
+    assert.match(list.url, /limit=5/u);
+    assert.match(list.url, /labels=toolrouter/u);
+    assert.match(list.url, /include_trash=true/u);
+    assert.equal(list.estimatedUsd, "0");
+
+    const get = buildEndpointRequest("agentmail.get_message", {
+      inboxId: "agent@agentmail.to",
+      messageId: "msg_123",
+    });
+    assert.equal(get.method, "GET");
+    assert.equal(
+      get.url,
+      "https://x402.api.agentmail.to/v0/inboxes/agent@agentmail.to/messages/msg_123",
+    );
+    assert.equal(get.estimatedUsd, "0");
+
+    const send = buildEndpointRequest("agentmail.send_message", {
+      inbox_id: "agent@agentmail.to",
+      to: ["recipient@example.com"],
+      subject: "Hello",
+      text: "Plain text body",
+      labels: ["toolrouter"],
+      max_usd: "ignored-control-field",
+    });
+    assert.equal(send.method, "POST");
+    assert.ok(send.url.endsWith("/x402/agentmail/messages/send"));
+    assert.deepEqual(send.json, {
+      inbox_id: "agent@agentmail.to",
+      to: ["recipient@example.com"],
+      subject: "Hello",
+      text: "Plain text body",
+      labels: ["toolrouter"],
+    });
+    assert.equal(send.estimatedUsd, "0.02");
+    assert.equal(agentmailPriceUsd("send_message"), "0.02");
+
+    const reply = buildEndpointRequest("agentmail.reply_to_message", {
+      inbox_id: "agent@agentmail.to",
+      message_id: "msg_123",
+      text: "Thanks",
+      reply_all: true,
+    });
+    assert.ok(reply.url.endsWith("/x402/agentmail/messages/reply"));
+    assert.deepEqual(reply.json, {
+      inbox_id: "agent@agentmail.to",
+      message_id: "msg_123",
+      text: "Thanks",
+      reply_all: true,
+    });
+    assert.equal(reply.estimatedUsd, "0.02");
+    assert.equal(agentmailPriceUsd("reply_to_message"), "0.02");
+  });
+
+  it("validates AgentMail required fields and recipient caps", () => {
+    assert.throws(
+      () => buildEndpointRequest("agentmail.list_messages", { limit: 5 }),
+      /inbox_id is required/u,
+    );
+    assert.throws(
+      () => buildEndpointRequest("agentmail.get_message", { inbox_id: "agent@agentmail.to" }),
+      /message_id is required/u,
+    );
+    assert.throws(
+      () =>
+        buildEndpointRequest("agentmail.send_message", {
+          inbox_id: "agent@agentmail.to",
+          to: "recipient@example.com",
+          subject: "Hello",
+        }),
+      /text or html is required/u,
+    );
+    assert.throws(
+      () =>
+        buildEndpointRequest("agentmail.send_message", {
+          inbox_id: "agent@agentmail.to",
+          to: Array.from({ length: 51 }, (_, index) => `r${index}@example.com`),
+          subject: "Hello",
+          text: "Body",
+        }),
+      /to must include at most 50 items/u,
+    );
   });
 });

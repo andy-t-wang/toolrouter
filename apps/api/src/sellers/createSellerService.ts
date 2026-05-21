@@ -128,6 +128,7 @@ function sendX402Instructions(reply: any, instructions: any) {
 
 function mapAgentkitMode(manifest: SellerManifest) {
   const mode = manifest.agentkit;
+  if (!mode) return null;
   if (mode.type === "free_trial") {
     return { type: "free-trial" as const, uses: mode.uses ?? 0 };
   }
@@ -197,46 +198,55 @@ export async function createSellerService(
     deps.facilitatorClient || new HTTPFacilitatorClient(deps.facilitatorConfig);
   const resourceServer = new x402ResourceServer(facilitatorClient);
   registerExactEvmScheme(resourceServer, { networks: [network] });
-  resourceServer.registerExtension(agentkitResourceServerExtension);
 
   const agentkitMode = mapAgentkitMode(manifest);
-  const hooks = createAgentkitHooks({
-    agentBook: deps.agentBook,
-    mode: agentkitMode,
-    storage: deps.storage,
-    rpcUrl: process.env.AGENTKIT_WORLDCHAIN_RPC_URL || undefined,
-  });
-  if (hooks.verifyFailureHook) {
+  const hooks = agentkitMode
+    ? createAgentkitHooks({
+        agentBook: deps.agentBook,
+        mode: agentkitMode,
+        storage: deps.storage,
+        rpcUrl: process.env.AGENTKIT_WORLDCHAIN_RPC_URL || undefined,
+      })
+    : null;
+  if (agentkitMode) {
+    resourceServer.registerExtension(agentkitResourceServerExtension);
+  }
+  if (hooks?.verifyFailureHook) {
     resourceServer.onVerifyFailure(hooks.verifyFailureHook as any);
   }
 
   const routeUrl = `${defaultPublicBaseUrl()}${manifest.route}`;
-  const server = new x402HTTPResourceServer(resourceServer, {
-    [`${manifest.method} ${manifest.route}`]: {
-      accepts: {
-        scheme: "exact",
-        network,
-        payTo,
-        price: (context: any) => `$${manifest.pricing(context.adapter.getBody?.() || {})}`,
-      },
-      description: manifest.description,
-      mimeType: manifest.mime_type,
-      extensions: declareAgentkitExtension({
-        domain: new URL(routeUrl).host,
-        resourceUri: routeUrl,
-        statement: `Verify your agent for free uses of ${manifest.id}.`,
-        network: agentkitNetwork,
-        mode: agentkitMode,
-      }),
-      unpaidResponseBody: () => ({
-        contentType: manifest.mime_type,
-        body: manifest.unpaid_response_body ?? {
-          error: "x402 payment or AgentKit verification required",
-        },
-      }),
+  const routeConfig: any = {
+    accepts: {
+      scheme: "exact",
+      network,
+      payTo,
+      price: (context: any) => `$${manifest.pricing(context.adapter.getBody?.() || {})}`,
     },
+    description: manifest.description,
+    mimeType: manifest.mime_type,
+    unpaidResponseBody: () => ({
+      contentType: manifest.mime_type,
+      body: manifest.unpaid_response_body ?? {
+        error: agentkitMode
+          ? "x402 payment or AgentKit verification required"
+          : "x402 payment required",
+      },
+    }),
+  };
+  if (agentkitMode) {
+    routeConfig.extensions = declareAgentkitExtension({
+      domain: new URL(routeUrl).host,
+      resourceUri: routeUrl,
+      statement: `Verify your agent for free uses of ${manifest.id}.`,
+      network: agentkitNetwork,
+      mode: agentkitMode,
+    });
+  }
+  const server = new x402HTTPResourceServer(resourceServer, {
+    [`${manifest.method} ${manifest.route}`]: routeConfig,
   });
-  server.onProtectedRequest(hooks.requestHook);
+  if (hooks?.requestHook) server.onProtectedRequest(hooks.requestHook);
   await server.initialize();
 
   async function handle(request: any, reply: any) {
