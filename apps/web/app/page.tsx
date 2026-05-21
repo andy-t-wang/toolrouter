@@ -1,6 +1,8 @@
 import {
   landingCategoryFallbacks,
   landingEndpointFallbacks,
+  landingEndpointHasAgentKitIntegration,
+  sortLandingEndpoints,
 } from "../lib/endpoint-manifest.ts";
 import { providerLogoPath } from "../lib/provider-logos.ts";
 
@@ -11,6 +13,7 @@ type LandingEndpoint = {
   provider: string;
   category?: string;
   name: string;
+  agentkit?: boolean;
   agentkit_value_type?: string;
   agentkit_value_label?: string;
   agentkit_status?: string;
@@ -289,7 +292,7 @@ function isRecommendedEndpoint(provider: LandingEndpoint) {
 }
 
 function hasAgentKitBenefit(provider: LandingEndpoint) {
-  return Boolean(provider.agentkit_value_type || provider.agentkit_value_label);
+  return landingEndpointHasAgentKitIntegration(provider);
 }
 
 function ProviderMark({ provider }: { provider: LandingEndpoint }) {
@@ -430,9 +433,9 @@ function HumanBoostArt() {
 export default async function LandingPage({ searchParams }: LandingPageProps = {}) {
   const statusData = await loadLandingStatus();
   const requestedCategory = await requestedCategoryFromSearchParams(searchParams);
-  const providers = [...statusData.endpoints].sort(
-    (a, b) =>
-      (hasAgentKitBenefit(a) ? 0 : 1) - (hasAgentKitBenefit(b) ? 0 : 1),
+  const providers = sortLandingEndpoints(
+    statusData.endpoints,
+    isRecommendedEndpoint,
   );
   const categoryTabs = categoryTabsFromEndpoints(providers);
   const activeCategory = categoryTabs.some(

@@ -13,12 +13,12 @@ export const parallelSearchEndpointDefinition = Object.freeze({
   description: "Keyword-driven web search through ToolRouter's x402 Parallel wrapper.",
   url: `${wrapperBaseUrl()}/x402/parallel/search`,
   method: "POST",
-  agentkit: true,
+  agentkit: false,
   x402: true,
   estimated_cost_usd: 0.02,
-  agentkit_value_type: "free_trial",
-  agentkit_value_label: "AgentKit-Free Trial",
-  default_payment_mode: "agentkit_first",
+  agentkit_value_type: null,
+  agentkit_value_label: null,
+  default_payment_mode: "x402_only",
   ui: {
     badge: "Search",
     fixture_label: "Search with Parallel",
@@ -38,23 +38,12 @@ export const parallelSearchEndpointDefinition = Object.freeze({
       mode: "basic",
     },
   },
-  agentkit_health_probe: {
-    mode: "agentkit_benefit",
-    payment_mode: "agentkit_first",
-    max_usd: parallelSearchPriceUsd(),
-    latency_budget_ms: 15000,
-    timeout_ms: 15000,
-    input: {
-      search_queries: ["ToolRouter AgentKit health check"],
-      mode: "basic",
-    },
-  },
   live_smoke: {
     default_path: {
-      payment_mode: "agentkit_first",
+      payment_mode: "x402_only",
       max_usd: parallelSearchPriceUsd(),
       input: {
-        search_queries: ["ToolRouter AgentKit smoke test"],
+        search_queries: ["ToolRouter x402 smoke test"],
         mode: "basic",
       },
     },

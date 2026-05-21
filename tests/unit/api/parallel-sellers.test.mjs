@@ -33,9 +33,11 @@ describe("Parallel seller manifests", () => {
     ]) {
       assert.equal(manifest.method, "POST");
       assert.deepEqual([...manifest.secrets], ["PARALLEL_API_KEY"]);
-      assert.equal(manifest.agentkit.type, "free_trial");
       assert.ok(manifest.upstream.url.startsWith("https://api.parallel.ai/"));
     }
+    assert.equal(parallelSearchSellerManifest.agentkit, null);
+    assert.equal(parallelExtractSellerManifest.agentkit, null);
+    assert.equal(parallelTaskSellerManifest.agentkit, null);
   });
 
   it("emits parallel x-api-key header for each upstream call", () => {
@@ -76,10 +78,10 @@ describe("Parallel seller manifests", () => {
     assert.throws(() => parallelTaskPriceUsd({ processor: "mega" }), /unsupported Parallel task processor/u);
   });
 
-  it("free-trial counters differ between Parallel endpoints", () => {
-    assert.equal(parallelSearchSellerManifest.agentkit.uses, 5);
-    assert.equal(parallelExtractSellerManifest.agentkit.uses, 5);
-    assert.equal(parallelTaskSellerManifest.agentkit.uses, 1);
+  it("keeps every Parallel seller x402-only", () => {
+    assert.equal(parallelSearchSellerManifest.agentkit, null);
+    assert.equal(parallelExtractSellerManifest.agentkit, null);
+    assert.equal(parallelTaskSellerManifest.agentkit, null);
   });
 
   it("forwarders preserve `input` for both string and object shapes (parallel.task)", async () => {

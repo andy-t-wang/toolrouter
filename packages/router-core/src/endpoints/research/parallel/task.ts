@@ -13,12 +13,12 @@ export const parallelTaskEndpointDefinition = Object.freeze({
   description: "Asynchronous deep-research task through ToolRouter's x402 Parallel wrapper.",
   url: `${wrapperBaseUrl()}/x402/parallel/task`,
   method: "POST",
-  agentkit: true,
+  agentkit: false,
   x402: true,
   estimated_cost_usd: 0.31,
-  agentkit_value_type: "free_trial",
-  agentkit_value_label: "AgentKit-Free Trial",
-  default_payment_mode: "agentkit_first",
+  agentkit_value_type: null,
+  agentkit_value_label: null,
+  default_payment_mode: "x402_only",
   ui: {
     badge: "Research",
     fixture_label: "Start Parallel task",
@@ -38,23 +38,12 @@ export const parallelTaskEndpointDefinition = Object.freeze({
       processor: "core",
     },
   },
-  agentkit_health_probe: {
-    mode: "agentkit_benefit",
-    payment_mode: "agentkit_first",
-    max_usd: parallelTaskPriceForProcessor("core"),
-    timeout_ms: 30000,
-    latency_budget_ms: 30000,
-    input: {
-      input: "ToolRouter AgentKit health check: one sentence about Parallel task availability.",
-      processor: "core",
-    },
-  },
   live_smoke: {
     default_path: {
-      payment_mode: "agentkit_first",
+      payment_mode: "x402_only",
       max_usd: parallelTaskPriceForProcessor("core"),
       input: {
-        input: "ToolRouter AgentKit smoke test for Parallel task.",
+        input: "ToolRouter x402 smoke test for Parallel task.",
         processor: "core",
       },
     },

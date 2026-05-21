@@ -71,7 +71,7 @@ These are durable project decisions for future agents working in this repo.
   - `parallel.search`: `$0.02` per call (Parallel $0.01 + markup).
   - `parallel.extract`: `$0.01` per URL (up to 20) + `$0.01` markup once per call.
   - `parallel.task`: configurable by processor — defaults `lite $0.015`, `base $0.02`, `core $0.035`, `pro $0.11`, `ultra $0.31`; admins can override via `TOOLROUTER_PARALLEL_TASK_PRICE_<PROCESSOR>_USD`. Only `ultra` is publicly documented by Parallel; treat the others as conservative defaults until confirmed.
-- AgentKit value: `free_trial` for all three Parallel endpoints. Monthly quotas: `parallel.search` and `parallel.extract` 5 uses, `parallel.task` 1 use. `createSellerService` only maps the `free_trial` AgentKit mode today; `access`/`discount` remain deferred.
+- AgentKit value: no Parallel endpoint has AgentKit integration. `parallel.search`, `parallel.extract`, and `parallel.task` are all x402-only.
 - Read endpoints `/v1/parallel/tasks/:run_id/{status,result}` call Parallel's public read APIs (free of x402) with the server-side `PARALLEL_API_KEY`. They mirror the `/v1/manus/tasks/...` pattern.
 - Async lifecycle is shared with Manus through the generalized `AsyncTaskStrategy` seam in `apps/api/src/services/execution/async-task.ts`. The Parallel strategy lives next to `services/parallel-tasks.ts`.
 - MCP tools surfaced from the published `@worldcoin/toolrouter` package: `parallel_search`, `parallel_extract`, `parallel_task_start`, `parallel_task_status`, `parallel_task_result`. The task start tool must keep the one-call-one-task warning in its description (agents must not retry the same input by creating a new task).

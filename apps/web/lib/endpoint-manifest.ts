@@ -46,6 +46,7 @@ export type LandingEndpointFallback = {
   provider: string;
   category: string;
   name: string;
+  agentkit: boolean;
   agentkit_value_type: string | null;
   agentkit_value_label: string | null;
   status: string;
@@ -72,6 +73,7 @@ function toLandingFallback(endpoint: MaterializedEndpoint): LandingEndpointFallb
     provider: endpoint.provider,
     category: endpoint.category,
     name: endpoint.name,
+    agentkit: endpoint.agentkit,
     agentkit_value_type: endpoint.agentkit_value_type,
     agentkit_value_label: endpoint.agentkit_value_label,
     status: "unverified",
@@ -106,4 +108,36 @@ export function landingCategoryFallbacks(): LandingCategoryFallback[] {
 
 export function landingEndpointCount(): number {
   return endpointRegistry.length;
+}
+
+export type LandingEndpointAgentKitRow = {
+  id: string;
+  provider?: string;
+  agentkit?: boolean;
+  agentkit_value_type?: string | null;
+  agentkit_value_label?: string | null;
+};
+
+export function landingEndpointHasAgentKitIntegration(
+  endpoint: LandingEndpointAgentKitRow,
+): boolean {
+  if (endpoint.provider === "parallel" || endpoint.id.startsWith("parallel.")) {
+    return false;
+  }
+  if (endpoint.agentkit === false) return false;
+  if (endpoint.agentkit === true) return true;
+  return Boolean(endpoint.agentkit_value_type || endpoint.agentkit_value_label);
+}
+
+export function sortLandingEndpoints<T extends LandingEndpointAgentKitRow>(
+  endpoints: T[],
+  isRecommendedEndpoint: (endpoint: T) => boolean = () => false,
+): T[] {
+  return [...endpoints].sort((a, b) => {
+    const agentkitRank =
+      Number(landingEndpointHasAgentKitIntegration(b)) -
+      Number(landingEndpointHasAgentKitIntegration(a));
+    if (agentkitRank !== 0) return agentkitRank;
+    return Number(isRecommendedEndpoint(b)) - Number(isRecommendedEndpoint(a));
+  });
 }
