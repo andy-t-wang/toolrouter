@@ -169,6 +169,13 @@ function jsonSchemaAnyOf(properties: Record<string, any>, requiredAlternatives: 
   };
 }
 
+function requiredCombinations(...groups: string[][]) {
+  return groups.reduce<string[][]>(
+    (combinations, group) => combinations.flatMap((combination) => group.map((item) => [...combination, item])),
+    [[]],
+  );
+}
+
 const PAYMENT_PROPERTIES = Object.freeze({
   maxUsd: { type: "string", description: "Optional caller spend cap in USD decimal form." },
   max_usd: { type: "string", description: "Compatibility alias for maxUsd." },
@@ -327,8 +334,8 @@ function inputPropertiesForKind(kind: string) {
         include_trash: { type: "boolean" },
         ...PAYMENT_PROPERTIES,
       },
-      required: ["inbox_id"] as string[],
-      requiredAlternatives: undefined as string[][] | undefined,
+      required: [] as string[],
+      requiredAlternatives: requiredCombinations(["inbox_id", "inboxId"]),
     };
   }
   if (kind === "agentmail_get_message") {
@@ -340,8 +347,8 @@ function inputPropertiesForKind(kind: string) {
         messageId: { type: "string", description: "Compatibility alias for message_id." },
         ...PAYMENT_PROPERTIES,
       },
-      required: ["inbox_id", "message_id"] as string[],
-      requiredAlternatives: undefined as string[][] | undefined,
+      required: [] as string[],
+      requiredAlternatives: requiredCombinations(["inbox_id", "inboxId"], ["message_id", "messageId"]),
     };
   }
   if (kind === "agentmail_send_message") {
@@ -349,10 +356,14 @@ function inputPropertiesForKind(kind: string) {
       properties: {
         inbox_id: { type: "string", description: "AgentMail inbox id or address to send from." },
         inboxId: { type: "string", description: "Compatibility alias for inbox_id." },
-        to: { oneOf: [{ type: "string" }, { type: "array", items: { type: "string" }, maxItems: 50 }] },
+        to: { oneOf: [{ type: "string" }, { type: "array", items: { type: "string" }, minItems: 1, maxItems: 50 }] },
         cc: { oneOf: [{ type: "string" }, { type: "array", items: { type: "string" }, maxItems: 50 }] },
         bcc: { oneOf: [{ type: "string" }, { type: "array", items: { type: "string" }, maxItems: 50 }] },
         reply_to: { oneOf: [{ type: "string" }, { type: "array", items: { type: "string" }, maxItems: 50 }] },
+        replyTo: {
+          oneOf: [{ type: "string" }, { type: "array", items: { type: "string" }, maxItems: 50 }],
+          description: "Compatibility alias for reply_to.",
+        },
         subject: { type: "string" },
         text: { type: "string" },
         html: { type: "string" },
@@ -361,8 +372,13 @@ function inputPropertiesForKind(kind: string) {
         headers: { type: "object", additionalProperties: { type: "string" } },
         ...PAYMENT_PROPERTIES,
       },
-      required: ["inbox_id", "to", "subject"] as string[],
-      requiredAlternatives: undefined as string[][] | undefined,
+      required: [] as string[],
+      requiredAlternatives: requiredCombinations(
+        ["inbox_id", "inboxId"],
+        ["to"],
+        ["subject"],
+        ["text", "html"],
+      ),
     };
   }
   if (kind === "agentmail_reply_to_message") {
@@ -376,6 +392,10 @@ function inputPropertiesForKind(kind: string) {
         cc: { oneOf: [{ type: "string" }, { type: "array", items: { type: "string" }, maxItems: 50 }] },
         bcc: { oneOf: [{ type: "string" }, { type: "array", items: { type: "string" }, maxItems: 50 }] },
         reply_to: { oneOf: [{ type: "string" }, { type: "array", items: { type: "string" }, maxItems: 50 }] },
+        replyTo: {
+          oneOf: [{ type: "string" }, { type: "array", items: { type: "string" }, maxItems: 50 }],
+          description: "Compatibility alias for reply_to.",
+        },
         reply_all: { type: "boolean" },
         text: { type: "string" },
         html: { type: "string" },
@@ -384,8 +404,12 @@ function inputPropertiesForKind(kind: string) {
         headers: { type: "object", additionalProperties: { type: "string" } },
         ...PAYMENT_PROPERTIES,
       },
-      required: ["inbox_id", "message_id"] as string[],
-      requiredAlternatives: undefined as string[][] | undefined,
+      required: [] as string[],
+      requiredAlternatives: requiredCombinations(
+        ["inbox_id", "inboxId"],
+        ["message_id", "messageId"],
+        ["text", "html"],
+      ),
     };
   }
   throw new Error(`unknown MCP input_kind: ${kind}`);
@@ -704,37 +728,38 @@ function valueFrom(data: any, key: string) {
 }
 
 function agentmailPayload(data: any) {
-  return data?.body?.result ?? data?.body ?? data;
+  return data?.body?.result ?? data?.body ?? null;
 }
 
-function nestedValueFrom(data: any, keys: string[]) {
+function nestedValueFrom(data: any, keys: string[], containers = ["inbox", "message", "email", "result"]) {
   for (const key of keys) {
-    const value =
-      data?.[key] ??
-      data?.inbox?.[key] ??
-      data?.message?.[key] ??
-      data?.email?.[key] ??
-      data?.result?.[key];
+    const nestedValue = containers.map((container) => data?.[container]?.[key]).find((value) => value !== undefined);
+    const value = data?.[key] ?? nestedValue;
     if (value !== undefined && value !== null) return value;
   }
   return null;
 }
 
 function agentmailToolResult(data: any) {
+  const endpointId = data?.endpoint_id || null;
   const payload = agentmailPayload(data);
+  const inboxIdKeys = endpointId === "agentmail.create_inbox" ? ["inbox_id", "inboxId", "id"] : ["inbox_id", "inboxId"];
+  const messageIdKeys = ["agentmail.send_message", "agentmail.reply_to_message", "agentmail.get_message"].includes(endpointId)
+    ? ["message_id", "messageId", "id"]
+    : ["message_id", "messageId"];
   const structuredContent = {
     id: data?.id || null,
-    endpoint_id: data?.endpoint_id || null,
+    endpoint_id: endpointId,
     path: data?.path || null,
     charged: data?.charged ?? null,
     status_code: data?.status_code ?? null,
     credit_reserved_usd: data?.credit_reserved_usd ?? null,
     credit_captured_usd: data?.credit_captured_usd ?? null,
     credit_released_usd: data?.credit_released_usd ?? null,
-    inbox_id: nestedValueFrom(payload, ["inbox_id", "inboxId", "id"]),
-    email: nestedValueFrom(payload, ["email", "email_address", "address"]),
-    message_id: nestedValueFrom(payload, ["message_id", "messageId", "id"]),
-    thread_id: nestedValueFrom(payload, ["thread_id", "threadId"]),
+    inbox_id: nestedValueFrom(payload, inboxIdKeys, ["inbox", "email", "result"]),
+    email: nestedValueFrom(payload, ["email", "email_address", "address"], ["inbox", "email", "result"]),
+    message_id: nestedValueFrom(payload, messageIdKeys, ["message", "result"]),
+    thread_id: nestedValueFrom(payload, ["thread_id", "threadId"], ["message", "result"]),
     body: data?.body ?? null,
   };
   const text = JSON.stringify(

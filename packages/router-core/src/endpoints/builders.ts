@@ -658,7 +658,7 @@ export function buildAgentmailSendMessageRequest(input, endpoint) {
   const data = assertInputRecord(input);
   const inboxId = readString(data, ["inbox_id", "inboxId"], "inbox_id", { required: true });
   const body = agentmailMessageBody(data, { requireSubject: true });
-  if (body.to === undefined) throw new TypeError("to is required");
+  if (recipientCount(body.to) < 1) throw new TypeError("to is required");
   return providerRequest(
     endpoint,
     { inbox_id: inboxId, ...body },

@@ -367,6 +367,7 @@ describe("endpoint registry", () => {
     const send = buildEndpointRequest("agentmail.send_message", {
       inbox_id: "agent@agentmail.to",
       to: ["recipient@example.com"],
+      replyTo: "reply@example.com",
       subject: "Hello",
       text: "Plain text body",
       labels: ["toolrouter"],
@@ -377,6 +378,7 @@ describe("endpoint registry", () => {
     assert.deepEqual(send.json, {
       inbox_id: "agent@agentmail.to",
       to: ["recipient@example.com"],
+      reply_to: "reply@example.com",
       subject: "Hello",
       text: "Plain text body",
       labels: ["toolrouter"],
@@ -418,6 +420,16 @@ describe("endpoint registry", () => {
           subject: "Hello",
         }),
       /text or html is required/u,
+    );
+    assert.throws(
+      () =>
+        buildEndpointRequest("agentmail.send_message", {
+          inbox_id: "agent@agentmail.to",
+          to: [],
+          subject: "Hello",
+          text: "Body",
+        }),
+      /to is required/u,
     );
     assert.throws(
       () =>

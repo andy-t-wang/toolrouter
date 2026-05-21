@@ -32,6 +32,13 @@ function onceData(stream) {
   });
 }
 
+function hasRequiredAlternative(schema, required) {
+  return (schema.anyOf || []).some((alternative) => {
+    const actual = new Set(alternative.required || []);
+    return actual.size === required.length && required.every((key) => actual.has(key));
+  });
+}
+
 describe("ToolRouter MCP server", () => {
   it("negotiates MCP initialization and lists tools", async () => {
     const initialized = await handleJsonRpcMessage({
@@ -76,9 +83,21 @@ describe("ToolRouter MCP server", () => {
     assert.ok(genericTool.inputSchema.properties.endpointId);
     assert.ok(genericTool.inputSchema.properties.max_usd);
     assert.ok(genericTool.inputSchema.properties.paymentMode);
+    const listMailTool = tools().find((tool) => tool.name === "agentmail_list_messages");
+    assert.ok(hasRequiredAlternative(listMailTool.inputSchema, ["inboxId"]));
+    const getMailTool = tools().find((tool) => tool.name === "agentmail_get_message");
+    assert.ok(hasRequiredAlternative(getMailTool.inputSchema, ["inboxId", "messageId"]));
     const sendMailTool = tools().find((tool) => tool.name === "agentmail_send_message");
     assert.equal(sendMailTool.inputSchema.properties.to.oneOf.length, 2);
+    assert.equal(sendMailTool.inputSchema.properties.to.oneOf[1].minItems, 1);
+    assert.ok(sendMailTool.inputSchema.properties.replyTo);
+    assert.ok(hasRequiredAlternative(sendMailTool.inputSchema, ["inboxId", "to", "subject", "html"]));
+    assert.ok(hasRequiredAlternative(sendMailTool.inputSchema, ["inbox_id", "to", "subject", "text"]));
     assert.equal(sendMailTool.inputSchema.properties.attachments.maxItems, 10);
+    const replyMailTool = tools().find((tool) => tool.name === "agentmail_reply_to_message");
+    assert.ok(replyMailTool.inputSchema.properties.replyTo);
+    assert.ok(hasRequiredAlternative(replyMailTool.inputSchema, ["inboxId", "messageId", "html"]));
+    assert.ok(hasRequiredAlternative(replyMailTool.inputSchema, ["inbox_id", "message_id", "text"]));
   });
 
   it("supports Content-Length framed stdio used by MCP clients", async () => {
@@ -182,7 +201,38 @@ describe("ToolRouter MCP server", () => {
     assert.equal(result.structuredContent.endpoint_id, "agentmail.create_inbox");
     assert.equal(result.structuredContent.inbox_id, "inbox_123");
     assert.equal(result.structuredContent.email, "health@agentmail.to");
+    assert.equal(result.structuredContent.message_id, null);
     assert.equal(result.structuredContent.charged, true);
+
+    const sendResult = await callTool("agentmail_send_message", {
+      inbox_id: "health@agentmail.to",
+      to: "recipient@example.com",
+      subject: "Hello",
+      text: "Body",
+    }, {
+      env: { TOOLROUTER_API_URL: "http://router.test", TOOLROUTER_API_KEY: "tr_test" },
+      fetchImpl: async () => response({
+        id: "req_mail_send",
+        endpoint_id: "agentmail.send_message",
+        path: "x402",
+        charged: true,
+        status_code: 200,
+        body: {
+          ok: true,
+          provider: "agentmail",
+          result: {
+            id: "msg_123",
+            thread_id: "thread_123",
+          },
+        },
+      }),
+    });
+
+    assert.equal(sendResult.isError, false);
+    assert.equal(sendResult.structuredContent.id, "req_mail_send");
+    assert.equal(sendResult.structuredContent.inbox_id, null);
+    assert.equal(sendResult.structuredContent.message_id, "msg_123");
+    assert.equal(sendResult.structuredContent.thread_id, "thread_123");
   });
 
   it("canonicalizes the stale api.toolrouter.com alias to the current API base", async () => {
