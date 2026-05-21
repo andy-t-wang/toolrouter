@@ -12,7 +12,7 @@ export const agentmailGetMessageEndpointDefinition = Object.freeze({
   provider: AGENTMAIL_PROVIDER,
   category: AGENTMAIL_CATEGORY,
   name: "AgentMail Get Message",
-  description: "Fetch a single AgentMail message over x402.",
+  description: "Fetch a single AgentMail message through ToolRouter's server-side x402 execution path.",
   url: `${AGENTMAIL_READ_URL}/inboxes/messages/message`,
   method: "GET",
   agentkit: false,
@@ -61,4 +61,3 @@ export const agentmailGetMessageEndpointDefinition = Object.freeze({
   },
   builder: buildAgentmailGetMessageRequest,
 }) satisfies EndpointManifest;
-

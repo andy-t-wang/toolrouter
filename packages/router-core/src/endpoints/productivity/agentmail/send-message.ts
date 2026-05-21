@@ -13,7 +13,7 @@ export const agentmailSendMessageEndpointDefinition = Object.freeze({
   provider: AGENTMAIL_PROVIDER,
   category: AGENTMAIL_CATEGORY,
   name: "AgentMail Send Message",
-  description: "Send an email from an AgentMail inbox through ToolRouter's x402 AgentMail wrapper.",
+  description: "Send an email from an AgentMail inbox through ToolRouter's server-side x402 AgentMail wrapper.",
   url: `${wrapperBaseUrl()}/x402/agentmail/messages/send`,
   method: "POST",
   agentkit: false,
@@ -73,4 +73,3 @@ export const agentmailSendMessageEndpointDefinition = Object.freeze({
   },
   builder: buildAgentmailSendMessageRequest,
 }) satisfies EndpointManifest;
-

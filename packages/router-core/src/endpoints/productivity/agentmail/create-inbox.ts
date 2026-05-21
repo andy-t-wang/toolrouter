@@ -12,7 +12,7 @@ export const agentmailCreateInboxEndpointDefinition = Object.freeze({
   provider: AGENTMAIL_PROVIDER,
   category: AGENTMAIL_CATEGORY,
   name: "AgentMail Create Inbox",
-  description: "Create a new AgentMail inbox through ToolRouter's x402 AgentMail wrapper.",
+  description: "Create a new AgentMail inbox through ToolRouter's server-side x402 AgentMail wrapper.",
   url: `${wrapperBaseUrl()}/x402/agentmail/inboxes`,
   method: "POST",
   agentkit: false,
@@ -64,4 +64,3 @@ export const agentmailCreateInboxEndpointDefinition = Object.freeze({
   },
   builder: buildAgentmailCreateInboxRequest,
 }) satisfies EndpointManifest;
-

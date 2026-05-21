@@ -13,7 +13,7 @@ export const agentmailReplyToMessageEndpointDefinition = Object.freeze({
   provider: AGENTMAIL_PROVIDER,
   category: AGENTMAIL_CATEGORY,
   name: "AgentMail Reply To Message",
-  description: "Reply to an AgentMail message through ToolRouter's x402 AgentMail wrapper.",
+  description: "Reply to an AgentMail message through ToolRouter's server-side x402 AgentMail wrapper.",
   url: `${wrapperBaseUrl()}/x402/agentmail/messages/reply`,
   method: "POST",
   agentkit: false,
@@ -69,4 +69,3 @@ export const agentmailReplyToMessageEndpointDefinition = Object.freeze({
   },
   builder: buildAgentmailReplyToMessageRequest,
 }) satisfies EndpointManifest;
-

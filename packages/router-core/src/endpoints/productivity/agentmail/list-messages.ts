@@ -12,7 +12,7 @@ export const agentmailListMessagesEndpointDefinition = Object.freeze({
   provider: AGENTMAIL_PROVIDER,
   category: AGENTMAIL_CATEGORY,
   name: "AgentMail List Messages",
-  description: "List messages in an AgentMail inbox over x402.",
+  description: "List messages in an AgentMail inbox through ToolRouter's server-side x402 execution path.",
   url: `${AGENTMAIL_READ_URL}/inboxes/messages`,
   method: "GET",
   agentkit: false,
@@ -61,4 +61,3 @@ export const agentmailListMessagesEndpointDefinition = Object.freeze({
   },
   builder: buildAgentmailListMessagesRequest,
 }) satisfies EndpointManifest;
-

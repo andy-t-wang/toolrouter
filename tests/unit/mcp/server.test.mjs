@@ -637,14 +637,27 @@ describe("ToolRouter MCP server", () => {
     const { createApiApp } = await import("../../../apps/api/src/app.ts");
     const { MemoryCache } = await import("../../../packages/cache/src/index.ts");
     const app = createApiApp({ logger: false, cache: new MemoryCache() });
-    const response = await app.inject({
-      method: "OPTIONS",
-      url: "/x402/manus/research",
-    });
-    await app.close();
-    assert.equal(response.statusCode, 204);
-    assert.match(response.headers["access-control-allow-headers"], /payment-signature/u);
-    assert.match(response.headers["access-control-expose-headers"], /payment-required/u);
+    try {
+      for (const url of [
+        "/x402/manus/research",
+        "/x402/agentmail/inboxes",
+        "/x402/agentmail/messages/send",
+        "/x402/agentmail/messages/reply",
+      ]) {
+        const response = await app.inject({
+          method: "OPTIONS",
+          url,
+        });
+        assert.equal(response.statusCode, 204, url);
+        assert.match(response.headers["access-control-allow-origin"], /\*/u, url);
+        assert.match(response.headers["access-control-allow-headers"], /payment-signature/u, url);
+        assert.match(response.headers["access-control-allow-headers"], /agentkit/u, url);
+        assert.match(response.headers["access-control-expose-headers"], /payment-required/u, url);
+        assert.match(response.headers["access-control-expose-headers"], /payment-response/u, url);
+      }
+    } finally {
+      await app.close();
+    }
   });
 
   it("passes explicit payment mode overrides for smoke tests", async () => {
