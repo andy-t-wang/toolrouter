@@ -215,6 +215,10 @@ export function publicEndpoint(endpoint: any, statusByEndpoint: Map<string, any>
   };
 }
 
+export function hasAutomatedHealthProbe(endpoint: any) {
+  return endpoint?.health_probe?.mode !== "manual_only";
+}
+
 function freshLayerStatus(value: any, updatedAt: any, now: Date) {
   if (!value) return "unknown";
   const updatedAtMs = typeof updatedAt === "string" ? Date.parse(updatedAt) : NaN;
@@ -320,6 +324,7 @@ export async function publicStatusRows(store: any, category?: string) {
     ]);
   }
   return listEndpoints({ category })
+    .filter(hasAutomatedHealthProbe)
     .map((endpoint: any) =>
       publicStatusDto(
         endpoint,
@@ -455,7 +460,7 @@ export async function monitoringPayload(store: any, user_id: string) {
   const statusByEndpoint = new Map<string, any>(
     statuses.map((status: any) => [status.endpoint_id, status]),
   );
-  const endpointStatuses = listEndpoints().map(
+  const endpointStatuses = listEndpoints().filter(hasAutomatedHealthProbe).map(
     (endpoint: any) =>
       statusByEndpoint.get(endpoint.id)?.status || "unverified",
   );
