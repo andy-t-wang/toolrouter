@@ -63,7 +63,7 @@ describe("web dashboard static wiring", () => {
     assert.match(endpointStatusFilter, /Recommended/);
     assert.match(endpointStatusFilter, /hasAgentKitBenefit\(provider\)/);
     assert.match(landingPage, /paid through AgentKit or x402/);
-    assert.doesNotMatch(endpointStatusFilter, /provider\.provider === "parallel"/);
+    assert.match(endpointStatusFilter, /provider\.provider === "parallel"/);
     assert.doesNotMatch(landingPage, /Fleet uptime/);
     assert.doesNotMatch(landingPage, /Last 30 days/);
     assert.doesNotMatch(endpointStatusFilter, /<div>Path<\/div>/);
@@ -76,6 +76,8 @@ describe("web dashboard static wiring", () => {
     assert.match(landingPage, /landingEndpointHasAgentKitIntegration\(provider\)/);
     assert.match(endpointStatusFilter, /endpoint-tabs/);
     assert.match(landingPage, /isRecommendedEndpoint/);
+    assert.match(landingPage, /renderedAtMs={renderedAtMs}/);
+    assert.match(endpointStatusFilter, /formatProbeAge\(provider\.last_checked_at, renderedAtMs\)/);
     assert.match(endpointStatusFilter, /No AgentKit Support/);
     assert.doesNotMatch(landingPage, /http:\/\/127\.0\.0\.1:9402/);
     assert.doesNotMatch(landingPage, /Get an MCP key/);

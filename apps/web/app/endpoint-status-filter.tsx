@@ -27,6 +27,7 @@ type EndpointStatusFilterProps = {
   categories: LandingCategory[];
   endpoints: LandingEndpoint[];
   initialCategory: string;
+  renderedAtMs: number;
 };
 
 function titleCase(value: string) {
@@ -37,11 +38,11 @@ function publicEndpointStatus(endpoint: Pick<LandingEndpoint, "status">) {
   return endpoint.status || "unverified";
 }
 
-function formatProbeAge(value?: string | null) {
+function formatProbeAge(value: string | null | undefined, renderedAtMs: number) {
   if (!value) return "Awaiting first live probe";
   const diffSeconds = Math.max(
     0,
-    Math.floor((Date.now() - Date.parse(value)) / 1000),
+    Math.floor((renderedAtMs - Date.parse(value)) / 1000),
   );
   if (diffSeconds < 60) return "Last probe just now";
   const diffMinutes = Math.floor(diffSeconds / 60);
@@ -76,7 +77,7 @@ function displayEndpointId(provider: LandingEndpoint) {
 }
 
 function hasAgentKitBenefit(provider: LandingEndpoint) {
-  if (provider.id.startsWith("parallel.")) {
+  if (provider.provider === "parallel" || provider.id.startsWith("parallel.")) {
     return false;
   }
   if (provider.agentkit === false) return false;
@@ -127,9 +128,11 @@ function AgentKitBenefit({ provider }: { provider: LandingEndpoint }) {
 function UptimeRow({
   provider,
   recommended,
+  renderedAtMs,
 }: {
   provider: LandingEndpoint;
   recommended: boolean;
+  renderedAtMs: number;
 }) {
   return (
     <div className="mkt-uptime-grid mkt-uptime-row">
@@ -159,7 +162,7 @@ function UptimeRow({
         <StatusDot status={publicEndpointStatus(provider)} />
       </div>
       <div className="mono muted check-age">
-        {formatProbeAge(provider.last_checked_at)}
+        {formatProbeAge(provider.last_checked_at, renderedAtMs)}
       </div>
     </div>
   );
@@ -175,6 +178,7 @@ export function EndpointStatusFilter({
   categories,
   endpoints,
   initialCategory,
+  renderedAtMs,
 }: EndpointStatusFilterProps) {
   const validCategoryIds = useMemo(
     () => new Set(categories.map((category) => category.id)),
@@ -258,7 +262,11 @@ export function EndpointStatusFilter({
             recommendedEndpointIdByCategory.get(provider.category || "") === provider.id;
           return (
             <div className="uptime-row-shell" key={provider.id}>
-              <UptimeRow provider={provider} recommended={recommended} />
+              <UptimeRow
+                provider={provider}
+                recommended={recommended}
+                renderedAtMs={renderedAtMs}
+              />
             </div>
           );
         })}

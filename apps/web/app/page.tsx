@@ -445,6 +445,7 @@ export default async function LandingPage({ searchParams }: LandingPageProps = {
     (count, provider) => count + (provider.health_check_count_30d ? 1 : 0),
     0,
   );
+  const renderedAtMs = Date.now();
 
   return (
     <>
@@ -733,6 +734,7 @@ export default async function LandingPage({ searchParams }: LandingPageProps = {
               categories={categoryTabs}
               endpoints={providers}
               initialCategory={activeCategory}
+              renderedAtMs={renderedAtMs}
             />
           </div>
         </section>
