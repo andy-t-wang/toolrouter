@@ -85,6 +85,10 @@ describe("ToolRouter MCP server", () => {
     assert.ok(genericTool.inputSchema.properties.paymentMode);
     const listMailTool = tools().find((tool) => tool.name === "agentmail_list_messages");
     assert.ok(hasRequiredAlternative(listMailTool.inputSchema, ["inboxId"]));
+    assert.ok(listMailTool.inputSchema.properties.includeSpam);
+    assert.ok(listMailTool.inputSchema.properties.includeBlocked);
+    assert.ok(listMailTool.inputSchema.properties.includeUnauthenticated);
+    assert.ok(listMailTool.inputSchema.properties.includeTrash);
     const getMailTool = tools().find((tool) => tool.name === "agentmail_get_message");
     assert.ok(hasRequiredAlternative(getMailTool.inputSchema, ["inboxId", "messageId"]));
     const sendMailTool = tools().find((tool) => tool.name === "agentmail_send_message");
