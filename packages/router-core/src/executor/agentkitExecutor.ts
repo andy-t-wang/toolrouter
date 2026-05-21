@@ -433,6 +433,9 @@ export async function executeEndpoint({ endpoint, request, maxUsd, traceId, paym
     }
 
     const receipt = receiptFromResponse(response, events);
+    const paymentRequired =
+      response.status === 402 ? await paymentRequiredFromResponse(response.clone()) : null;
+    const body = await readResponseBody(response);
     return {
       trace_id: traceId,
       endpoint_id: endpoint.id,
@@ -443,7 +446,7 @@ export async function executeEndpoint({ endpoint, request, maxUsd, traceId, paym
       estimated_usd: request.estimated_usd || request.estimatedUsd || null,
       ...receipt,
       latency_ms: Date.now() - started,
-      body: await readResponseBody(response),
+      body: body ?? paymentRequired,
     };
   } catch (error) {
     if (timeout.timeoutMs && isTimeoutError(timeout.signal)) {

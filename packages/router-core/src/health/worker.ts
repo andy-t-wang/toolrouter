@@ -110,8 +110,9 @@ function normalizeExecutionResult(result, fallbackLatencyMs) {
 
 function statusFromResult(result, endpoint, { requireAgentKitValue = false } = {}) {
   // A clean unresolved x402 challenge envelope is the protocol working — never
-  // a failure to attribute. attributeFailure returns null in that case so we
-  // fall through to the success-shape check.
+  // a failure to attribute. attributeFailure returns null in that case, and
+  // availability probes should count that as healthy unless this probe needs
+  // proof of an AgentKit benefit.
   const attribution = result.attribution ?? null;
   if (attribution) {
     // A failure was attributed. 5xx-style upstream/transport failures with no
@@ -120,6 +121,11 @@ function statusFromResult(result, endpoint, { requireAgentKitValue = false } = {
       return "failing";
     }
     return "degraded";
+  }
+  if (result.status_code === 402) {
+    if (result.latency_ms > latencyBudgetMs(endpoint)) return "degraded";
+    if (requireAgentKitValue) return "degraded";
+    return "healthy";
   }
   if (result.ok || (result.status_code !== null && result.status_code >= 200 && result.status_code < 300)) {
     if (result.latency_ms > latencyBudgetMs(endpoint)) return "degraded";

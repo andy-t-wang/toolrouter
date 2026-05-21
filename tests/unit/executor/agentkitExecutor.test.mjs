@@ -94,6 +94,19 @@ function agentkitChallengeResponse() {
   );
 }
 
+function emptyX402ChallengeResponse() {
+  const paymentRequired = {
+    x402Version: 1,
+    accepts: [{ scheme: "exact", network: "eip155:8453" }],
+  };
+  return new Response("", {
+    status: 402,
+    headers: {
+      "payment-required": Buffer.from(JSON.stringify(paymentRequired)).toString("base64"),
+    },
+  });
+}
+
 function fakePaymentDeps({ captures, agentkitResponse, x402Response, selectedRequirements }) {
   class FakeX402Client {
     register() {}
@@ -327,6 +340,28 @@ describe("AgentKit/x402 executor", () => {
     assert.equal(result.charged, false);
     assert.equal(result.amount_usd, null);
     assert.equal(result.payment_reference, null);
+  });
+
+  it("surfaces the payment-required challenge when a 402 body is empty", async () => {
+    const seen = captures();
+    const result = await executeEndpoint({
+      endpoint: baseEndpoint(),
+      request: providerRequest(),
+      maxUsd: "0.01",
+      traceId: "trace_empty_x402_challenge",
+      paymentDeps: fakePaymentDeps({
+        captures: seen,
+        agentkitResponse: new Response("", { status: 402 }),
+        x402Response: emptyX402ChallengeResponse(),
+      }),
+    });
+
+    assert.equal(result.path, "agentkit_to_x402");
+    assert.equal(result.status_code, 402);
+    assert.equal(result.ok, false);
+    assert.equal(result.charged, false);
+    assert.equal(result.body.x402Version, 1);
+    assert.deepEqual(result.body.accepts, [{ scheme: "exact", network: "eip155:8453" }]);
   });
 
   it("returns an uncharged timeout result when the provider fetch is too slow", async () => {
