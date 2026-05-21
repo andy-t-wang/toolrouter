@@ -1837,18 +1837,18 @@ code {
 .endpoint-tabs {
   align-items: center;
   display: flex;
+  flex-wrap: wrap;
   gap: 6px;
   margin-bottom: 14px;
-  overflow-x: auto;
-  padding-bottom: 2px;
-  scrollbar-width: none;
+  overflow: visible;
+  padding: 2px 0;
 }
 
 .endpoint-tabs::-webkit-scrollbar {
   display: none;
 }
 
-.endpoint-tabs a {
+.endpoint-tabs :where(a, button) {
   align-items: center;
   background: transparent;
   border: 1px solid var(--line-strong);
@@ -1861,20 +1861,26 @@ code {
   gap: 8px;
   height: 34px;
   line-height: 1;
+  outline: none;
   padding: 0 8px 0 12px;
   transition: background 0.12s ease, border-color 0.12s ease, transform 0.12s ease;
   white-space: nowrap;
 }
 
-.endpoint-tabs a:hover {
+.endpoint-tabs :where(a, button):hover {
   background: var(--bone-2);
   transform: translateY(-1px);
 }
 
-.endpoint-tabs a.active {
+.endpoint-tabs :where(a, button).active {
   background: var(--ink);
   border-color: var(--ink);
   color: var(--bone);
+}
+
+.endpoint-tabs :where(a, button):focus-visible {
+  border-color: var(--ink);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--ink) 12%, transparent);
 }
 
 .endpoint-tab-count {
@@ -1889,9 +1895,10 @@ code {
   justify-content: center;
   min-width: 22px;
   padding: 0 6px;
+  transform: translateY(-0.5px);
 }
 
-.endpoint-tabs a.active .endpoint-tab-count {
+.endpoint-tabs :where(a, button).active .endpoint-tab-count {
   background: color-mix(in oklab, var(--bone) 16%, transparent);
   border-color: color-mix(in oklab, var(--bone) 24%, transparent);
   color: var(--bone);

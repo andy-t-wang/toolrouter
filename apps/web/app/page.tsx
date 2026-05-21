@@ -4,6 +4,7 @@ import {
   landingEndpointHasAgentKitIntegration,
   sortLandingEndpoints,
 } from "../lib/endpoint-manifest.ts";
+import { EndpointStatusFilter } from "./endpoint-status-filter.tsx";
 import { providerLogoPath } from "../lib/provider-logos.ts";
 
 export const dynamic = "force-dynamic";
@@ -225,11 +226,6 @@ function categoryTabsFromEndpoints(endpoints: LandingEndpoint[]) {
   return tabs;
 }
 
-function categoryTabHref(categoryId: string) {
-  if (categoryId === "all") return "/#endpoints";
-  return `/?category=${encodeURIComponent(categoryId)}#endpoints`;
-}
-
 function fleetLabel(status: string) {
   if (status === "healthy") return "All systems live";
   if (status === "degraded") return "Some endpoints degraded";
@@ -443,20 +439,9 @@ export default async function LandingPage({ searchParams }: LandingPageProps = {
   )
     ? requestedCategory
     : "all";
-  const visibleProviders =
-    activeCategory === "all"
-      ? providers
-      : providers.filter((provider) => provider.category === activeCategory);
-  const selectedCategoryName =
-    categoryTabs.find((category) => category.id === activeCategory)?.name ||
-    "All";
   const operational = statusData.summary.operational_count;
   const endpointCount = statusData.summary.endpoint_count || providers.length;
   const probedCount = providers.reduce(
-    (count, provider) => count + (provider.health_check_count_30d ? 1 : 0),
-    0,
-  );
-  const visibleProbedCount = visibleProviders.reduce(
     (count, provider) => count + (provider.health_check_count_30d ? 1 : 0),
     0,
   );
@@ -744,43 +729,11 @@ export default async function LandingPage({ searchParams }: LandingPageProps = {
               </div>
             </div>
 
-            <nav className="endpoint-tabs" aria-label="Endpoint categories">
-              {categoryTabs.map((category) => (
-                <a
-                  key={category.id}
-                  className={category.id === activeCategory ? "active" : ""}
-                  href={categoryTabHref(category.id)}
-                  aria-current={
-                    category.id === activeCategory ? "page" : undefined
-                  }
-                >
-                  <span>{category.name}</span>
-                  <span className="endpoint-tab-count">
-                    {category.endpoint_count}
-                  </span>
-                </a>
-              ))}
-            </nav>
-
-            <div className="mkt-uptime-card">
-              <div className="mkt-uptime-grid uptime-grid-head">
-                <div>Endpoint</div>
-                <div>Benefit</div>
-                <div>Status</div>
-                <div>Last check</div>
-              </div>
-              {visibleProviders.map((provider) => (
-                <UptimeRow key={provider.id} provider={provider} />
-              ))}
-              <div className="uptime-foot">
-                <span>
-                  {visibleProbedCount
-                    ? `Showing ${visibleProviders.length} ${selectedCategoryName.toLowerCase()} endpoints from live health checks.`
-                    : `Showing ${visibleProviders.length} ${selectedCategoryName.toLowerCase()} endpoints from the live registry. Awaiting probe history.`}
-                </span>
-                <span className="mono">v0.1.0</span>
-              </div>
-            </div>
+            <EndpointStatusFilter
+              categories={categoryTabs}
+              endpoints={providers}
+              initialCategory={activeCategory}
+            />
           </div>
         </section>
 
