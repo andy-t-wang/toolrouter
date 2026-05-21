@@ -1834,6 +1834,69 @@ code {
   text-transform: uppercase;
 }
 
+.endpoint-tabs {
+  align-items: center;
+  display: flex;
+  gap: 6px;
+  margin-bottom: 14px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+  scrollbar-width: none;
+}
+
+.endpoint-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.endpoint-tabs a {
+  align-items: center;
+  background: transparent;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  color: var(--ink-2);
+  display: inline-flex;
+  flex: 0 0 auto;
+  font-size: 13px;
+  font-weight: 500;
+  gap: 8px;
+  height: 34px;
+  line-height: 1;
+  padding: 0 8px 0 12px;
+  transition: background 0.12s ease, border-color 0.12s ease, transform 0.12s ease;
+  white-space: nowrap;
+}
+
+.endpoint-tabs a:hover {
+  background: var(--bone-2);
+  transform: translateY(-1px);
+}
+
+.endpoint-tabs a.active {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--bone);
+}
+
+.endpoint-tab-count {
+  align-items: center;
+  background: var(--bone-2);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--mute);
+  display: inline-flex;
+  font: 600 11px/1 "JetBrains Mono", monospace;
+  height: 20px;
+  justify-content: center;
+  min-width: 22px;
+  padding: 0 6px;
+}
+
+.endpoint-tabs a.active .endpoint-tab-count {
+  background: color-mix(in oklab, var(--bone) 16%, transparent);
+  border-color: color-mix(in oklab, var(--bone) 24%, transparent);
+  color: var(--bone);
+}
+
 .mkt-uptime-card {
   background: var(--card);
   border: 1px solid var(--line);
@@ -1890,6 +1953,21 @@ code {
 
 .provider-id {
   font-size: 11px;
+}
+
+.recommended-pill {
+  background: #ffffff;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  color: var(--ink);
+  display: inline-flex;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0;
+  line-height: 1;
+  padding: 4px 7px;
+  text-transform: uppercase;
+  white-space: nowrap;
 }
 
 .check-age {
