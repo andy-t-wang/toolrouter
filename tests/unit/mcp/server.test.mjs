@@ -91,11 +91,12 @@ describe("ToolRouter MCP server", () => {
     assert.equal(sendMailTool.inputSchema.properties.to.oneOf.length, 2);
     assert.equal(sendMailTool.inputSchema.properties.to.oneOf[1].minItems, 1);
     assert.ok(sendMailTool.inputSchema.properties.replyTo);
-    assert.ok(hasRequiredAlternative(sendMailTool.inputSchema, ["inboxId", "to", "subject", "html"]));
-    assert.ok(hasRequiredAlternative(sendMailTool.inputSchema, ["inbox_id", "to", "subject", "text"]));
+    assert.ok(hasRequiredAlternative(sendMailTool.inputSchema, ["inboxId", "to", "html"]));
+    assert.ok(hasRequiredAlternative(sendMailTool.inputSchema, ["inbox_id", "to", "text"]));
     assert.equal(sendMailTool.inputSchema.properties.attachments.maxItems, 10);
     const replyMailTool = tools().find((tool) => tool.name === "agentmail_reply_to_message");
     assert.ok(replyMailTool.inputSchema.properties.replyTo);
+    assert.ok(replyMailTool.inputSchema.properties.replyAll);
     assert.ok(hasRequiredAlternative(replyMailTool.inputSchema, ["inboxId", "messageId", "html"]));
     assert.ok(hasRequiredAlternative(replyMailTool.inputSchema, ["inbox_id", "message_id", "text"]));
   });

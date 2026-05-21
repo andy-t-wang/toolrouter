@@ -386,17 +386,28 @@ describe("endpoint registry", () => {
     assert.equal(send.estimatedUsd, "0.02");
     assert.equal(agentmailPriceUsd("send_message"), "0.02");
 
+    const subjectlessSend = buildEndpointRequest("agentmail.send_message", {
+      inbox_id: "agent@agentmail.to",
+      to: "recipient@example.com",
+      text: "Subjectless body",
+    });
+    assert.deepEqual(subjectlessSend.json, {
+      inbox_id: "agent@agentmail.to",
+      to: "recipient@example.com",
+      text: "Subjectless body",
+    });
+
     const reply = buildEndpointRequest("agentmail.reply_to_message", {
       inbox_id: "agent@agentmail.to",
       message_id: "msg_123",
-      text: "Thanks",
-      reply_all: true,
+      html: "<p>Thanks</p>",
+      replyAll: true,
     });
     assert.ok(reply.url.endsWith("/x402/agentmail/messages/reply"));
     assert.deepEqual(reply.json, {
       inbox_id: "agent@agentmail.to",
       message_id: "msg_123",
-      text: "Thanks",
+      html: "<p>Thanks</p>",
       reply_all: true,
     });
     assert.equal(reply.estimatedUsd, "0.02");

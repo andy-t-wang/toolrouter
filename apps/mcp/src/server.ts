@@ -376,7 +376,6 @@ function inputPropertiesForKind(kind: string) {
       requiredAlternatives: requiredCombinations(
         ["inbox_id", "inboxId"],
         ["to"],
-        ["subject"],
         ["text", "html"],
       ),
     };
@@ -397,6 +396,7 @@ function inputPropertiesForKind(kind: string) {
           description: "Compatibility alias for reply_to.",
         },
         reply_all: { type: "boolean" },
+        replyAll: { type: "boolean", description: "Compatibility alias for reply_all." },
         text: { type: "string" },
         html: { type: "string" },
         labels: { type: "array", items: { type: "string" }, maxItems: 20 },
