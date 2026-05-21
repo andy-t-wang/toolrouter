@@ -108,6 +108,7 @@ describe("ToolRouter MCP live e2e", () => {
     );
     assert.ok(categories.categories.some((category) => category.id === "search"));
     assert.ok(categories.categories.some((category) => category.id === "research"));
+    assert.ok(categories.categories.some((category) => category.id === "email"));
 
     const recommendation = assertToolOk(
       await callTool("toolrouter_recommend_endpoint", { category: "search" }, liveOptions()),
@@ -121,6 +122,12 @@ describe("ToolRouter MCP live e2e", () => {
     );
     assert.equal(researchRecommendation.recommended_endpoint.id, "manus.research");
     assert.equal(researchRecommendation.recommended_mcp_tool, "manus_research_start");
+    const emailRecommendation = assertToolOk(
+      await callTool("toolrouter_recommend_endpoint", { category: "email" }, liveOptions()),
+      "toolrouter_recommend_endpoint email",
+    );
+    assert.equal(emailRecommendation.recommended_endpoint.id, "agentmail.send_message");
+    assert.equal(emailRecommendation.recommended_mcp_tool, "toolrouter_send_email");
   });
 
   it("executes paid endpoint tools through MCP and can read the resulting trace", { skip: runPaid ? false : "live paid MCP smoke disabled" }, async () => {

@@ -131,6 +131,7 @@ export function publicRequestError(row: any) {
 export function recommendedMcpToolForCategory(categoryId: string) {
   if (categoryId === "research") return "manus_research_start";
   if (categoryId === "search") return "toolrouter_search";
+  if (categoryId === "email") return "toolrouter_send_email";
   if (categoryId === "browser_usage") return "toolrouter_browser_use";
   return null;
 }
@@ -163,7 +164,10 @@ export function mcpToolsForEndpoint(endpointId: string) {
   }
   const agentmailTool = recommendedMcpToolForEndpoint(endpointId);
   if (agentmailTool?.startsWith("agentmail_")) {
-    return { call: agentmailTool };
+    return {
+      call: agentmailTool,
+      ...(endpointId === "agentmail.send_message" ? { category: "toolrouter_send_email" } : {}),
+    };
   }
   return null;
 }

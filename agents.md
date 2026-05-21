@@ -99,7 +99,7 @@ These are durable project decisions for future agents working in this repo.
 - The ToolRouter MCP server lives in `apps/mcp`, publishes as `@worldcoin/toolrouter`, and runs for users with `npx -y @worldcoin/toolrouter`.
 - It reads `TOOLROUTER_API_URL` and `TOOLROUTER_API_KEY` from its environment and calls ToolRouter through `POST /v1/requests`.
 - MCP tools should remain thin wrappers over named endpoints plus generic category/list/trace tools. The MCP process must not load wallet private keys, Crossmint signer secrets, Supabase service role keys, or provider API keys.
-- Generic MCP tools such as `toolrouter_search` and `toolrouter_browser_use` are convenience wrappers over the current recommended endpoint for that category. They should still submit a concrete `endpoint_id` to the API.
+- Generic MCP tools such as `toolrouter_search`, `toolrouter_send_email`, and `toolrouter_browser_use` are convenience wrappers over the current recommended endpoint for that category. They should still submit a concrete `endpoint_id` to the API.
 - The setup page at `/setup` should stay agent-agnostic and include a first test query for top sushi places in SF.
 
 ## Testing

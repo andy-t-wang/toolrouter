@@ -48,6 +48,7 @@ describe("ToolRouter MCP built dist", () => {
       "toolrouter_list_endpoints",
       "toolrouter_recommend_endpoint",
       "toolrouter_search",
+      "toolrouter_send_email",
     ]);
   });
 

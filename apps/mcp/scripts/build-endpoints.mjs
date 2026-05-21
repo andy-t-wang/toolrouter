@@ -129,6 +129,13 @@ const CATEGORY_TOOL_DEFINITIONS = Object.freeze([
     category: "search",
   },
   {
+    tool_name: "toolrouter_send_email",
+    title: "Send email",
+    description: "Send an email through ToolRouter's recommended email endpoint.",
+    input_kind: "agentmail_send_message",
+    category: "email",
+  },
+  {
     tool_name: "toolrouter_browser_use",
     title: "Browser use",
     description: "Start a browser session through ToolRouter's recommended browser-use endpoint.",

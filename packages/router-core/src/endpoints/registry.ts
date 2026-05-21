@@ -1,11 +1,11 @@
 import { ENDPOINT_CATEGORY_DEFINITIONS, isEndpointCategory } from "./categories.ts";
 import { browserbaseSessionEndpointDefinition } from "./browser_usage/browserbase/session.ts";
 import { parallelExtractEndpointDefinition } from "./extract/parallel/extract.ts";
-import { agentmailCreateInboxEndpointDefinition } from "./productivity/agentmail/create-inbox.ts";
-import { agentmailGetMessageEndpointDefinition } from "./productivity/agentmail/get-message.ts";
-import { agentmailListMessagesEndpointDefinition } from "./productivity/agentmail/list-messages.ts";
-import { agentmailReplyToMessageEndpointDefinition } from "./productivity/agentmail/reply-to-message.ts";
-import { agentmailSendMessageEndpointDefinition } from "./productivity/agentmail/send-message.ts";
+import { agentmailCreateInboxEndpointDefinition } from "./email/agentmail/create-inbox.ts";
+import { agentmailGetMessageEndpointDefinition } from "./email/agentmail/get-message.ts";
+import { agentmailListMessagesEndpointDefinition } from "./email/agentmail/list-messages.ts";
+import { agentmailReplyToMessageEndpointDefinition } from "./email/agentmail/reply-to-message.ts";
+import { agentmailSendMessageEndpointDefinition } from "./email/agentmail/send-message.ts";
 import { manusResearchEndpointDefinition } from "./research/manus/research.ts";
 import { parallelTaskEndpointDefinition } from "./research/parallel/task.ts";
 import { exaSearchEndpointDefinition } from "./search/exa/search.ts";

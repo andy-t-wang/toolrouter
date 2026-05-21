@@ -49,11 +49,11 @@ export const ENDPOINT_CATEGORY_DEFINITIONS = Object.freeze([
     use_cases: ["batch jobs", "transforms", "sandboxed execution"],
   },
   {
-    id: "productivity",
-    name: "Productivity",
-    description: "Email, calendar, documents, task, and workspace actions.",
-    recommended_endpoint_id: null,
-    use_cases: ["calendar", "email", "documents"],
+    id: "email",
+    name: "Email",
+    description: "Send, receive, list, and reply to email through agent-owned inboxes.",
+    recommended_endpoint_id: "agentmail.send_message",
+    use_cases: ["send email", "read inbox", "reply to messages"],
   },
   {
     id: "browser_usage",

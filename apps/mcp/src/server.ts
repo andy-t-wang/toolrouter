@@ -556,7 +556,7 @@ export function tools(): McpTool[] {
       title: "List ToolRouter endpoints",
       description: "List verified ToolRouter endpoint IDs available to this API key. Manus status/result helpers are MCP tools, not endpoint IDs; use the endpoint mcp_tools metadata or tools/list for those helper names.",
       inputSchema: jsonSchema({
-        category: { type: "string", description: "Optional endpoint category filter, such as search or browser_usage." },
+        category: { type: "string", description: "Optional endpoint category filter, such as search, email, or browser_usage." },
       }),
     },
     {
@@ -570,9 +570,9 @@ export function tools(): McpTool[] {
     {
       name: "toolrouter_recommend_endpoint",
       title: "Recommend endpoint",
-      description: "Pick the recommended concrete endpoint and MCP tool for a generic category such as search, research, or browser_usage.",
+      description: "Pick the recommended concrete endpoint and MCP tool for a generic category such as search, email, research, or browser_usage.",
       inputSchema: jsonSchema({
-        category: { type: "string", description: "Tool category, such as search, research, data, or browser_usage." },
+        category: { type: "string", description: "Tool category, such as search, email, research, data, or browser_usage." },
       }, ["category"]),
     },
     {
@@ -1145,7 +1145,7 @@ export async function callTool(name: string, args: any = {}, options: any = {}) 
     if (name === "parallel_task_start") {
       return parallelTaskStartResult(data);
     }
-    if (name.startsWith("agentmail_")) {
+    if (name.startsWith("agentmail_") || name === "toolrouter_send_email") {
       return agentmailToolResult(data);
     }
     return textResult(JSON.stringify(data, null, 2), data);
