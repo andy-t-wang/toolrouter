@@ -1867,6 +1867,14 @@ code {
   background: var(--bone-2);
 }
 
+.mkt-uptime-row.is-disabled {
+  opacity: 0.55;
+}
+
+.mkt-uptime-row.is-disabled:hover {
+  background: transparent;
+}
+
 .provider-cell {
   gap: 10px;
 }
@@ -1982,6 +1990,12 @@ code {
   display: block;
   height: 14px;
   width: 14px;
+}
+
+.agentkit-status-pill.is-muted {
+  border-color: var(--line);
+  color: var(--mute);
+  font-weight: 500;
 }
 
 .prov-mark {
