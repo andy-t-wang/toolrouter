@@ -204,19 +204,25 @@ export function endpointDto(endpoint: any) {
 
 export function publicEndpoint(endpoint: any, statusByEndpoint: Map<string, any>) {
   const status = statusByEndpoint.get(endpoint.id);
+  const manualHealth = isManualHealthEndpoint(endpoint);
   return {
     ...endpointDto(endpoint),
     recommended_mcp_tool: recommendedMcpToolForEndpoint(endpoint.id),
     mcp_tools: mcpToolsForEndpoint(endpoint.id),
-    status: status?.status || "unverified",
-    last_checked_at: status?.last_checked_at || null,
-    latency_ms: status?.latency_ms || null,
-    last_error: publicStatusError(status),
+    status: publicEndpointHealthStatus(endpoint, status),
+    last_checked_at: manualHealth ? null : status?.last_checked_at || null,
+    latency_ms: manualHealth ? null : status?.latency_ms || null,
+    last_error: manualHealth ? null : publicStatusError(status),
   };
 }
 
-export function hasAutomatedHealthProbe(endpoint: any) {
-  return endpoint?.health_probe?.mode !== "manual_only";
+export function isManualHealthEndpoint(endpoint: any) {
+  return endpoint?.health_probe?.mode === "manual_only";
+}
+
+export function publicEndpointHealthStatus(endpoint: any, status?: any) {
+  if (isManualHealthEndpoint(endpoint)) return "healthy";
+  return status?.status || "unverified";
 }
 
 function freshLayerStatus(value: any, updatedAt: any, now: Date) {
@@ -267,7 +273,10 @@ export function publicStatusDto(
   const latencyValues = checks
     .map((check) => Number(check.latency_ms))
     .filter(Number.isFinite);
-  const currentStatus = status?.status || latestCheck?.status || "unverified";
+  const manualHealth = isManualHealthEndpoint(endpoint);
+  const currentStatus = manualHealth
+    ? "healthy"
+    : status?.status || latestCheck?.status || "unverified";
   const latestAgentKitEvidence = latestByCheckedAt([
     ...(status && countsAsAgentKitEvidence(endpoint, status) ? [status] : []),
     ...checks.filter((check) => countsAsAgentKitEvidence(endpoint, check)),
@@ -285,16 +294,16 @@ export function publicStatusDto(
     agentkit_value_type: endpoint.agentkit_value_type,
     agentkit_value_label: endpoint.agentkit_value_label,
     status: currentStatus,
-    last_checked_at: status?.last_checked_at || latestCheck?.checked_at || null,
-    status_code: status?.status_code ?? latestCheck?.status_code ?? null,
-    latency_ms: status?.latency_ms ?? latestCheck?.latency_ms ?? null,
+    last_checked_at: manualHealth ? null : status?.last_checked_at || latestCheck?.checked_at || null,
+    status_code: manualHealth ? null : status?.status_code ?? latestCheck?.status_code ?? null,
+    latency_ms: manualHealth ? null : status?.latency_ms ?? latestCheck?.latency_ms ?? null,
     p50_latency_ms: median(latencyValues),
     uptime_30d: average(uptimeValues),
     sparkline_30d,
     health_check_count_30d: checks.length,
-    path: status?.path || latestCheck?.path || null,
-    charged: Boolean(status?.charged ?? latestCheck?.charged ?? false),
-    amount_usd: status?.amount_usd ?? latestCheck?.amount_usd ?? null,
+    path: manualHealth ? null : status?.path || latestCheck?.path || null,
+    charged: manualHealth ? false : Boolean(status?.charged ?? latestCheck?.charged ?? false),
+    amount_usd: manualHealth ? null : status?.amount_usd ?? latestCheck?.amount_usd ?? null,
     agentkit_status: latestAgentKitEvidence?.status || "unverified",
     agentkit_operational: latestAgentKitEvidence
       ? checkCountsAsUp(latestAgentKitEvidence)
@@ -302,8 +311,8 @@ export function publicStatusDto(
     agentkit_last_checked_at: checkedAt(latestAgentKitEvidence),
     agentkit_path: latestAgentKitEvidence?.path || null,
     agentkit_charged: Boolean(latestAgentKitEvidence?.charged || false),
-    layers: publicStatusLayers(status, now),
-    last_error: publicStatusError(status || latestCheck),
+    layers: publicStatusLayers(manualHealth ? null : status, now),
+    last_error: manualHealth ? null : publicStatusError(status || latestCheck),
   };
 }
 
@@ -324,7 +333,6 @@ export async function publicStatusRows(store: any, category?: string) {
     ]);
   }
   return listEndpoints({ category })
-    .filter(hasAutomatedHealthProbe)
     .map((endpoint: any) =>
       publicStatusDto(
         endpoint,
@@ -460,9 +468,9 @@ export async function monitoringPayload(store: any, user_id: string) {
   const statusByEndpoint = new Map<string, any>(
     statuses.map((status: any) => [status.endpoint_id, status]),
   );
-  const endpointStatuses = listEndpoints().filter(hasAutomatedHealthProbe).map(
+  const endpointStatuses = listEndpoints().map(
     (endpoint: any) =>
-      statusByEndpoint.get(endpoint.id)?.status || "unverified",
+      publicEndpointHealthStatus(endpoint, statusByEndpoint.get(endpoint.id)),
   );
   const healthyEndpoints = endpointStatuses.filter(
     (status: string) => status === "healthy",
