@@ -15,12 +15,12 @@ export const parallelExtractEndpointDefinition = Object.freeze({
   description: "URL content extraction through ToolRouter's x402 Parallel wrapper.",
   url: `${wrapperBaseUrl()}/x402/parallel/extract`,
   method: "POST",
-  agentkit: true,
+  agentkit: false,
   x402: true,
   estimated_cost_usd: 0.02,
-  agentkit_value_type: "free_trial",
-  agentkit_value_label: "AgentKit-Free Trial",
-  default_payment_mode: "agentkit_first",
+  agentkit_value_type: null,
+  agentkit_value_label: null,
+  default_payment_mode: "x402_only",
   ui: {
     badge: "Extract",
     fixture_label: "Extract with Parallel",
@@ -38,19 +38,9 @@ export const parallelExtractEndpointDefinition = Object.freeze({
       urls: ["https://example.com"],
     },
   },
-  agentkit_health_probe: {
-    mode: "agentkit_benefit",
-    payment_mode: "agentkit_first",
-    max_usd: SINGLE_URL_PRICE,
-    latency_budget_ms: 20000,
-    timeout_ms: 20000,
-    input: {
-      urls: ["https://example.com"],
-    },
-  },
   live_smoke: {
     default_path: {
-      payment_mode: "agentkit_first",
+      payment_mode: "x402_only",
       max_usd: SINGLE_URL_PRICE,
       input: {
         urls: ["https://example.com"],

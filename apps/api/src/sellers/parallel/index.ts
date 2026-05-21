@@ -2,9 +2,7 @@
 // extract, task) that settle on Base and forward to Parallel's standard API.
 //
 // Each manifest mirrors the Manus seller structure so adding the second
-// provider proves the declarative seller pattern. Three separate
-// `MonthlyAgentKitStorage` keyspaces keep AgentKit free-trial counters
-// scoped per endpoint.
+// provider proves the declarative seller pattern.
 
 import type { SellerManifest } from "@toolrouter/router-core";
 
@@ -47,7 +45,7 @@ export const parallelSearchSellerManifest: SellerManifest = Object.freeze({
   mime_type: "application/json",
   secrets: PARALLEL_SECRETS,
   pricing: () => parallelSearchPriceUsd(),
-  agentkit: Object.freeze({ type: "free_trial", uses: 5, window: "monthly" }),
+  agentkit: null,
   pay_to_env_order: PARALLEL_PAY_TO_ENV_ORDER,
   upstream: Object.freeze({
     url: "https://api.parallel.ai/v1/search",
@@ -57,7 +55,7 @@ export const parallelSearchSellerManifest: SellerManifest = Object.freeze({
     }),
     body_factory: (input: any) => input,
   }),
-  unpaid_response_body: Object.freeze({ error: "x402 payment or AgentKit verification required" }),
+  unpaid_response_body: Object.freeze({ error: "x402 payment required" }),
 }) as SellerManifest;
 
 export const parallelExtractSellerManifest: SellerManifest = Object.freeze({
@@ -68,7 +66,7 @@ export const parallelExtractSellerManifest: SellerManifest = Object.freeze({
   mime_type: "application/json",
   secrets: PARALLEL_SECRETS,
   pricing: (input: any) => parallelExtractPriceUsd(input || {}),
-  agentkit: Object.freeze({ type: "free_trial", uses: 5, window: "monthly" }),
+  agentkit: null,
   pay_to_env_order: PARALLEL_PAY_TO_ENV_ORDER,
   upstream: Object.freeze({
     url: "https://api.parallel.ai/v1/extract",
@@ -78,7 +76,7 @@ export const parallelExtractSellerManifest: SellerManifest = Object.freeze({
     }),
     body_factory: (input: any) => input,
   }),
-  unpaid_response_body: Object.freeze({ error: "x402 payment or AgentKit verification required" }),
+  unpaid_response_body: Object.freeze({ error: "x402 payment required" }),
 }) as SellerManifest;
 
 export const parallelTaskSellerManifest: SellerManifest = Object.freeze({
@@ -89,7 +87,7 @@ export const parallelTaskSellerManifest: SellerManifest = Object.freeze({
   mime_type: "application/json",
   secrets: PARALLEL_SECRETS,
   pricing: (input: any) => parallelTaskPriceUsd(input || {}),
-  agentkit: Object.freeze({ type: "free_trial", uses: 1, window: "monthly" }),
+  agentkit: null,
   pay_to_env_order: PARALLEL_PAY_TO_ENV_ORDER,
   upstream: Object.freeze({
     url: "https://api.parallel.ai/v1/tasks/runs",
@@ -99,7 +97,7 @@ export const parallelTaskSellerManifest: SellerManifest = Object.freeze({
     }),
     body_factory: (input: any) => input,
   }),
-  unpaid_response_body: Object.freeze({ error: "x402 payment or AgentKit verification required" }),
+  unpaid_response_body: Object.freeze({ error: "x402 payment required" }),
 }) as SellerManifest;
 
 export interface RegisterParallelSellerDeps {

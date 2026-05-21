@@ -5,6 +5,7 @@ import {
   buildEndpointHealthProbeRequest,
   buildEndpointRequest,
   endpointRegistry,
+  getEndpoint,
   listCategories,
   listEndpoints,
   recommendEndpoint,
@@ -119,6 +120,13 @@ describe("endpoint registry", () => {
     const probe = buildEndpointHealthProbeRequest("parallel.search");
     assert.equal(probe.paymentMode, "x402_only");
     assert.equal(probe.maxUsd, "0.02");
+
+    const endpoint = getEndpoint("parallel.search");
+    assert.equal(endpoint.agentkit, false);
+    assert.equal(endpoint.agentkit_value_type, null);
+    assert.equal(endpoint.agentkit_value_label, null);
+    assert.equal(endpoint.defaultPaymentMode, "x402_only");
+    assert.equal(endpoint.agentkitHealthProbe, null);
   });
 
   it("builds Parallel Extract requests priced per URL plus markup", () => {
@@ -154,6 +162,13 @@ describe("endpoint registry", () => {
     assert.equal(five.estimatedUsd, "0.06");
     assert.deepEqual(five.json.advanced_settings, { full_content: true });
     assert.equal(parallelExtractPriceUsd(5), "0.06");
+
+    const endpoint = getEndpoint("parallel.extract");
+    assert.equal(endpoint.agentkit, false);
+    assert.equal(endpoint.agentkit_value_type, null);
+    assert.equal(endpoint.agentkit_value_label, null);
+    assert.equal(endpoint.defaultPaymentMode, "x402_only");
+    assert.equal(endpoint.agentkitHealthProbe, null);
   });
 
   it("builds Parallel Task requests with processor pricing", () => {
@@ -175,6 +190,13 @@ describe("endpoint registry", () => {
     assert.equal(core.json.processor, "core");
     assert.equal(core.estimatedUsd, "0.035");
     assert.equal(parallelTaskPriceForProcessor("core"), "0.035");
+
+    const endpoint = getEndpoint("parallel.task");
+    assert.equal(endpoint.agentkit, false);
+    assert.equal(endpoint.agentkit_value_type, null);
+    assert.equal(endpoint.agentkit_value_label, null);
+    assert.equal(endpoint.defaultPaymentMode, "x402_only");
+    assert.equal(endpoint.agentkitHealthProbe, null);
 
     const ultra = buildEndpointRequest("parallel.task", {
       input: "Deep research brief",

@@ -70,6 +70,11 @@ describe("web dashboard static wiring", () => {
     assert.doesNotMatch(landingPage, /AgentKitStatusBadge/);
     assert.doesNotMatch(landingPage, /status-human-badge/);
     assert.doesNotMatch(landingPage, /Agentation/);
+    assert.match(landingPage, /sortLandingEndpoints\(/);
+    assert.match(landingPage, /landingEndpointHasAgentKitIntegration\(provider\)/);
+    assert.match(landingPage, /endpoint-tabs/);
+    assert.match(landingPage, /isRecommendedEndpoint/);
+    assert.match(landingPage, /No AgentKit Support/);
     assert.doesNotMatch(landingPage, /http:\/\/127\.0\.0\.1:9402/);
     assert.doesNotMatch(landingPage, /Get an MCP key/);
     assert.doesNotMatch(landingPage, /Pricing/);
@@ -245,6 +250,7 @@ describe("web dashboard static wiring", () => {
     assert.match(css, /\.endpoint-tabs/);
     assert.match(css, /\.endpoint-tab-count/);
     assert.match(css, /\.recommended-pill/);
+    assert.doesNotMatch(css, /\.recommended-pill\s*\{[^}]*text-transform:\s*uppercase/);
     assert.match(css, /\.topnav/);
     assert.match(css, /\.topnav-tabs/);
     assert.match(css, /\.topnav-tabs\s*\{[^}]*display:\s*none/);
