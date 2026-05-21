@@ -48,6 +48,19 @@ describe("web dashboard static wiring", () => {
     assert.match(landingPage, /<div>Benefit<\/div>/);
     assert.match(landingPage, /Last check/);
     assert.match(landingPage, /Checked at least once/);
+    assert.match(landingPage, /categoryTabsFromEndpoints/);
+    assert.match(landingPage, /Endpoint categories/);
+    assert.match(landingPage, /endpoint-tabs/);
+    assert.match(landingPage, /fallbackById\.has\(endpoint\.id\)/);
+    assert.match(landingPage, /endpoint_count:\s+endpoints\.length/);
+    assert.match(landingPage, /categoryTabHref\(category\.id\)/);
+    assert.match(landingPage, /visibleProviders\.map/);
+    assert.match(landingPage, /isRecommendedEndpoint\(provider\)/);
+    assert.match(landingPage, /Recommended default endpoint/);
+    assert.match(landingPage, /Recommended/);
+    assert.match(landingPage, /hasAgentKitBenefit\(provider\)/);
+    assert.match(landingPage, /paid through AgentKit or x402/);
+    assert.doesNotMatch(landingPage, /provider\.provider === "parallel"/);
     assert.doesNotMatch(landingPage, /Fleet uptime/);
     assert.doesNotMatch(landingPage, /Last 30 days/);
     assert.doesNotMatch(landingPage, /<div>Path<\/div>/);
@@ -143,6 +156,7 @@ describe("web dashboard static wiring", () => {
     assert.match(providerLogos, /\/exa-logomark\.svg/);
     assert.match(providerLogos, /\/browserbase-logomark\.svg/);
     assert.match(providerLogos, /\/manus-logomark\.svg/);
+    assert.match(providerLogos, /\/agentmail-logomark\.svg/);
     assert.match(dashboardPage, /providerLogoPath/);
     assert.match(dashboardPage, /<th>Protocol<\/th>/);
     assert.match(dashboardPage, /<th>Benefit<\/th>/);
@@ -227,6 +241,9 @@ describe("web dashboard static wiring", () => {
   it("keeps the ToolRouter visual system in the Next app", () => {
     assert.match(css, /--bone/);
     assert.match(css, /\.mkt-hero/);
+    assert.match(css, /\.endpoint-tabs/);
+    assert.match(css, /\.endpoint-tab-count/);
+    assert.match(css, /\.recommended-pill/);
     assert.match(css, /\.topnav/);
     assert.match(css, /\.topnav-tabs/);
     assert.match(css, /\.topnav-tabs\s*\{[^}]*display:\s*none/);
@@ -243,6 +260,8 @@ describe("web dashboard static wiring", () => {
     assert.doesNotMatch(css, /\.endpoint-cell\s*\{[^}]*display:\s*grid/);
     assert.match(layout, /rel="icon"/);
     assert.match(layout, /\/logo\.png/);
+    assert.match(endpointManifestLib, /landingCategoryFallbacks/);
+    assert.match(endpointManifestLib, /recommended_endpoint_id/);
   });
 
   it("serves path-specific OpenGraph images for public pages", () => {

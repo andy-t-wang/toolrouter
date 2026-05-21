@@ -1,4 +1,7 @@
-import { landingEndpointFallbacks } from "../lib/endpoint-manifest.ts";
+import {
+  landingCategoryFallbacks,
+  landingEndpointFallbacks,
+} from "../lib/endpoint-manifest.ts";
 import { providerLogoPath } from "../lib/provider-logos.ts";
 
 export const dynamic = "force-dynamic";
@@ -39,7 +42,21 @@ type LandingStatus = {
   endpoints: LandingEndpoint[];
 };
 
+type LandingCategory = {
+  id: string;
+  name: string;
+  endpoint_count: number;
+  recommended_endpoint_id: string | null;
+};
+
+type LandingPageProps = {
+  searchParams?:
+    | Promise<Record<string, string | string[] | undefined>>
+    | Record<string, string | string[] | undefined>;
+};
+
 const fallbackEndpoints: LandingEndpoint[] = landingEndpointFallbacks();
+const fallbackCategories: LandingCategory[] = landingCategoryFallbacks();
 
 const fallbackStatus: LandingStatus = {
   status: "unverified",
@@ -51,6 +68,16 @@ const fallbackStatus: LandingStatus = {
   },
   endpoints: fallbackEndpoints,
 };
+
+const categoryNameById = new Map(
+  fallbackCategories.map((category) => [category.id, category.name]),
+);
+
+const recommendedEndpointIdByCategory = new Map(
+  fallbackCategories
+    .filter((category) => category.recommended_endpoint_id)
+    .map((category) => [category.id, category.recommended_endpoint_id]),
+);
 
 function statusRank(status: string) {
   const ranks: Record<string, number> = {
@@ -71,25 +98,24 @@ function mergeEndpointRows(rows: LandingEndpoint[]) {
     fallbackStatus.endpoints.map((endpoint) => [endpoint.id, endpoint]),
   );
   const seen = new Set<string>();
-  const merged = rows.map((endpoint) => {
-    seen.add(endpoint.id);
-    return {
-      ...(fallbackById.get(endpoint.id) || {}),
-      ...endpoint,
-    };
-  });
+  const merged = rows
+    .filter((endpoint) => fallbackById.has(endpoint.id))
+    .map((endpoint) => {
+      seen.add(endpoint.id);
+      return {
+        ...(fallbackById.get(endpoint.id) || {}),
+        ...endpoint,
+      };
+    });
   for (const endpoint of fallbackStatus.endpoints) {
     if (!seen.has(endpoint.id)) merged.push(endpoint);
   }
   return merged;
 }
 
-function summarizeStatus(endpoints: LandingEndpoint[], bodySummary: any = {}) {
+function summarizeStatus(endpoints: LandingEndpoint[]) {
   return {
-    endpoint_count: Math.max(
-      Number(bodySummary?.endpoint_count || 0),
-      endpoints.length,
-    ),
+    endpoint_count: endpoints.length,
     operational_count: endpoints.filter(
       (endpoint) => publicEndpointStatus(endpoint) === "healthy",
     ).length,
@@ -127,7 +153,7 @@ async function loadLandingStatus(): Promise<LandingStatus> {
     const endpoints = mergeEndpointRows(
       body.endpoints.length ? body.endpoints : fallbackStatus.endpoints,
     );
-    const summary = summarizeStatus(endpoints, body.summary);
+    const summary = summarizeStatus(endpoints);
     return {
       status: fleetStatusFromEndpoints(endpoints),
       summary,
@@ -140,6 +166,67 @@ async function loadLandingStatus(): Promise<LandingStatus> {
 
 function titleCase(value: string) {
   return value ? `${value.slice(0, 1).toUpperCase()}${value.slice(1)}` : value;
+}
+
+function categoryName(categoryId: string) {
+  return (
+    categoryNameById.get(categoryId) ||
+    categoryId
+      .split("_")
+      .map((part) => titleCase(part))
+      .join(" ")
+  );
+}
+
+async function requestedCategoryFromSearchParams(
+  searchParams: LandingPageProps["searchParams"],
+) {
+  const resolved: Record<string, string | string[] | undefined> | undefined =
+    searchParams && typeof (searchParams as Promise<any>).then === "function"
+      ? await (searchParams as Promise<
+          Record<string, string | string[] | undefined>
+        >)
+      : (searchParams as Record<string, string | string[] | undefined> | undefined);
+  const value = resolved?.category;
+  const category = Array.isArray(value) ? value[0] : value;
+  return typeof category === "string" && category ? category : "all";
+}
+
+function categoryTabsFromEndpoints(endpoints: LandingEndpoint[]) {
+  const counts = new Map<string, number>();
+  for (const endpoint of endpoints) {
+    if (!endpoint.category) continue;
+    counts.set(endpoint.category, (counts.get(endpoint.category) || 0) + 1);
+  }
+  const tabs: LandingCategory[] = [
+    {
+      id: "all",
+      name: "All",
+      endpoint_count: endpoints.length,
+      recommended_endpoint_id: null,
+    },
+  ];
+  for (const category of fallbackCategories) {
+    const count = counts.get(category.id);
+    if (count) {
+      tabs.push({ ...category, endpoint_count: count });
+      counts.delete(category.id);
+    }
+  }
+  for (const [categoryId, count] of counts) {
+    tabs.push({
+      id: categoryId,
+      name: categoryName(categoryId),
+      endpoint_count: count,
+      recommended_endpoint_id: null,
+    });
+  }
+  return tabs;
+}
+
+function categoryTabHref(categoryId: string) {
+  if (categoryId === "all") return "/#endpoints";
+  return `/?category=${encodeURIComponent(categoryId)}#endpoints`;
 }
 
 function fleetLabel(status: string) {
@@ -198,6 +285,15 @@ function displayEndpointId(provider: LandingEndpoint) {
     : provider.id;
 }
 
+function isRecommendedEndpoint(provider: LandingEndpoint) {
+  if (!provider.category) return false;
+  return recommendedEndpointIdByCategory.get(provider.category) === provider.id;
+}
+
+function hasAgentKitBenefit(provider: LandingEndpoint) {
+  return Boolean(provider.agentkit_value_type || provider.agentkit_value_label);
+}
+
 function ProviderMark({ provider }: { provider: LandingEndpoint }) {
   const src = providerLogoSrc(provider.provider);
   const label = titleCase(provider.provider);
@@ -233,7 +329,7 @@ function agentKitBenefit(provider: LandingEndpoint) {
 }
 
 function AgentKitBenefit({ provider }: { provider: LandingEndpoint }) {
-  if (provider.provider === "parallel") {
+  if (!hasAgentKitBenefit(provider)) {
     return (
       <div className="agentkit-status-benefit">
         <span className="agentkit-status-pill is-muted">
@@ -254,6 +350,7 @@ function AgentKitBenefit({ provider }: { provider: LandingEndpoint }) {
 }
 
 function UptimeRow({ provider }: { provider: LandingEndpoint }) {
+  const recommended = isRecommendedEndpoint(provider);
   return (
     <div className="mkt-uptime-grid mkt-uptime-row">
       <div>
@@ -265,6 +362,14 @@ function UptimeRow({ provider }: { provider: LandingEndpoint }) {
               <span className="mono muted provider-id">
                 {displayEndpointId(provider)}
               </span>
+              {recommended ? (
+                <span
+                  className="recommended-pill"
+                  aria-label="Recommended default endpoint"
+                >
+                  Recommended
+                </span>
+              ) : null}
             </span>
           </span>
         </div>
@@ -324,15 +429,33 @@ function HumanBoostArt() {
   );
 }
 
-export default async function LandingPage() {
+export default async function LandingPage({ searchParams }: LandingPageProps = {}) {
   const statusData = await loadLandingStatus();
+  const requestedCategory = await requestedCategoryFromSearchParams(searchParams);
   const providers = [...statusData.endpoints].sort(
     (a, b) =>
-      (a.provider === "parallel" ? 1 : 0) - (b.provider === "parallel" ? 1 : 0),
+      (hasAgentKitBenefit(a) ? 0 : 1) - (hasAgentKitBenefit(b) ? 0 : 1),
   );
+  const categoryTabs = categoryTabsFromEndpoints(providers);
+  const activeCategory = categoryTabs.some(
+    (category) => category.id === requestedCategory,
+  )
+    ? requestedCategory
+    : "all";
+  const visibleProviders =
+    activeCategory === "all"
+      ? providers
+      : providers.filter((provider) => provider.category === activeCategory);
+  const selectedCategoryName =
+    categoryTabs.find((category) => category.id === activeCategory)?.name ||
+    "All";
   const operational = statusData.summary.operational_count;
   const endpointCount = statusData.summary.endpoint_count || providers.length;
   const probedCount = providers.reduce(
+    (count, provider) => count + (provider.health_check_count_30d ? 1 : 0),
+    0,
+  );
+  const visibleProbedCount = visibleProviders.reduce(
     (count, provider) => count + (provider.health_check_count_30d ? 1 : 0),
     0,
   );
@@ -394,7 +517,7 @@ export default async function LandingPage() {
             </h1>
             <p className="mkt-lede">
               ToolRouter is an MCP server your agent connects to once. Every
-              endpoint behind it is verified, paid through AgentKit, and traced
+              endpoint behind it is verified, paid through AgentKit or x402, and traced
               end-to-end, so when the model calls a tool, you know it works
               before you spend a cent.
             </p>
@@ -590,7 +713,7 @@ export default async function LandingPage() {
           </div>
         </section>
 
-        <section className="mkt-section">
+        <section className="mkt-section" id="endpoints">
           <div className="mkt-container">
             <div className="uptime-head">
               <div>
@@ -620,6 +743,24 @@ export default async function LandingPage() {
               </div>
             </div>
 
+            <nav className="endpoint-tabs" aria-label="Endpoint categories">
+              {categoryTabs.map((category) => (
+                <a
+                  key={category.id}
+                  className={category.id === activeCategory ? "active" : ""}
+                  href={categoryTabHref(category.id)}
+                  aria-current={
+                    category.id === activeCategory ? "page" : undefined
+                  }
+                >
+                  <span>{category.name}</span>
+                  <span className="endpoint-tab-count">
+                    {category.endpoint_count}
+                  </span>
+                </a>
+              ))}
+            </nav>
+
             <div className="mkt-uptime-card">
               <div className="mkt-uptime-grid uptime-grid-head">
                 <div>Endpoint</div>
@@ -627,14 +768,14 @@ export default async function LandingPage() {
                 <div>Status</div>
                 <div>Last check</div>
               </div>
-              {providers.map((provider) => (
+              {visibleProviders.map((provider) => (
                 <UptimeRow key={provider.id} provider={provider} />
               ))}
               <div className="uptime-foot">
                 <span>
-                  {probedCount
-                    ? `Showing ${providers.length} endpoints from live health checks.`
-                    : `Showing ${providers.length} endpoints from the live registry. Awaiting probe history.`}
+                  {visibleProbedCount
+                    ? `Showing ${visibleProviders.length} ${selectedCategoryName.toLowerCase()} endpoints from live health checks.`
+                    : `Showing ${visibleProviders.length} ${selectedCategoryName.toLowerCase()} endpoints from the live registry. Awaiting probe history.`}
                 </span>
                 <span className="mono">v0.1.0</span>
               </div>

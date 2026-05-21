@@ -10,6 +10,7 @@
 
 import {
   endpointRegistry,
+  listCategories,
   type MaterializedEndpoint,
 } from "@toolrouter/router-core";
 
@@ -58,6 +59,13 @@ export type LandingEndpointFallback = {
   layers: EndpointLayerStatuses;
 };
 
+export type LandingCategoryFallback = {
+  id: string;
+  name: string;
+  endpoint_count: number;
+  recommended_endpoint_id: string | null;
+};
+
 function toLandingFallback(endpoint: MaterializedEndpoint): LandingEndpointFallback {
   return {
     id: endpoint.id,
@@ -85,6 +93,15 @@ function toLandingFallback(endpoint: MaterializedEndpoint): LandingEndpointFallb
  */
 export function landingEndpointFallbacks(): LandingEndpointFallback[] {
   return endpointRegistry.map(toLandingFallback);
+}
+
+export function landingCategoryFallbacks(): LandingCategoryFallback[] {
+  return listCategories().map((category) => ({
+    id: category.id,
+    name: category.name,
+    endpoint_count: category.endpoint_count,
+    recommended_endpoint_id: category.recommended_endpoint_id,
+  }));
 }
 
 export function landingEndpointCount(): number {
