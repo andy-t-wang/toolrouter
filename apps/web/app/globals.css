@@ -1867,14 +1867,6 @@ code {
   background: var(--bone-2);
 }
 
-.mkt-uptime-row.is-disabled {
-  opacity: 0.55;
-}
-
-.mkt-uptime-row.is-disabled:hover {
-  background: transparent;
-}
-
 .provider-cell {
   gap: 10px;
 }

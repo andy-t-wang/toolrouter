@@ -254,11 +254,8 @@ function AgentKitBenefit({ provider }: { provider: LandingEndpoint }) {
 }
 
 function UptimeRow({ provider }: { provider: LandingEndpoint }) {
-  const isDisabled = provider.provider === "parallel";
   return (
-    <div
-      className={`mkt-uptime-grid mkt-uptime-row${isDisabled ? " is-disabled" : ""}`}
-    >
+    <div className="mkt-uptime-grid mkt-uptime-row">
       <div>
         <div className="row provider-cell">
           <ProviderMark provider={provider} />
