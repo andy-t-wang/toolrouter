@@ -233,6 +233,15 @@ function agentKitBenefit(provider: LandingEndpoint) {
 }
 
 function AgentKitBenefit({ provider }: { provider: LandingEndpoint }) {
+  if (provider.provider === "parallel") {
+    return (
+      <div className="agentkit-status-benefit">
+        <span className="agentkit-status-pill is-muted">
+          No AgentKit Support
+        </span>
+      </div>
+    );
+  }
   const benefit = agentKitBenefit(provider);
   return (
     <div className="agentkit-status-benefit">
@@ -245,8 +254,11 @@ function AgentKitBenefit({ provider }: { provider: LandingEndpoint }) {
 }
 
 function UptimeRow({ provider }: { provider: LandingEndpoint }) {
+  const isDisabled = provider.provider === "parallel";
   return (
-    <div className="mkt-uptime-grid mkt-uptime-row">
+    <div
+      className={`mkt-uptime-grid mkt-uptime-row${isDisabled ? " is-disabled" : ""}`}
+    >
       <div>
         <div className="row provider-cell">
           <ProviderMark provider={provider} />
@@ -317,7 +329,10 @@ function HumanBoostArt() {
 
 export default async function LandingPage() {
   const statusData = await loadLandingStatus();
-  const providers = statusData.endpoints;
+  const providers = [...statusData.endpoints].sort(
+    (a, b) =>
+      (a.provider === "parallel" ? 1 : 0) - (b.provider === "parallel" ? 1 : 0),
+  );
   const operational = statusData.summary.operational_count;
   const endpointCount = statusData.summary.endpoint_count || providers.length;
   const probedCount = providers.reduce(
