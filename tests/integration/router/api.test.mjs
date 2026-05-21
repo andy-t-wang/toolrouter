@@ -321,7 +321,7 @@ describe("router API", () => {
     const body = await response.json();
     assert.deepEqual(
       body.categories.map((category) => category.id),
-      ["search", "research", "extract", "productivity", "browser_usage"],
+      ["search", "research", "extract", "email", "browser_usage"],
     );
     const search = body.categories.find((category) => category.id === "search");
     assert.equal(search.recommended_endpoint_id, "exa.search");
@@ -334,9 +334,10 @@ describe("router API", () => {
     const extract = body.categories.find((category) => category.id === "extract");
     assert.equal(extract.recommended_endpoint_id, "parallel.extract");
     assert.equal(extract.recommended_endpoint.id, "parallel.extract");
-    const productivity = body.categories.find((category) => category.id === "productivity");
-    assert.equal(productivity.recommended_endpoint_id, null);
-    assert.equal(productivity.recommended_endpoint, null);
+    const email = body.categories.find((category) => category.id === "email");
+    assert.equal(email.recommended_endpoint_id, "agentmail.send_message");
+    assert.equal(email.recommended_endpoint.id, "agentmail.send_message");
+    assert.equal(email.recommended_mcp_tool, "toolrouter_send_email");
     assert.ok(search.endpoints.every((endpoint) => endpoint.status));
 
     const dashboardResponse = await fetch(`${baseUrl}/v1/dashboard/categories?include_empty=true`, { headers: sessionHeaders() });

@@ -132,7 +132,7 @@ const SNAPSHOT_BASELINE = Object.freeze({
   "agentmail.create_inbox": {
     id: "agentmail.create_inbox",
     provider: "agentmail",
-    category: "productivity",
+    category: "email",
     name: "AgentMail Create Inbox",
     description: "Create a new AgentMail inbox through ToolRouter's server-side x402 AgentMail wrapper.",
     method: "POST",
@@ -152,7 +152,7 @@ const SNAPSHOT_BASELINE = Object.freeze({
   "agentmail.list_messages": {
     id: "agentmail.list_messages",
     provider: "agentmail",
-    category: "productivity",
+    category: "email",
     name: "AgentMail List Messages",
     description: "List messages in an AgentMail inbox through ToolRouter's server-side x402 execution path.",
     url_host: "x402.api.agentmail.to",
@@ -172,7 +172,7 @@ const SNAPSHOT_BASELINE = Object.freeze({
   "agentmail.get_message": {
     id: "agentmail.get_message",
     provider: "agentmail",
-    category: "productivity",
+    category: "email",
     name: "AgentMail Get Message",
     description: "Fetch a single AgentMail message through ToolRouter's server-side x402 execution path.",
     url_host: "x402.api.agentmail.to",
@@ -192,7 +192,7 @@ const SNAPSHOT_BASELINE = Object.freeze({
   "agentmail.send_message": {
     id: "agentmail.send_message",
     provider: "agentmail",
-    category: "productivity",
+    category: "email",
     name: "AgentMail Send Message",
     description: "Send an email from an AgentMail inbox through ToolRouter's server-side x402 AgentMail wrapper.",
     method: "POST",
@@ -213,7 +213,7 @@ const SNAPSHOT_BASELINE = Object.freeze({
   "agentmail.reply_to_message": {
     id: "agentmail.reply_to_message",
     provider: "agentmail",
-    category: "productivity",
+    category: "email",
     name: "AgentMail Reply To Message",
     description: "Reply to an AgentMail message through ToolRouter's server-side x402 AgentMail wrapper.",
     method: "POST",

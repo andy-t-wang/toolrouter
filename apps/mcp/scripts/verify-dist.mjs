@@ -17,6 +17,7 @@ const REQUIRED_TOOL_NAMES = [
   "toolrouter_call_endpoint",
   "toolrouter_get_request",
   "toolrouter_search",
+  "toolrouter_send_email",
   "toolrouter_browser_use",
   "exa_search",
   "browserbase_session_create",

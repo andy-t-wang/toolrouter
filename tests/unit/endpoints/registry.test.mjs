@@ -53,7 +53,7 @@ describe("endpoint registry", () => {
     const categories = listCategories();
     assert.deepEqual(
       categories.map((category) => category.id),
-      ["search", "research", "extract", "productivity", "browser_usage"],
+      ["search", "research", "extract", "email", "browser_usage"],
     );
 
     const search = categories.find((category) => category.id === "search");
@@ -73,11 +73,12 @@ describe("endpoint registry", () => {
     const extract = recommendEndpoint("extract");
     assert.equal(extract.id, "parallel.extract");
 
-    const productivity = categories.find((category) => category.id === "productivity");
-    assert.equal(productivity.recommended_endpoint_id, null);
-    assert.equal(productivity.recommended_endpoint, null);
+    const email = categories.find((category) => category.id === "email");
+    assert.equal(email.name, "Email");
+    assert.equal(email.recommended_endpoint_id, "agentmail.send_message");
+    assert.equal(email.recommended_endpoint.id, "agentmail.send_message");
     assert.deepEqual(
-      productivity.endpoints.map((endpoint) => endpoint.id),
+      email.endpoints.map((endpoint) => endpoint.id),
       [
         "agentmail.create_inbox",
         "agentmail.list_messages",
@@ -86,7 +87,7 @@ describe("endpoint registry", () => {
         "agentmail.reply_to_message",
       ],
     );
-    assert.throws(() => recommendEndpoint("productivity"), /category has no recommended endpoint yet/u);
+    assert.equal(recommendEndpoint("email").id, "agentmail.send_message");
   });
 
   it("builds Parallel Search requests with the per-call markup price", () => {

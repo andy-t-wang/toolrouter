@@ -55,6 +55,7 @@ describe("ToolRouter MCP server", () => {
     assert.ok(listed.result.tools.some((tool) => tool.name === "toolrouter_search"));
     assert.ok(listed.result.tools.some((tool) => tool.name === "toolrouter_list_categories"));
     assert.ok(listed.result.tools.some((tool) => tool.name === "toolrouter_recommend_endpoint"));
+    assert.ok(listed.result.tools.some((tool) => tool.name === "toolrouter_send_email"));
     assert.ok(listed.result.tools.some((tool) => tool.name === "manus_research_start"));
     assert.ok(listed.result.tools.some((tool) => tool.name === "manus_research_status"));
     assert.ok(listed.result.tools.some((tool) => tool.name === "manus_research_result"));
@@ -98,6 +99,10 @@ describe("ToolRouter MCP server", () => {
     assert.ok(hasRequiredAlternative(sendMailTool.inputSchema, ["inboxId", "to", "html"]));
     assert.ok(hasRequiredAlternative(sendMailTool.inputSchema, ["inbox_id", "to", "text"]));
     assert.equal(sendMailTool.inputSchema.properties.attachments.maxItems, 10);
+    const genericEmailTool = tools().find((tool) => tool.name === "toolrouter_send_email");
+    assert.equal(genericEmailTool.inputSchema.properties.to.oneOf.length, 2);
+    assert.ok(hasRequiredAlternative(genericEmailTool.inputSchema, ["inboxId", "to", "html"]));
+    assert.ok(hasRequiredAlternative(genericEmailTool.inputSchema, ["inbox_id", "to", "text"]));
     const replyMailTool = tools().find((tool) => tool.name === "agentmail_reply_to_message");
     assert.ok(replyMailTool.inputSchema.properties.replyTo);
     assert.ok(replyMailTool.inputSchema.properties.replyAll);
@@ -320,6 +325,53 @@ describe("ToolRouter MCP server", () => {
         query: "agent payment routers",
       },
       maxUsd: "0.01",
+    });
+  });
+
+  it("sends email through the generic email category wrapper", async () => {
+    const calls = [];
+    const categories = {
+      categories: [
+        {
+          id: "email",
+          name: "Email",
+          recommended_endpoint: { id: "agentmail.send_message", name: "AgentMail Send Message" },
+        },
+      ],
+    };
+    const result = await callTool("toolrouter_send_email", {
+      inbox_id: "agent@agentmail.to",
+      to: "recipient@example.com",
+      subject: "Hello",
+      text: "Body",
+    }, {
+      env: { TOOLROUTER_API_URL: "http://router.test", TOOLROUTER_API_KEY: "tr_test" },
+      fetchImpl: async (url, init) => {
+        calls.push({ url, init });
+        if (url === "http://router.test/v1/categories?include_empty=true") return response(categories);
+        return response({
+          id: "req_email",
+          endpoint_id: "agentmail.send_message",
+          path: "x402",
+          charged: true,
+          body: { result: { id: "msg_123", thread_id: "thread_123" } },
+        });
+      },
+    });
+
+    assert.equal(result.isError, false);
+    assert.equal(result.structuredContent.message_id, "msg_123");
+    assert.equal(calls[0].url, "http://router.test/v1/categories?include_empty=true");
+    assert.equal(calls[1].url, "http://router.test/v1/requests");
+    assert.deepEqual(JSON.parse(calls[1].init.body), {
+      endpoint_id: "agentmail.send_message",
+      input: {
+        inbox_id: "agent@agentmail.to",
+        to: "recipient@example.com",
+        subject: "Hello",
+        text: "Body",
+      },
+      maxUsd: "0.02",
     });
   });
 
