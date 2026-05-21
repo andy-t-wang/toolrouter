@@ -106,7 +106,7 @@ services:
       - key: X402_ALLOWED_CHAINS
         value: eip155:8453,eip155:480
       - key: X402_ALLOWED_HOSTS
-        value: api.exa.ai,x402.browserbase.com,toolrouter.world
+        value: api.exa.ai,x402.browserbase.com,toolrouter.world,x402.api.agentmail.to
       - key: X402_FACILITATOR_URL
         value: https://api.cdp.coinbase.com/platform/v2/x402
       - key: COINBASE_KEY_ID
@@ -118,8 +118,11 @@ services:
       - key: X402_MANUS_PAY_TO_ADDRESS
         value: SET_IN_APP_PLATFORM
         type: SECRET
+      - key: X402_AGENTMAIL_PAY_TO_ADDRESS
+        value: SET_IN_APP_PLATFORM
+        type: SECRET
       - key: X402_MAX_USD_PER_REQUEST
-        value: "0.05"
+        value: "2.05"
       - key: TOOLROUTER_X402_PROVIDER_URL
         value: https://toolrouter.world
       - key: TOOLROUTER_MANUS_RESEARCH_PRICE_USD
@@ -182,6 +185,12 @@ services:
         type: SECRET
       - key: CROSSMINT_TREASURY_WALLET_LOCATOR
         value: evm:alias:toolrouter-treasury-base
+      - key: CROSSMINT_LIVE_WALLET_LOCATOR
+        value: SET_IN_APP_PLATFORM
+        type: SECRET
+      - key: CROSSMINT_LIVE_WALLET_ADDRESS
+        value: SET_IN_APP_PLATFORM
+        type: SECRET
       - key: TOOLROUTER_RATE_LIMIT_PER_MINUTE
         value: "60"
       - key: TOOLROUTER_IP_RATE_LIMIT_PER_MINUTE
@@ -275,7 +284,7 @@ workers:
       - key: X402_ALLOWED_CHAINS
         value: eip155:8453,eip155:480
       - key: X402_ALLOWED_HOSTS
-        value: api.exa.ai,x402.browserbase.com,toolrouter.world
+        value: api.exa.ai,x402.browserbase.com,toolrouter.world,x402.api.agentmail.to
       - key: X402_MAX_USD_PER_REQUEST
         value: "0.05"
       - key: TOOLROUTER_X402_PROVIDER_URL
@@ -298,5 +307,23 @@ workers:
         value: SET_IN_APP_PLATFORM
         type: SECRET
       - key: CROSSMINT_HEALTH_WALLET_ADDRESS
+        value: SET_IN_APP_PLATFORM
+        type: SECRET
+      - key: CROSSMINT_LIVE_WALLET_LOCATOR
+        value: SET_IN_APP_PLATFORM
+        type: SECRET
+      - key: CROSSMINT_LIVE_WALLET_ADDRESS
+        value: SET_IN_APP_PLATFORM
+        type: SECRET
+      - key: AGENTMAIL_HEALTH_INBOX_ID
+        value: SET_IN_APP_PLATFORM
+        type: SECRET
+      - key: AGENTMAIL_HEALTH_INBOX_EMAIL
+        value: SET_IN_APP_PLATFORM
+        type: SECRET
+      - key: AGENTMAIL_HEALTH_MESSAGE_ID
+        value: SET_IN_APP_PLATFORM
+        type: SECRET
+      - key: AGENTMAIL_HEALTH_REPLY_MESSAGE_ID
         value: SET_IN_APP_PLATFORM
         type: SECRET
