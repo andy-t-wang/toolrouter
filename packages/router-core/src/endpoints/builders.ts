@@ -285,31 +285,6 @@ function providerRequest(endpoint, json, estimatedUsd) {
   };
 }
 
-function providerGetRequest(url, estimatedUsd) {
-  return {
-    method: "GET",
-    url,
-    headers: {},
-    estimatedUsd: toUsdString(estimatedUsd),
-  };
-}
-
-function encodedPathPart(value) {
-  return encodeURIComponent(value).replace(/%40/giu, "@");
-}
-
-function addQueryParams(url, params) {
-  for (const [key, value] of Object.entries(params)) {
-    if (value === undefined || value === null || value === "") continue;
-    if (Array.isArray(value)) {
-      for (const item of value) url.searchParams.append(key, item);
-      continue;
-    }
-    url.searchParams.set(key, String(value));
-  }
-  return url.toString();
-}
-
 /**
  * @param {ExaSearchInput} input
  * @param {{ method: "POST", url: string }} endpoint
@@ -596,9 +571,10 @@ export function buildAgentmailCreateInboxRequest(input, endpoint) {
 
 /**
  * @param {object} input
+ * @param {{ method: "POST", url: string }} endpoint
  * @returns {ProviderRequest}
  */
-export function buildAgentmailListMessagesRequest(input) {
+export function buildAgentmailListMessagesRequest(input, endpoint) {
   const data = assertInputRecord(input);
   const inboxId = readString(data, ["inbox_id", "inboxId"], "inbox_id", { required: true });
   const limit = readInteger(data, ["limit"], "limit", { defaultValue: 10, min: 1, max: 100 });
@@ -617,34 +593,41 @@ export function buildAgentmailListMessagesRequest(input) {
     "include_unauthenticated",
   );
   const includeTrash = readOptionalBoolean(data, ["include_trash", "includeTrash"], "include_trash");
-  const url = new URL(`${AGENTMAIL_X402_API_BASE}/v0/inboxes/${encodedPathPart(inboxId)}/messages`);
-  return providerGetRequest(
-    addQueryParams(url, {
-      limit,
-      page_token: pageToken,
-      labels,
-      before,
-      after,
-      ascending,
-      include_spam: includeSpam,
-      include_blocked: includeBlocked,
-      include_unauthenticated: includeUnauthenticated,
-      include_trash: includeTrash,
-    }),
+  const json: Record<string, unknown> = {
+    inbox_id: inboxId,
+    limit,
+  };
+  if (pageToken) json.page_token = pageToken;
+  if (labels.length > 0) json.labels = labels;
+  if (before) json.before = before;
+  if (after) json.after = after;
+  if (ascending !== undefined) json.ascending = ascending;
+  if (includeSpam !== undefined) json.include_spam = includeSpam;
+  if (includeBlocked !== undefined) json.include_blocked = includeBlocked;
+  if (includeUnauthenticated !== undefined) json.include_unauthenticated = includeUnauthenticated;
+  if (includeTrash !== undefined) json.include_trash = includeTrash;
+  return providerRequest(
+    endpoint,
+    json,
     Number(agentmailPriceUsd("list_messages")),
   );
 }
 
 /**
  * @param {object} input
+ * @param {{ method: "POST", url: string }} endpoint
  * @returns {ProviderRequest}
  */
-export function buildAgentmailGetMessageRequest(input) {
+export function buildAgentmailGetMessageRequest(input, endpoint) {
   const data = assertInputRecord(input);
   const inboxId = readString(data, ["inbox_id", "inboxId"], "inbox_id", { required: true });
   const messageId = readString(data, ["message_id", "messageId"], "message_id", { required: true });
-  return providerGetRequest(
-    `${AGENTMAIL_X402_API_BASE}/v0/inboxes/${encodedPathPart(inboxId)}/messages/${encodedPathPart(messageId)}`,
+  return providerRequest(
+    endpoint,
+    {
+      inbox_id: inboxId,
+      message_id: messageId,
+    },
     Number(agentmailPriceUsd("get_message")),
   );
 }

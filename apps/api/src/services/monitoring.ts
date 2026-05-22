@@ -73,6 +73,18 @@ function latestByCheckedAt(rows: any[]) {
   );
 }
 
+function manualOnlyHealthProbe(endpoint: any) {
+  return (endpoint?.health_probe || endpoint?.healthProbe)?.mode === "manual_only";
+}
+
+function nonForcedManualProbe(row: any) {
+  return row?.error === "manual health probe" || row?.last_error === "manual health probe";
+}
+
+function emptyManualStatus(row: any) {
+  return Boolean(row) && row.status_code == null && !row.path && !row.last_checked_at;
+}
+
 export function latestIso(values: Array<string | null | undefined>) {
   return (
     values
@@ -255,9 +267,16 @@ export function publicStatusDto(
   checks: any[],
   now = new Date(),
 ) {
-  const latestCheck = checks[0] || null;
+  const manualOnly = manualOnlyHealthProbe(endpoint);
+  const effectiveChecks = manualOnly
+    ? checks.filter((check) => !nonForcedManualProbe(check))
+    : checks;
+  const effectiveStatus = manualOnly && (nonForcedManualProbe(status) || emptyManualStatus(status))
+    ? null
+    : status;
+  const latestCheck = effectiveChecks[0] || null;
   const daily = new Map<string, any[]>();
-  for (const check of checks) {
+  for (const check of effectiveChecks) {
     const key = dayKey(new Date(check.checked_at));
     daily.set(key, [...(daily.get(key) || []), check]);
   }
@@ -270,16 +289,16 @@ export function publicStatusDto(
   const uptimeValues = sparkline_30d.filter(
     (value): value is number => value !== null,
   );
-  const latencyValues = checks
+  const latencyValues = effectiveChecks
     .map((check) => Number(check.latency_ms))
     .filter(Number.isFinite);
   const manualHealth = isManualHealthEndpoint(endpoint);
   const currentStatus = manualHealth
     ? "healthy"
-    : status?.status || latestCheck?.status || "unverified";
+    : effectiveStatus?.status || latestCheck?.status || "unverified";
   const latestAgentKitEvidence = latestByCheckedAt([
-    ...(status && countsAsAgentKitEvidence(endpoint, status) ? [status] : []),
-    ...checks.filter((check) => countsAsAgentKitEvidence(endpoint, check)),
+    ...(effectiveStatus && countsAsAgentKitEvidence(endpoint, effectiveStatus) ? [effectiveStatus] : []),
+    ...effectiveChecks.filter((check) => countsAsAgentKitEvidence(endpoint, check)),
   ]);
   return {
     id: endpoint.id,
@@ -294,16 +313,16 @@ export function publicStatusDto(
     agentkit_value_type: endpoint.agentkit_value_type,
     agentkit_value_label: endpoint.agentkit_value_label,
     status: currentStatus,
-    last_checked_at: manualHealth ? null : status?.last_checked_at || latestCheck?.checked_at || null,
-    status_code: manualHealth ? null : status?.status_code ?? latestCheck?.status_code ?? null,
-    latency_ms: manualHealth ? null : status?.latency_ms ?? latestCheck?.latency_ms ?? null,
-    p50_latency_ms: median(latencyValues),
-    uptime_30d: average(uptimeValues),
-    sparkline_30d,
-    health_check_count_30d: checks.length,
-    path: manualHealth ? null : status?.path || latestCheck?.path || null,
-    charged: manualHealth ? false : Boolean(status?.charged ?? latestCheck?.charged ?? false),
-    amount_usd: manualHealth ? null : status?.amount_usd ?? latestCheck?.amount_usd ?? null,
+    last_checked_at: manualHealth ? null : effectiveStatus?.last_checked_at || latestCheck?.checked_at || null,
+    status_code: manualHealth ? null : effectiveStatus?.status_code ?? latestCheck?.status_code ?? null,
+    latency_ms: manualHealth ? null : effectiveStatus?.latency_ms ?? latestCheck?.latency_ms ?? null,
+    p50_latency_ms: manualHealth ? null : median(latencyValues),
+    uptime_30d: manualHealth ? null : average(uptimeValues),
+    sparkline_30d: manualHealth ? lastThirtyDayKeys(now).map(() => null) : sparkline_30d,
+    health_check_count_30d: effectiveChecks.length,
+    path: manualHealth ? null : effectiveStatus?.path || latestCheck?.path || null,
+    charged: manualHealth ? false : Boolean(effectiveStatus?.charged ?? latestCheck?.charged ?? false),
+    amount_usd: manualHealth ? null : effectiveStatus?.amount_usd ?? latestCheck?.amount_usd ?? null,
     agentkit_status: latestAgentKitEvidence?.status || "unverified",
     agentkit_operational: latestAgentKitEvidence
       ? checkCountsAsUp(latestAgentKitEvidence)
@@ -311,8 +330,8 @@ export function publicStatusDto(
     agentkit_last_checked_at: checkedAt(latestAgentKitEvidence),
     agentkit_path: latestAgentKitEvidence?.path || null,
     agentkit_charged: Boolean(latestAgentKitEvidence?.charged || false),
-    layers: publicStatusLayers(manualHealth ? null : status, now),
-    last_error: manualHealth ? null : publicStatusError(status || latestCheck),
+    layers: publicStatusLayers(manualHealth ? null : effectiveStatus, now),
+    last_error: manualHealth ? null : publicStatusError(effectiveStatus || latestCheck),
   };
 }
 

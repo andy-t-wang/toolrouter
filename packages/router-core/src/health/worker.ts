@@ -114,6 +114,13 @@ function statusFromResult(result, endpoint, { requireAgentKitValue = false } = {
   // fall through to the success-shape check.
   const attribution = result.attribution ?? null;
   if (attribution) {
+    if (
+      attribution.retryable === false &&
+      Number.isFinite(result.status_code) &&
+      [400, 401, 403, 404].includes(Number(result.status_code))
+    ) {
+      return "unverified";
+    }
     // A failure was attributed. 5xx-style upstream/transport failures with no
     // status code are `failing`; everything else is `degraded`.
     if (result.status_code === null || (Number.isFinite(result.status_code) && result.status_code >= 500)) {

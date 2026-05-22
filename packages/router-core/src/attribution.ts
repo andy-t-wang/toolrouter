@@ -54,6 +54,11 @@ const ROUTER_PAYMENT_PATTERNS = [
 ];
 
 const TIMEOUT_PATTERNS = [/timed out/i, /timeout/i];
+const AGENTMAIL_OWNERSHIP_PATTERNS = [
+  /agentmail_inbox_not_owned/i,
+  /AgentMail inbox is not owned by this payer/i,
+  /AgentMail inbox ownership check failed/i,
+];
 
 function toNumber(value: unknown): number | null {
   if (value === undefined || value === null || value === "") return null;
@@ -67,7 +72,7 @@ function bodyText(body: unknown): string {
   if (typeof body !== "object") return "";
   const obj = body as Record<string, unknown>;
   const parts: string[] = [];
-  for (const key of ["error", "message", "details", "errorReason", "errorMessage"]) {
+  for (const key of ["code", "error", "message", "details", "errorReason", "errorMessage"]) {
     const v = obj[key];
     if (typeof v === "string") parts.push(v);
   }
@@ -157,6 +162,13 @@ export function attributeFailure(input: AttributionInput | null | undefined): At
 
   if (statusCode === 429) {
     return { layer: "rate_limit", label: "Provider rate limited", retryable: true };
+  }
+  if (anyMatch(combined, AGENTMAIL_OWNERSHIP_PATTERNS)) {
+    return {
+      layer: "upstream",
+      label: "AgentMail inbox ownership check failed",
+      retryable: false,
+    };
   }
   if (statusCode === 504 || anyMatch(combined, TIMEOUT_PATTERNS)) {
     return { layer: "timeout", label: "Provider timed out", retryable: true };
