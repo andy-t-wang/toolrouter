@@ -9,6 +9,7 @@ import {
   sortLandingEndpoints,
 } from "../../../apps/web/lib/endpoint-manifest.ts";
 import { providerLogoPath } from "../../../apps/web/lib/provider-logos.ts";
+import { ENDPOINT_POPOVER_COPY } from "../../../apps/web/app/endpoint-status-filter.tsx";
 
 describe("apps/web endpoint manifest adapter", () => {
   it("derives one fallback row per registered endpoint in registry order", () => {
@@ -88,6 +89,19 @@ describe("apps/web endpoint manifest adapter", () => {
         }),
         false,
       );
+    }
+  });
+
+  it("has concise StableTravel landing popover copy for every travel endpoint", () => {
+    const stabletravelEndpoints = endpointRegistry.filter(
+      (endpoint) => endpoint.provider === "stabletravel",
+    );
+    assert.equal(stabletravelEndpoints.length, 5);
+    for (const endpoint of stabletravelEndpoints) {
+      const copy = ENDPOINT_POPOVER_COPY[endpoint.id];
+      assert.equal(typeof copy, "string", `${endpoint.id} is missing landing popover copy`);
+      assert.ok(copy.length > 0 && copy.length <= 90, `${endpoint.id} popover copy should stay concise`);
+      assert.equal(copy.includes("ToolRouter"), false, `${endpoint.id} copy should describe the user value directly`);
     }
   });
 });

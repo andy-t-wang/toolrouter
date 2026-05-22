@@ -31,7 +31,7 @@ type EndpointStatusFilterProps = {
   renderedAtMs: number;
 };
 
-const ENDPOINT_POPOVER_COPY: Record<string, string> = Object.freeze({
+export const ENDPOINT_POPOVER_COPY: Record<string, string> = Object.freeze({
   "agentmail.create_inbox": "Create a new AgentMail inbox for an agent.",
   "agentmail.get_message": "Fetch a single AgentMail message.",
   "agentmail.list_messages": "List messages in an AgentMail inbox.",
@@ -43,6 +43,16 @@ const ENDPOINT_POPOVER_COPY: Record<string, string> = Object.freeze({
   "parallel.extract": "Extract clean content from one or more URLs.",
   "parallel.search": "Search the web for fresh, relevant results.",
   "parallel.task": "Start an async research task with citations.",
+  "stabletravel.flightaware_flights":
+    "Look up live flight details by flight number, registration, or FlightAware ID.",
+  "stabletravel.google_flights_search":
+    "Compare flight options and prices between airports for a travel date.",
+  "stabletravel.hotels_list":
+    "Find hotel IDs in a city before pricing specific stays.",
+  "stabletravel.hotels_search":
+    "Search dated hotel availability and rates for selected hotel IDs.",
+  "stabletravel.locations":
+    "Find airport and city codes from a place name.",
 });
 
 function titleCase(value: string) {
