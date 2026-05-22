@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { pathToFileURL } from "node:url";
 
 import { createCrossmintClient } from "@toolrouter/api/crossmint";
+import { createDatadogClient } from "@toolrouter/api/datadog";
 import { createStore } from "@toolrouter/db";
 import { createHealthWorker, executeEndpoint } from "@toolrouter/router-core";
 
@@ -115,6 +116,35 @@ function safeErrorLog(error: any) {
     code: error?.code || null,
     status_code: error?.statusCode || error?.status_code || null,
     name: error?.name || null,
+  };
+}
+
+export function createWorkerLogger({
+  consoleLogger = console,
+  datadog = createDatadogClient({
+    env: {
+      ...process.env,
+      DD_SERVICE: process.env.DD_SERVICE || process.env.DATADOG_SERVICE || "toolrouter-worker",
+      DD_SOURCE: process.env.DD_SOURCE || process.env.DATADOG_SOURCE || "toolrouter",
+    },
+  }),
+}: any = {}) {
+  function write(level: string, message: string, fields: any = {}) {
+    consoleLogger[level]?.(message, fields);
+    datadog?.log?.(level, message, fields).catch((error: any) => {
+      consoleLogger.warn?.("datadog log submit failed", safeErrorLog(error));
+    });
+  }
+  return {
+    error(message: string, fields?: any) {
+      write("error", message, fields);
+    },
+    info(message: string, fields?: any) {
+      write("info", message, fields);
+    },
+    warn(message: string, fields?: any) {
+      write("warn", message, fields);
+    },
   };
 }
 
@@ -244,12 +274,14 @@ export async function main() {
   const store = createStore();
   const paidIntervalMs = Number(process.env.TOOLROUTER_PAID_HEALTH_INTERVAL_MS || process.env.TOOLROUTER_HEALTH_INTERVAL_MS || 60 * 60 * 1000);
   const agentKitIntervalMs = Number(process.env.TOOLROUTER_AGENTKIT_HEALTH_INTERVAL_MS || 12 * 60 * 60 * 1000);
+  const logger = createWorkerLogger();
   const paymentSignerState = healthPaymentSignerState();
   const paymentSignerPromise = resolveCrossmintHealthPaymentSigner(paymentSignerState);
   const executeHealthEndpoint = createHealthEndpointExecutor({
     paymentSignerState,
     paymentSigner: null,
     paymentSignerFactory: () => paymentSignerPromise,
+    logger,
   });
   const paidWorker = createHealthWorker({
     db: store,
@@ -258,7 +290,7 @@ export async function main() {
     probeKind: "availability",
     useRecentRequests: false,
     updateEndpointStatus: true,
-    logger: console,
+    logger,
   });
   const agentKitWorker = createHealthWorker({
     db: store,
@@ -267,7 +299,7 @@ export async function main() {
     probeKind: "agentkit",
     useRecentRequests: true,
     updateEndpointStatus: false,
-    logger: console,
+    logger,
   });
 
   if (process.argv.includes("--once")) {
@@ -276,7 +308,7 @@ export async function main() {
     const agentKitResults = await agentKitWorker.runOnce({ force, useRecentRequests: !force });
     console.log(JSON.stringify({ ok: true, checked: paidResults.length + agentKitResults.length, paidResults, agentKitResults }, null, 2));
   } else {
-    console.info("health worker payment signer configured", {
+    logger.info("health worker payment signer configured", {
       health_payment_signer: paymentSignerState.log,
     });
     await paidWorker.runOnce();

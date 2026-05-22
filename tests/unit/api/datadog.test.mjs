@@ -28,6 +28,10 @@ describe("Datadog metrics helper", () => {
       sent: false,
       skipped: true,
     });
+    assert.deepEqual(await client.log("error", "health payment signer unavailable"), {
+      sent: false,
+      skipped: true,
+    });
     assert.equal(called, false);
   });
 
@@ -75,6 +79,70 @@ describe("Datadog metrics helper", () => {
     assert.ok(!payloads[0].series[0].tags.some((tag) => tag.includes("authorization")));
     assert.ok(!payloads[0].series[0].tags.some((tag) => tag.includes("payment_header")));
     assert.ok(!payloads[1].series[0].tags.some((tag) => tag.includes("request_time")));
+  });
+
+  it("sends log payloads to the Datadog Logs HTTP intake", async () => {
+    const requests = [];
+    const client = createDatadogClient({
+      env: {
+        DD_API_KEY: "dd_test",
+        DD_ENV: "production",
+        DD_SERVICE: "toolrouter-worker",
+        DD_SOURCE: "toolrouter",
+        DD_SITE: "datadoghq.com",
+      },
+      fetchImpl: async (url, init) => {
+        requests.push({ url, body: JSON.parse(init.body), headers: init.headers });
+        return new Response("{}", { status: 202 });
+      },
+    });
+
+    await client.log(
+      "error",
+      "health payment signer signMessage failed",
+      {
+        endpoint_id: "agentmail.send_message",
+        payment_mode: "x402_only",
+        health_payment_signer: {
+          source: "crossmint_health",
+          selected_address_hash: "sha256:abc123",
+        },
+      },
+      { endpoint: "agentmail.send_message" },
+    );
+
+    assert.equal(requests.length, 1);
+    assert.equal(requests[0].url, "https://http-intake.logs.datadoghq.com/api/v2/logs");
+    assert.equal(requests[0].headers["DD-API-KEY"], "dd_test");
+    assert.equal(requests[0].body.message, "health payment signer signMessage failed");
+    assert.equal(requests[0].body.status, "error");
+    assert.equal(requests[0].body.service, "toolrouter-worker");
+    assert.equal(requests[0].body.ddsource, "toolrouter");
+    assert.match(requests[0].body.ddtags, /env:production/);
+    assert.match(requests[0].body.ddtags, /endpoint:agentmail\.send_message/);
+    assert.equal(requests[0].body.endpoint_id, "agentmail.send_message");
+    assert.deepEqual(requests[0].body.health_payment_signer, {
+      source: "crossmint_health",
+      selected_address_hash: "sha256:abc123",
+    });
+  });
+
+  it("normalizes full URL Datadog sites to the Logs HTTP intake host", async () => {
+    const urls = [];
+    const client = createDatadogClient({
+      env: {
+        DD_API_KEY: "dd_test",
+        DD_SITE: "https://api.datadoghq.com",
+      },
+      fetchImpl: async (url) => {
+        urls.push(url);
+        return new Response("{}", { status: 202 });
+      },
+    });
+
+    await client.log("info", "endpoint health check completed");
+
+    assert.deepEqual(urls, ["https://http-intake.logs.datadoghq.com/api/v2/logs"]);
   });
 
   it("keeps base tags stable", () => {
