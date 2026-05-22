@@ -96,6 +96,25 @@ async function withAllowedHosts(fn) {
   }
 }
 
+async function withAgentmailHealthEnv(fn) {
+  const previousOwner = process.env.CROSSMINT_HEALTH_WALLET_ADDRESS;
+  const previousInbox = process.env.AGENTMAIL_HEALTH_INBOX_ID;
+  const previousEmail = process.env.AGENTMAIL_HEALTH_INBOX_EMAIL;
+  process.env.CROSSMINT_HEALTH_WALLET_ADDRESS = OWNER_A;
+  process.env.AGENTMAIL_HEALTH_INBOX_ID = "health-inbox";
+  process.env.AGENTMAIL_HEALTH_INBOX_EMAIL = "health@agentmail.to";
+  try {
+    return await fn();
+  } finally {
+    if (previousOwner === undefined) delete process.env.CROSSMINT_HEALTH_WALLET_ADDRESS;
+    else process.env.CROSSMINT_HEALTH_WALLET_ADDRESS = previousOwner;
+    if (previousInbox === undefined) delete process.env.AGENTMAIL_HEALTH_INBOX_ID;
+    else process.env.AGENTMAIL_HEALTH_INBOX_ID = previousInbox;
+    if (previousEmail === undefined) delete process.env.AGENTMAIL_HEALTH_INBOX_EMAIL;
+    else process.env.AGENTMAIL_HEALTH_INBOX_EMAIL = previousEmail;
+  }
+}
+
 describe("AgentMail seller manifests", () => {
   it("mounts x402-only AgentMail manifests at the documented paths", () => {
     assert.equal(agentmailCreateInboxSellerManifest.route, AGENTMAIL_CREATE_INBOX_PATH);
@@ -407,6 +426,112 @@ describe("AgentMail seller manifests", () => {
       assert.doesNotMatch(JSON.stringify(result), new RegExp(OWNER_A.slice(2), "iu"));
       assert.equal(upstreamCalls, 0);
     });
+  });
+
+  it("repairs missing ownership for the configured health inbox and health payer", async () => {
+    await withAllowedHosts(() =>
+      withAgentmailHealthEnv(async () => {
+        let upstreamCalls = 0;
+        const store = makeAgentmailStore();
+        const reply = makeReply();
+        const result = await forwardAgentmailListMessagesUpstream({
+          request: {
+            body: {
+              inbox_id: "health-inbox",
+              limit: 10,
+            },
+          },
+          reply,
+          payment: paymentContext(OWNER_A),
+          store,
+          fetchImpl: async () => {
+            upstreamCalls += 1;
+            return new Response('{"messages":[]}', { status: 200 });
+          },
+          paymentSigner: paymentSigner(),
+        });
+
+        assert.equal(reply.statusCode, 200);
+        assert.equal(result.ok, true);
+        assert.equal(upstreamCalls, 1);
+        assert.equal(store.rows[0].inbox_id, "health-inbox");
+        assert.equal(store.rows[0].email, "health@agentmail.to");
+        assert.equal(store.rows[0].owner_address, OWNER_A.toLowerCase());
+        assert.equal(store.rows[0].metadata.health_probe, true);
+        assert.equal(store.rows[0].metadata.repaired_owner, true);
+      }),
+    );
+  });
+
+  it("repairs stale ownership for the configured health inbox and health payer", async () => {
+    await withAllowedHosts(() =>
+      withAgentmailHealthEnv(async () => {
+        let upstreamCalls = 0;
+        const store = makeAgentmailStore();
+        await store.upsertAgentmailInbox({
+          inbox_id: "health-inbox",
+          email: "health@agentmail.to",
+          owner_address: OWNER_B,
+        });
+
+        const reply = makeReply();
+        const result = await forwardAgentmailSendMessageUpstream({
+          request: {
+            body: {
+              inbox_id: "health@agentmail.to",
+              to: "health@agentmail.to",
+              subject: "Health",
+              text: "Health check",
+            },
+          },
+          reply,
+          payment: paymentContext(OWNER_A),
+          store,
+          fetchImpl: async () => {
+            upstreamCalls += 1;
+            return new Response('{"id":"msg_123"}', { status: 200 });
+          },
+          paymentSigner: paymentSigner(),
+        });
+
+        assert.equal(reply.statusCode, 200);
+        assert.equal(result.ok, true);
+        assert.equal(upstreamCalls, 1);
+        assert.equal(store.rows[0].owner_address, OWNER_A.toLowerCase());
+      }),
+    );
+  });
+
+  it("does not repair the health inbox for a non-health payer", async () => {
+    await withAllowedHosts(() =>
+      withAgentmailHealthEnv(async () => {
+        let upstreamCalls = 0;
+        const store = makeAgentmailStore();
+        const reply = makeReply();
+        const result = await forwardAgentmailListMessagesUpstream({
+          request: {
+            body: {
+              inbox_id: "health-inbox",
+              limit: 10,
+            },
+          },
+          reply,
+          payment: paymentContext(OWNER_B),
+          store,
+          fetchImpl: async () => {
+            upstreamCalls += 1;
+            return new Response('{"messages":[]}', { status: 200 });
+          },
+          paymentSigner: paymentSigner(),
+        });
+
+        assert.equal(reply.statusCode, 403);
+        assert.equal(result.code, "agentmail_inbox_not_owned");
+        assert.equal(result.diagnostics.reason, "missing_inbox_owner_row");
+        assert.equal(store.rows.length, 0);
+        assert.equal(upstreamCalls, 0);
+      }),
+    );
   });
 
   it("does not let create-inbox responses transfer an existing inbox to another payer", async () => {

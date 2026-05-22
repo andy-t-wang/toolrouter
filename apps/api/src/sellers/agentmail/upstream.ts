@@ -157,6 +157,17 @@ function requireAgentmailOwner(payment: any, reply: any) {
   return agentmailOwnerUnavailable(reply);
 }
 
+function configuredAgentmailHealthInbox() {
+  const inboxId = firstString(process.env.AGENTMAIL_HEALTH_INBOX_ID);
+  const email = firstString(process.env.AGENTMAIL_HEALTH_INBOX_EMAIL);
+  return {
+    inbox_id: inboxId,
+    email,
+    identifiers: new Set([inboxId, email].filter(Boolean).map((value) => value.toLowerCase())),
+    owner_address: normalizeEvmAddress(process.env.CROSSMINT_HEALTH_WALLET_ADDRESS),
+  };
+}
+
 function firstString(...values: unknown[]) {
   for (const value of values) {
     if (typeof value === "string" && value.trim()) return value.trim();
@@ -239,6 +250,34 @@ async function recordAgentmailInboxOwner({
   return result;
 }
 
+async function repairAgentmailHealthInboxOwner({
+  store,
+  ownerAddress,
+  inboxId,
+  existing,
+}: {
+  store: any;
+  ownerAddress: string;
+  inboxId: string;
+  existing?: any;
+}) {
+  const health = configuredAgentmailHealthInbox();
+  if (!health.owner_address || ownerAddress !== health.owner_address) return false;
+  if (!health.identifiers.has(inboxId.toLowerCase())) return false;
+
+  await store.upsertAgentmailInbox({
+    inbox_id: health.inbox_id || existing?.inbox_id || inboxId,
+    email: health.email || existing?.email || (inboxId.includes("@") ? inboxId : null),
+    owner_address: ownerAddress,
+    metadata: {
+      provider: "agentmail",
+      health_probe: true,
+      repaired_owner: true,
+    },
+  });
+  return true;
+}
+
 async function assertAgentmailInboxOwner({
   store,
   reply,
@@ -252,6 +291,14 @@ async function assertAgentmailInboxOwner({
 }) {
   const inbox = await store.findAgentmailInboxByIdentifier({ identifier: inboxId });
   if (!inbox || normalizeEvmAddress(inbox.owner_address) !== ownerAddress) {
+    const repaired = await repairAgentmailHealthInboxOwner({
+      store,
+      ownerAddress,
+      inboxId,
+      existing: inbox,
+    });
+    if (repaired) return null;
+
     return agentmailInboxNotOwned(reply, {
       inbox_found: Boolean(inbox),
       reason: inbox ? "owner_mismatch" : "missing_inbox_owner_row",

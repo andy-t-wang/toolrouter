@@ -196,6 +196,18 @@ services:
       - key: CROSSMINT_HEALTH_WALLET_ADDRESS
         value: SET_IN_APP_PLATFORM
         type: SECRET
+      - key: AGENTMAIL_HEALTH_INBOX_ID
+        value: SET_IN_APP_PLATFORM
+        type: SECRET
+      - key: AGENTMAIL_HEALTH_INBOX_EMAIL
+        value: SET_IN_APP_PLATFORM
+        type: SECRET
+      - key: AGENTMAIL_HEALTH_MESSAGE_ID
+        value: SET_IN_APP_PLATFORM
+        type: SECRET
+      - key: AGENTMAIL_HEALTH_REPLY_MESSAGE_ID
+        value: SET_IN_APP_PLATFORM
+        type: SECRET
       - key: TOOLROUTER_RATE_LIMIT_PER_MINUTE
         value: "60"
       - key: TOOLROUTER_IP_RATE_LIMIT_PER_MINUTE
