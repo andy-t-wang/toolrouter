@@ -71,6 +71,19 @@ function makeAgentmailStore() {
     async upsertAgentmailInbox(row) {
       const next = { ...row, owner_address: row.owner_address.toLowerCase() };
       const index = rows.findIndex((item) => item.inbox_id === next.inbox_id);
+      if (index >= 0 && rows[index].owner_address !== next.owner_address) {
+        throw Object.assign(new Error("AgentMail inbox is already owned by another payer"), {
+          statusCode: 403,
+          code: "agentmail_inbox_not_owned",
+        });
+      }
+      if (index >= 0) rows[index] = { ...rows[index], ...next };
+      else rows.unshift(next);
+      return rows.find((item) => item.inbox_id === next.inbox_id);
+    },
+    async repairAgentmailHealthInboxOwner(row) {
+      const next = { ...row, owner_address: row.owner_address.toLowerCase() };
+      const index = rows.findIndex((item) => item.inbox_id === next.inbox_id || (next.email && item.email === next.email));
       if (index >= 0) rows[index] = { ...rows[index], ...next };
       else rows.unshift(next);
       return rows.find((item) => item.inbox_id === next.inbox_id);

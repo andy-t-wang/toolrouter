@@ -247,6 +247,39 @@ describe("Supabase store RPC accounting", () => {
     );
   });
 
+  it("repairs AgentMail health inbox ownership through an explicit server-only path", async () => {
+    const existing = {
+      id: "ami_1",
+      inbox_id: "inbox_123",
+      email: "agent@agentmail.to",
+      owner_address: "0x00000000000000000000000000000000000000a1",
+    };
+    const repaired = {
+      ...existing,
+      owner_address: "0x00000000000000000000000000000000000000b2",
+    };
+    const { store, calls } = rpcCapturingStore((path) => {
+      if (path.includes("inbox_id=eq.inbox_123")) return [existing];
+      if (path.includes("id=eq.ami_1")) return [repaired];
+      return [];
+    });
+
+    const row = await store.repairAgentmailHealthInboxOwner({
+      inbox_id: "inbox_123",
+      email: "agent@agentmail.to",
+      owner_address: "0x00000000000000000000000000000000000000B2",
+      metadata: { provider: "agentmail", health_probe: true },
+    });
+
+    assert.equal(row.owner_address, "0x00000000000000000000000000000000000000b2");
+    const patch = calls.find((call) => call.path.includes("id=eq.ami_1"));
+    assert.ok(patch, "must update the existing health fixture row by id");
+    assert.equal(patch.options.method, "PATCH");
+    assert.equal(patch.options.prefer, "return=representation");
+    assert.equal(patch.options.body.owner_address, "0x00000000000000000000000000000000000000b2");
+    assert.deepEqual(patch.options.body.metadata, { provider: "agentmail", health_probe: true });
+  });
+
   it("finds AgentMail ownership records by inbox id before falling back to email", async () => {
     const responses = [
       [],

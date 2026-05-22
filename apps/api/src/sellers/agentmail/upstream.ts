@@ -144,6 +144,7 @@ function requireAgentmailOwnershipStore(store: any, reply: any) {
   if (
     store &&
     typeof store.upsertAgentmailInbox === "function" &&
+    typeof store.repairAgentmailHealthInboxOwner === "function" &&
     typeof store.findAgentmailInboxByIdentifier === "function"
   ) {
     return store;
@@ -265,7 +266,7 @@ async function repairAgentmailHealthInboxOwner({
   if (!health.owner_address || ownerAddress !== health.owner_address) return false;
   if (!health.identifiers.has(inboxId.toLowerCase())) return false;
 
-  await store.upsertAgentmailInbox({
+  await store.repairAgentmailHealthInboxOwner({
     inbox_id: health.inbox_id || existing?.inbox_id || inboxId,
     email: health.email || existing?.email || (inboxId.includes("@") ? inboxId : null),
     owner_address: ownerAddress,
