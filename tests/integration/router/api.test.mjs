@@ -1216,6 +1216,74 @@ describe("router API", () => {
     });
   });
 
+  it("proxies StableTravel direct x402 requests through /v1/requests", async () => {
+    const executorCalls = [];
+    await withIsolatedApp("toolrouter-stabletravel-proxy-", {
+      executor: async (payload) => {
+        executorCalls.push(payload);
+        assert.equal(payload.endpoint.id, "stabletravel.google_flights_search");
+        assert.equal(payload.request.method, "GET");
+        assert.equal(payload.request.json, undefined);
+        assert.equal(
+          payload.request.url,
+          "https://stabletravel.dev/api/google-flights/search?departure_id=SFO&arrival_id=JFK&outbound_date=2026-06-15&type=2&adults=1&children=0&infants_in_seat=0&infants_on_lap=0&currency=USD&hl=en",
+        );
+        return executorResult(payload, {
+          path: "x402",
+          charged: true,
+          amount_usd: "0.02",
+          payment_reference: "pay_stabletravel_x402",
+          payment_network: "eip155:8453",
+          latency_ms: 20,
+          body: { data: [] },
+        });
+      },
+    }, async ({ baseUrl, store }) => {
+      await store.upsertCreditAccount({
+        user_id: process.env.TOOLROUTER_DEV_USER_ID,
+        available_usd: "1",
+        pending_usd: "0",
+        reserved_usd: "0",
+        currency: "USD",
+      });
+      const response = await fetch(`${baseUrl}/v1/requests`, {
+        method: "POST",
+        headers: authHeaders(),
+        body: JSON.stringify({
+          endpoint_id: "stabletravel.google_flights_search",
+          input: {
+            departure_id: "SFO",
+            arrival_id: "JFK",
+            outbound_date: "2026-06-15",
+            type: "2",
+          },
+          maxUsd: "0.025",
+        }),
+      });
+      const responseText = await response.text();
+      assert.equal(response.status, 200, responseText);
+      const created = JSON.parse(responseText);
+      assert.equal(created.endpoint_id, "stabletravel.google_flights_search");
+      assert.equal(created.path, "x402");
+      assert.equal(created.charged, true);
+      assert.equal(created.status_code, 200);
+      assert.equal(created.credit_reserved_usd, "0.025");
+      assert.equal(created.credit_captured_usd, "0.02");
+      assert.equal(created.credit_released_usd, "0.005");
+      assert.equal(executorCalls.length, 1);
+      assert.equal(executorCalls[0].endpoint.defaultPaymentMode, "x402_only");
+      assert.equal(executorCalls[0].paymentMode, undefined);
+      assert.equal(executorCalls[0].maxUsd, "0.025");
+      assert.equal(executorCalls[0].request.estimatedUsd, "0.02");
+
+      const listResponse = await fetch(`${baseUrl}/v1/requests`, { headers: authHeaders() });
+      const listed = await listResponse.json();
+      assert.equal(listed.requests[0].endpoint_id, "stabletravel.google_flights_search");
+      assert.equal(listed.requests[0].agentkit_value_type, null);
+      assert.equal(listed.requests[0].agentkit_value_label, null);
+    });
+  });
+
   it("proxies Manus through /v1/requests with AgentKit preflight and paid x402 fallback", async () => {
     const executorCalls = [];
     await withIsolatedApp("toolrouter-manus-proxy-fallback-", {
