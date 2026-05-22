@@ -36,8 +36,8 @@ function datadogLogsUrl(env: DatadogEnv) {
   const explicit = env.DD_LOGS_URL || env.DATADOG_LOGS_URL;
   if (explicit) return trimSlash(explicit);
   const site = env.DD_LOGS_SITE || env.DATADOG_LOGS_SITE || env.DD_SITE || env.DATADOG_SITE || "datadoghq.com";
-  if (/^https?:\/\//u.test(site)) return `${trimSlash(site)}/api/v2/logs`;
-  const normalized = trimSlash(site).replace(/^api\./u, "").replace(/^http-intake\.logs\./u, "");
+  const siteHost = /^https?:\/\//u.test(site) ? new URL(site).host : site;
+  const normalized = trimSlash(siteHost).replace(/^api\./u, "").replace(/^http-intake\.logs\./u, "");
   return `https://http-intake.logs.${normalized}/api/v2/logs`;
 }
 

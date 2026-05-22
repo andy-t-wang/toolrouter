@@ -127,6 +127,24 @@ describe("Datadog metrics helper", () => {
     });
   });
 
+  it("normalizes full URL Datadog sites to the Logs HTTP intake host", async () => {
+    const urls = [];
+    const client = createDatadogClient({
+      env: {
+        DD_API_KEY: "dd_test",
+        DD_SITE: "https://api.datadoghq.com",
+      },
+      fetchImpl: async (url) => {
+        urls.push(url);
+        return new Response("{}", { status: 202 });
+      },
+    });
+
+    await client.log("info", "endpoint health check completed");
+
+    assert.deepEqual(urls, ["https://http-intake.logs.datadoghq.com/api/v2/logs"]);
+  });
+
   it("keeps base tags stable", () => {
     assert.deepEqual(
       datadogTags({ endpoint: "exa.search" }, { DD_ENV: "production" }),
