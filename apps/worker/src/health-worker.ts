@@ -1,13 +1,10 @@
 import { createServer } from "node:http";
 import { createHash } from "node:crypto";
+import { pathToFileURL } from "node:url";
 
 import { createCrossmintClient } from "@toolrouter/api/crossmint";
 import { createStore } from "@toolrouter/db";
 import { createHealthWorker, executeEndpoint } from "@toolrouter/router-core";
-
-const store = createStore();
-const paidIntervalMs = Number(process.env.TOOLROUTER_PAID_HEALTH_INTERVAL_MS || process.env.TOOLROUTER_HEALTH_INTERVAL_MS || 60 * 60 * 1000);
-const agentKitIntervalMs = Number(process.env.TOOLROUTER_AGENTKIT_HEALTH_INTERVAL_MS || 12 * 60 * 60 * 1000);
 
 function safeHash(value: string | undefined) {
   if (!value) return null;
@@ -74,77 +71,86 @@ function crossmintHealthPaymentSigner(state = healthPaymentSignerState()) {
   };
 }
 
-const paymentSignerState = healthPaymentSignerState();
-const paymentSigner = crossmintHealthPaymentSigner(paymentSignerState);
-const executeHealthEndpoint = async (payload: any) => {
-  try {
-    if (!paymentSigner) {
+export async function main() {
+  const store = createStore();
+  const paidIntervalMs = Number(process.env.TOOLROUTER_PAID_HEALTH_INTERVAL_MS || process.env.TOOLROUTER_HEALTH_INTERVAL_MS || 60 * 60 * 1000);
+  const agentKitIntervalMs = Number(process.env.TOOLROUTER_AGENTKIT_HEALTH_INTERVAL_MS || 12 * 60 * 60 * 1000);
+  const paymentSignerState = healthPaymentSignerState();
+  const paymentSigner = crossmintHealthPaymentSigner(paymentSignerState);
+  const executeHealthEndpoint = async (payload: any) => {
+    try {
+      if (!paymentSigner) {
+        return {
+          ok: false,
+          status_code: null,
+          path: null,
+          charged: false,
+          latency_ms: 0,
+          payment_error: "health payment signer unavailable",
+          error: "health payment signer unavailable",
+          health_payment_signer: paymentSignerState.log,
+        };
+      }
+      const result = await executeEndpoint({ ...payload, paymentSigner });
       return {
-        ok: false,
-        status_code: null,
-        path: null,
-        charged: false,
-        latency_ms: 0,
-        payment_error: "health payment signer unavailable",
-        error: "health payment signer unavailable",
+        ...result,
         health_payment_signer: paymentSignerState.log,
       };
+    } catch (error: any) {
+      console.error("health endpoint execution failed", {
+        endpoint_id: payload?.endpointId || payload?.endpoint?.id || null,
+        probe_kind: payload?.probeKind || null,
+        payment_mode: payload?.paymentMode || null,
+        health_payment_signer: paymentSignerState.log,
+        error: error?.message || String(error),
+        code: error?.code || null,
+      });
+      throw error;
     }
-    const result = await executeEndpoint({ ...payload, paymentSigner });
-    return {
-      ...result,
-      health_payment_signer: paymentSignerState.log,
-    };
-  } catch (error: any) {
-    console.error("health endpoint execution failed", {
-      endpoint_id: payload?.endpointId || payload?.endpoint?.id || null,
-      probe_kind: payload?.probeKind || null,
-      payment_mode: payload?.paymentMode || null,
-      health_payment_signer: paymentSignerState.log,
-      error: error?.message || String(error),
-      code: error?.code || null,
-    });
-    throw error;
-  }
-};
-const paidWorker = createHealthWorker({
-  db: store,
-  executor: executeHealthEndpoint,
-  intervalMs: paidIntervalMs,
-  probeKind: "availability",
-  useRecentRequests: false,
-  updateEndpointStatus: true,
-  logger: console,
-});
-const agentKitWorker = createHealthWorker({
-  db: store,
-  executor: executeHealthEndpoint,
-  intervalMs: agentKitIntervalMs,
-  probeKind: "agentkit",
-  useRecentRequests: true,
-  updateEndpointStatus: false,
-  logger: console,
-});
+  };
+  const paidWorker = createHealthWorker({
+    db: store,
+    executor: executeHealthEndpoint,
+    intervalMs: paidIntervalMs,
+    probeKind: "availability",
+    useRecentRequests: false,
+    updateEndpointStatus: true,
+    logger: console,
+  });
+  const agentKitWorker = createHealthWorker({
+    db: store,
+    executor: executeHealthEndpoint,
+    intervalMs: agentKitIntervalMs,
+    probeKind: "agentkit",
+    useRecentRequests: true,
+    updateEndpointStatus: false,
+    logger: console,
+  });
 
-if (process.argv.includes("--once")) {
-  const force = process.argv.includes("--force");
-  const paidResults = await paidWorker.runOnce({ force, useRecentRequests: false });
-  const agentKitResults = await agentKitWorker.runOnce({ force, useRecentRequests: !force });
-  console.log(JSON.stringify({ ok: true, checked: paidResults.length + agentKitResults.length, paidResults, agentKitResults }, null, 2));
-} else {
-  console.info("health worker payment signer configured", {
-    health_payment_signer: paymentSignerState.log,
-  });
-  await paidWorker.runOnce();
-  await agentKitWorker.runOnce();
-  paidWorker.start();
-  agentKitWorker.start();
-  const port = Number(process.env.PORT || process.env.TOOLROUTER_WORKER_HEALTH_PORT || "8080");
-  const server = createServer((_req, res) => {
-    res.writeHead(200, { "content-type": "application/json; charset=utf-8" });
-    res.end(JSON.stringify({ ok: true, service: "toolrouter-worker" }));
-  });
-  server.listen(port, "0.0.0.0");
-  console.log(JSON.stringify({ service: "toolrouter-worker", paidIntervalMs, agentKitIntervalMs, healthPort: port, health_payment_signer: paymentSignerState.log }));
-  process.stdin.resume();
+  if (process.argv.includes("--once")) {
+    const force = process.argv.includes("--force");
+    const paidResults = await paidWorker.runOnce({ force, useRecentRequests: false });
+    const agentKitResults = await agentKitWorker.runOnce({ force, useRecentRequests: !force });
+    console.log(JSON.stringify({ ok: true, checked: paidResults.length + agentKitResults.length, paidResults, agentKitResults }, null, 2));
+  } else {
+    console.info("health worker payment signer configured", {
+      health_payment_signer: paymentSignerState.log,
+    });
+    await paidWorker.runOnce();
+    await agentKitWorker.runOnce();
+    paidWorker.start();
+    agentKitWorker.start();
+    const port = Number(process.env.PORT || process.env.TOOLROUTER_WORKER_HEALTH_PORT || "8080");
+    const server = createServer((_req, res) => {
+      res.writeHead(200, { "content-type": "application/json; charset=utf-8" });
+      res.end(JSON.stringify({ ok: true, service: "toolrouter-worker" }));
+    });
+    server.listen(port, "0.0.0.0");
+    console.log(JSON.stringify({ service: "toolrouter-worker", paidIntervalMs, agentKitIntervalMs, healthPort: port, health_payment_signer: paymentSignerState.log }));
+    process.stdin.resume();
+  }
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  await main();
 }
