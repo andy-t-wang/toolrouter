@@ -40,22 +40,22 @@ On the worker side, log the signer selection once at startup and annotate every 
   crossmint_auth_configured: true,
   private_key_configured: false,
   health_locator_configured: true,
-  health_address_configured: false,
+  health_address_configured: true,
   live_locator_configured: false,
   live_address_configured: false,
   selected_locator_source: "health",
-  selected_address_source: null,
+  selected_address_source: "health",
   selected_wallet_locator_hash: "sha256:...",
-  selected_address_hash: null
+  selected_address_hash: "sha256:..."
 }
 ```
 
-The worker should use the health wallet only. `CROSSMINT_HEALTH_WALLET_LOCATOR`
-is enough to identify that wallet; the worker can resolve its current address
-through Crossmint instead of depending on a duplicated static address env. The
-source should make signer selection explicit:
+The source should make fallback explicit:
 
 - `crossmint_health`: expected recurring health signer.
+- `crossmint_live_fallback`: health env was incomplete and live Crossmint env was used.
+- `crossmint_mixed_fallback`: locator and address came from different source classes.
+- `agent_wallet_private_key_fallback`: executor fell back to `AGENT_WALLET_PRIVATE_KEY`.
 - `unavailable`: no usable signer config was present.
 
 On the API wrapper side, AgentMail ownership failures should distinguish the reason without exposing raw addresses:
@@ -81,11 +81,12 @@ Keep raw wallet addresses, locators, payment payloads, signatures, and provider 
 Without signer-source logging, every recurrence looks like "the health wallet changed" even when static env may still be present. The real failure can be any of:
 
 - the worker used the expected health wallet but the health inbox row is stale;
-- the health wallet locator is missing or cannot be read through Crossmint;
-- the API and worker components have different health wallet env;
+- the worker fell back to live Crossmint env;
+- the worker fell back to `AGENT_WALLET_PRIVATE_KEY`;
+- the API and worker components have different static env;
 - the health inbox env points to an inbox that was provisioned under a different payer.
 
-The next incident should be answerable from one health log line: whether the health signer was selected, whether wallet address resolution succeeded, whether the inbox row existed, and whether the stored owner hash matched the payer hash.
+The next incident should be answerable from one health log line: which signer class was selected, whether fallback happened, whether the inbox row existed, and whether the stored owner hash matched the payer hash.
 
 ## When to Apply
 
