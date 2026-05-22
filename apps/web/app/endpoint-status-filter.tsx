@@ -8,6 +8,7 @@ type LandingEndpoint = {
   provider: string;
   category?: string;
   name: string;
+  description?: string | null;
   agentkit?: boolean;
   agentkit_value_type?: string | null;
   agentkit_value_label?: string | null;
@@ -29,6 +30,20 @@ type EndpointStatusFilterProps = {
   initialCategory: string;
   renderedAtMs: number;
 };
+
+const ENDPOINT_POPOVER_COPY: Record<string, string> = Object.freeze({
+  "agentmail.create_inbox": "Create a new AgentMail inbox for an agent.",
+  "agentmail.get_message": "Fetch a single AgentMail message.",
+  "agentmail.list_messages": "List messages in an AgentMail inbox.",
+  "agentmail.reply_to_message": "Reply to an AgentMail message.",
+  "agentmail.send_message": "Send an email from an AgentMail inbox.",
+  "browserbase.session": "Create a verified browser session for automation.",
+  "exa.search": "Search the web with Exa neural search.",
+  "manus.research": "Start a deep research task that returns a sourced report.",
+  "parallel.extract": "Extract clean content from one or more URLs.",
+  "parallel.search": "Search the web for fresh, relevant results.",
+  "parallel.task": "Start an async research task with citations.",
+});
 
 function titleCase(value: string) {
   return value ? `${value.slice(0, 1).toUpperCase()}${value.slice(1)}` : value;
@@ -136,6 +151,18 @@ function AgentKitBenefit({ provider }: { provider: LandingEndpoint }) {
   );
 }
 
+function endpointDescription(provider: LandingEndpoint) {
+  return (
+    ENDPOINT_POPOVER_COPY[provider.id] ||
+    provider.description ||
+    "No endpoint description available yet."
+  );
+}
+
+function endpointDescriptionId(provider: LandingEndpoint) {
+  return `endpoint-description-${provider.id.replace(/[^a-z0-9_-]/giu, "-")}`;
+}
+
 function UptimeRow({
   provider,
   recommended,
@@ -145,13 +172,27 @@ function UptimeRow({
   recommended: boolean;
   renderedAtMs: number;
 }) {
+  const descriptionId = endpointDescriptionId(provider);
   return (
     <div className="mkt-uptime-grid mkt-uptime-row">
       <div>
         <div className="row provider-cell">
           <ProviderMark provider={provider} />
-          <span>
-            <span className="provider-name">{provider.name}</span>
+          <span className="provider-copy">
+            <span
+              className="provider-title-wrap"
+              tabIndex={0}
+              aria-describedby={descriptionId}
+            >
+              <span className="provider-name">{provider.name}</span>
+              <span
+                className="endpoint-info-popover"
+                id={descriptionId}
+                role="tooltip"
+              >
+                {endpointDescription(provider)}
+              </span>
+            </span>
             <span className="provider-meta">
               <span className="mono muted provider-id">
                 {displayEndpointId(provider)}
