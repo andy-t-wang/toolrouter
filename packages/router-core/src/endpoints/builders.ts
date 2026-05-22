@@ -843,7 +843,9 @@ export function buildStabletravelGoogleFlightsSearchRequest(input, endpoint) {
   const arrivalId = readString(data, ["arrival_id", "arrivalId"], "arrival_id", { required: true });
   const outboundDate = readDate(data, ["outbound_date", "outboundDate"], "outbound_date", { required: true });
   const returnDate = readDate(data, ["return_date", "returnDate"], "return_date");
-  const type = readEnum(data, ["type", "trip_type", "tripType"], "type", ["1", "2", "3"], { defaultValue: "1" });
+  const type = readEnum(data, ["type", "trip_type", "tripType"], "type", ["1", "2"], {
+    defaultValue: returnDate ? "1" : "2",
+  });
   if (type === "1" && !returnDate) throw new TypeError("return_date is required for round trip searches");
   assertDateOrder(outboundDate, returnDate, {
     allowSameDay: true,

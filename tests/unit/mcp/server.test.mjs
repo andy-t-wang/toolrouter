@@ -131,7 +131,9 @@ describe("ToolRouter MCP server", () => {
     const stabletravelFlightsTool = tools().find((tool) => tool.name === "stabletravel_google_flights_search");
     assert.ok(hasRequiredAlternative(stabletravelFlightsTool.inputSchema, ["departure_id", "arrival_id", "outbound_date"]));
     assert.ok(hasRequiredAlternative(stabletravelFlightsTool.inputSchema, ["departureId", "arrivalId", "outboundDate"]));
-    assert.equal(stabletravelFlightsTool.inputSchema.properties.type.enum.length, 3);
+    assert.deepEqual(stabletravelFlightsTool.inputSchema.properties.type.enum, ["1", "2"]);
+    assert.deepEqual(stabletravelFlightsTool.inputSchema.properties.trip_type.enum, ["1", "2"]);
+    assert.deepEqual(stabletravelFlightsTool.inputSchema.properties.tripType.enum, ["1", "2"]);
     assert.ok(stabletravelFlightsTool.inputSchema.properties.trip_type);
     assert.ok(stabletravelFlightsTool.inputSchema.properties.tripType);
     assert.ok(stabletravelFlightsTool.inputSchema.properties.infants_in_seat);

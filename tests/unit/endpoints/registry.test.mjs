@@ -546,6 +546,13 @@ describe("endpoint registry", () => {
     assert.equal(flights.estimatedUsd, "0.02");
     assert.equal(stabletravelPriceUsd("google_flights_search"), "0.02");
 
+    const defaultOneWayFlights = buildEndpointRequest("stabletravel.google_flights_search", {
+      departure_id: "SFO",
+      arrival_id: "JFK",
+      outbound_date: outboundDate,
+    });
+    assert.ok(defaultOneWayFlights.url.includes("type=2"));
+
     const roundTripFlights = buildEndpointRequest("stabletravel.google_flights_search", {
       departure_id: "SFO",
       arrival_id: "JFK",
@@ -647,6 +654,16 @@ describe("endpoint registry", () => {
           return_date: earlierDate,
         }),
       /return_date must be on or after outbound_date/u,
+    );
+    assert.throws(
+      () =>
+        buildEndpointRequest("stabletravel.google_flights_search", {
+          departure_id: "SFO",
+          arrival_id: "JFK",
+          outbound_date: outboundDate,
+          type: "3",
+        }),
+      /type must be one of 1, 2/u,
     );
     assert.throws(
       () => buildEndpointRequest("stabletravel.hotels_list", { city_code: "Paris" }),
