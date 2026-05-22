@@ -10,6 +10,11 @@ import { manusResearchEndpointDefinition } from "./research/manus/research.ts";
 import { parallelTaskEndpointDefinition } from "./research/parallel/task.ts";
 import { exaSearchEndpointDefinition } from "./search/exa/search.ts";
 import { parallelSearchEndpointDefinition } from "./search/parallel/search.ts";
+import { stabletravelFlightawareFlightsEndpointDefinition } from "./travel/stabletravel/flightaware-flights.ts";
+import { stabletravelGoogleFlightsSearchEndpointDefinition } from "./travel/stabletravel/google-flights-search.ts";
+import { stabletravelHotelsListEndpointDefinition } from "./travel/stabletravel/hotels-list.ts";
+import { stabletravelHotelsSearchEndpointDefinition } from "./travel/stabletravel/hotels-search.ts";
+import { stabletravelLocationsEndpointDefinition } from "./travel/stabletravel/locations.ts";
 
 const ENDPOINT_DEFINITIONS = Object.freeze([
   browserbaseSessionEndpointDefinition,
@@ -18,6 +23,11 @@ const ENDPOINT_DEFINITIONS = Object.freeze([
   parallelExtractEndpointDefinition,
   manusResearchEndpointDefinition,
   parallelTaskEndpointDefinition,
+  stabletravelLocationsEndpointDefinition,
+  stabletravelGoogleFlightsSearchEndpointDefinition,
+  stabletravelHotelsListEndpointDefinition,
+  stabletravelHotelsSearchEndpointDefinition,
+  stabletravelFlightawareFlightsEndpointDefinition,
   agentmailCreateInboxEndpointDefinition,
   agentmailListMessagesEndpointDefinition,
   agentmailGetMessageEndpointDefinition,

@@ -1,0 +1,80 @@
+import type { EndpointManifest } from "../../../manifest/endpoint.ts";
+import {
+  STABLETRAVEL_API_BASE,
+  buildStabletravelGoogleFlightsSearchRequest,
+  stabletravelMaxUsd,
+} from "../../builders.ts";
+
+export const stabletravelGoogleFlightsSearchEndpointDefinition = Object.freeze({
+  id: "stabletravel.google_flights_search",
+  provider: "stabletravel",
+  category: "travel",
+  name: "StableTravel Google Flights Search",
+  description: "Search Google Flights for priced flight offers and airport context; costs $0.02 with a $0.025 default cap.",
+  url: `${STABLETRAVEL_API_BASE}/api/google-flights/search`,
+  method: "GET",
+  agentkit: false,
+  x402: true,
+  estimated_cost_usd: 0.02,
+  agentkit_value_type: null,
+  agentkit_value_label: null,
+  default_payment_mode: "x402_only",
+  ui: {
+    badge: "Travel",
+    fixture_label: "Search flight offers",
+  },
+  fixture_input: {
+    departure_id: "SFO",
+    arrival_id: "JFK",
+    outbound_date: "2026-06-15",
+    type: "2",
+    adults: 1,
+    currency: "USD",
+    hl: "en",
+  },
+  health_probe: {
+    mode: "paid_availability",
+    payment_mode: "x402_only",
+    max_usd: stabletravelMaxUsd("google_flights_search"),
+    latency_budget_ms: 15000,
+    timeout_ms: 20000,
+    input: {
+      departure_id: "SFO",
+      arrival_id: "JFK",
+      outbound_date: "2026-06-15",
+      type: "2",
+      adults: 1,
+      currency: "USD",
+      hl: "en",
+    },
+  },
+  live_smoke: {
+    default_path: {
+      payment_mode: "x402_only",
+      max_usd: stabletravelMaxUsd("google_flights_search"),
+      input: {
+        departure_id: "SFO",
+        arrival_id: "JFK",
+        outbound_date: "2026-06-15",
+        type: "2",
+        adults: 1,
+        currency: "USD",
+        hl: "en",
+      },
+    },
+    paid_path: {
+      payment_mode: "x402_only",
+      max_usd: stabletravelMaxUsd("google_flights_search"),
+      input: {
+        departure_id: "SFO",
+        arrival_id: "JFK",
+        outbound_date: "2026-06-15",
+        type: "2",
+        adults: 1,
+        currency: "USD",
+        hl: "en",
+      },
+    },
+  },
+  builder: buildStabletravelGoogleFlightsSearchRequest,
+}) satisfies EndpointManifest;

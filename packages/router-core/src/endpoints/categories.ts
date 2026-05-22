@@ -66,7 +66,7 @@ export const ENDPOINT_CATEGORY_DEFINITIONS = Object.freeze([
     id: "travel",
     name: "Travel",
     description: "Flights, hotels, itinerary, and destination planning endpoints.",
-    recommended_endpoint_id: null,
+    recommended_endpoint_id: "stabletravel.google_flights_search",
     use_cases: ["flight search", "hotel search", "itineraries"],
   },
   {

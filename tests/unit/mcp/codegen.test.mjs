@@ -75,4 +75,20 @@ describe("ToolRouter MCP endpoints codegen", () => {
     const registryIds = new Set(endpointRegistry.map((endpoint) => endpoint.id));
     assert.deepEqual([...codegenIds].sort(), [...registryIds].sort());
   });
+
+  it("keeps StableTravel MCP default spend caps visible", () => {
+    const fresh = endpointsManifestSnapshot();
+    for (const [endpointId, price, maxUsd] of [
+      ["stabletravel.locations", "0.0054", "0.007"],
+      ["stabletravel.google_flights_search", "0.02", "0.025"],
+      ["stabletravel.hotels_list", "0.0324", "0.04"],
+      ["stabletravel.hotels_search", "0.0324", "0.04"],
+      ["stabletravel.flightaware_flights", "0.01", "0.012"],
+    ]) {
+      const entry = fresh.endpoints.find((candidate) => candidate.id === endpointId);
+      assert.equal(entry.mcp.default_max_usd, maxUsd);
+      assert.match(entry.mcp.description, new RegExp(`\\$${price.replace(".", "\\.")}`));
+      assert.match(entry.mcp.description, new RegExp(`\\$${maxUsd.replace(".", "\\.")}`));
+    }
+  });
 });

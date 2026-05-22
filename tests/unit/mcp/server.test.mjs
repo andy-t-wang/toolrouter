@@ -64,6 +64,11 @@ describe("ToolRouter MCP server", () => {
     assert.ok(listed.result.tools.some((tool) => tool.name === "agentmail_get_message"));
     assert.ok(listed.result.tools.some((tool) => tool.name === "agentmail_send_message"));
     assert.ok(listed.result.tools.some((tool) => tool.name === "agentmail_reply_to_message"));
+    assert.ok(listed.result.tools.some((tool) => tool.name === "stabletravel_locations"));
+    assert.ok(listed.result.tools.some((tool) => tool.name === "stabletravel_google_flights_search"));
+    assert.ok(listed.result.tools.some((tool) => tool.name === "stabletravel_hotels_list"));
+    assert.ok(listed.result.tools.some((tool) => tool.name === "stabletravel_hotels_search"));
+    assert.ok(listed.result.tools.some((tool) => tool.name === "stabletravel_flightaware_flights"));
     assert.equal(listed.result.tools.some((tool) => tool.name === "toolrouter_research"), false);
     assert.equal(listed.result.tools.some((tool) => tool.name === "manus_research"), false);
     assert.ok(tools().some((tool) => tool.name === "browserbase_session_create"));
@@ -108,6 +113,10 @@ describe("ToolRouter MCP server", () => {
     assert.ok(replyMailTool.inputSchema.properties.replyAll);
     assert.ok(hasRequiredAlternative(replyMailTool.inputSchema, ["inboxId", "messageId", "html"]));
     assert.ok(hasRequiredAlternative(replyMailTool.inputSchema, ["inbox_id", "message_id", "text"]));
+    const stabletravelFlightsTool = tools().find((tool) => tool.name === "stabletravel_google_flights_search");
+    assert.ok(hasRequiredAlternative(stabletravelFlightsTool.inputSchema, ["departure_id", "arrival_id", "outbound_date"]));
+    assert.ok(hasRequiredAlternative(stabletravelFlightsTool.inputSchema, ["departureId", "arrivalId", "outboundDate"]));
+    assert.equal(stabletravelFlightsTool.inputSchema.properties.type.enum.length, 3);
   });
 
   it("supports Content-Length framed stdio used by MCP clients", async () => {
@@ -181,6 +190,34 @@ describe("ToolRouter MCP server", () => {
         text: "Body",
       },
       maxUsd: "0.02",
+    });
+  });
+
+  it("calls StableTravel endpoint tools with direct x402 defaults", async () => {
+    const calls = [];
+    const result = await callTool("stabletravel_google_flights_search", {
+      departure_id: "SFO",
+      arrival_id: "JFK",
+      outbound_date: "2026-06-15",
+      type: "2",
+    }, {
+      env: { TOOLROUTER_API_URL: "http://router.test", TOOLROUTER_API_KEY: "tr_test" },
+      fetchImpl: async (url, init) => {
+        calls.push({ url, init });
+        return response({ id: "req_travel", endpoint_id: "stabletravel.google_flights_search", path: "x402", charged: true });
+      },
+    });
+
+    assert.equal(result.isError, false);
+    assert.deepEqual(JSON.parse(calls[0].init.body), {
+      endpoint_id: "stabletravel.google_flights_search",
+      input: {
+        departure_id: "SFO",
+        arrival_id: "JFK",
+        outbound_date: "2026-06-15",
+        type: "2",
+      },
+      maxUsd: "0.025",
     });
   });
 

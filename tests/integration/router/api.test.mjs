@@ -306,6 +306,11 @@ describe("router API", () => {
         "parallel.extract",
         "manus.research",
         "parallel.task",
+        "stabletravel.locations",
+        "stabletravel.google_flights_search",
+        "stabletravel.hotels_list",
+        "stabletravel.hotels_search",
+        "stabletravel.flightaware_flights",
         "agentmail.create_inbox",
         "agentmail.list_messages",
         "agentmail.get_message",
@@ -321,7 +326,7 @@ describe("router API", () => {
     const body = await response.json();
     assert.deepEqual(
       body.categories.map((category) => category.id),
-      ["search", "research", "extract", "email", "browser_usage"],
+      ["search", "research", "extract", "email", "browser_usage", "travel"],
     );
     const search = body.categories.find((category) => category.id === "search");
     assert.equal(search.recommended_endpoint_id, "exa.search");
@@ -338,6 +343,10 @@ describe("router API", () => {
     assert.equal(email.recommended_endpoint_id, "agentmail.send_message");
     assert.equal(email.recommended_endpoint.id, "agentmail.send_message");
     assert.equal(email.recommended_mcp_tool, "toolrouter_send_email");
+    const travel = body.categories.find((category) => category.id === "travel");
+    assert.equal(travel.recommended_endpoint_id, "stabletravel.google_flights_search");
+    assert.equal(travel.recommended_endpoint.id, "stabletravel.google_flights_search");
+    assert.equal(travel.recommended_mcp_tool, "stabletravel_google_flights_search");
     assert.ok(search.endpoints.every((endpoint) => endpoint.status));
 
     const dashboardResponse = await fetch(`${baseUrl}/v1/dashboard/categories?include_empty=true`, { headers: sessionHeaders() });
@@ -390,7 +399,7 @@ describe("router API", () => {
     assert.equal(response.status, 200);
     const body = await response.json();
     assert.equal(body.status, "unverified");
-    assert.equal(body.summary.endpoint_count, 11);
+    assert.equal(body.summary.endpoint_count, 16);
     assert.equal(body.summary.operational_count, 2);
     assert.deepEqual(
       body.endpoints.map((endpoint) => endpoint.id).sort(),
@@ -401,6 +410,11 @@ describe("router API", () => {
         "parallel.extract",
         "parallel.search",
         "parallel.task",
+        "stabletravel.locations",
+        "stabletravel.google_flights_search",
+        "stabletravel.hotels_list",
+        "stabletravel.hotels_search",
+        "stabletravel.flightaware_flights",
         "agentmail.create_inbox",
         "agentmail.list_messages",
         "agentmail.get_message",
@@ -1858,8 +1872,8 @@ describe("router API", () => {
     const body = await response.json();
     assert.ok(body.monitoring.requests_24h.total >= 1);
     assert.equal(body.monitoring.requests_24h.errors, 0);
-    assert.equal(body.monitoring.endpoint_health.total, 11);
-    assert.equal(body.monitoring.endpoint_health.unverified, 9);
+    assert.equal(body.monitoring.endpoint_health.total, 16);
+    assert.equal(body.monitoring.endpoint_health.unverified, 14);
     assert.ok("error_rate" in body.monitoring.requests_24h);
   });
 

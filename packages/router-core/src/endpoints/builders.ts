@@ -93,6 +93,23 @@ export const AGENTMAIL_BASE_PRICES_USD = Object.freeze({
   reply_to_message: 0.01,
 });
 
+export const STABLETRAVEL_API_BASE = "https://stabletravel.dev";
+export const STABLETRAVEL_PRICES_USD = Object.freeze({
+  locations: 0.0054,
+  google_flights_search: 0.02,
+  hotels_list: 0.0324,
+  hotels_search: 0.0324,
+  flightaware_flights: 0.01,
+});
+
+export const STABLETRAVEL_MAX_USD = Object.freeze({
+  locations: 0.007,
+  google_flights_search: 0.025,
+  hotels_list: 0.04,
+  hotels_search: 0.04,
+  flightaware_flights: 0.012,
+});
+
 const DEFAULT_HEADERS = Object.freeze({
   "content-type": "application/json",
 });
@@ -148,6 +165,28 @@ function readInteger(input, names, label, { defaultValue, min, max }) {
   return resolved;
 }
 
+function readOptionalInteger(input, names, label, { min, max }) {
+  const value = firstDefined(input, names);
+  if (value === undefined) return undefined;
+  if (!Number.isInteger(value)) throw new TypeError(`${label} must be an integer`);
+  if (value < min || value > max) {
+    throw new RangeError(`${label} must be between ${min} and ${max}`);
+  }
+  return value;
+}
+
+function readOptionalNumber(input, names, label, { min, max }) {
+  const value = firstDefined(input, names);
+  if (value === undefined) return undefined;
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    throw new TypeError(`${label} must be a number`);
+  }
+  if (value < min || value > max) {
+    throw new RangeError(`${label} must be between ${min} and ${max}`);
+  }
+  return value;
+}
+
 function readStringArray(input, names, label, { defaultValue = [], max = 10 } = {}) {
   const value = firstDefined(input, names);
   if (value === undefined) return defaultValue;
@@ -159,6 +198,26 @@ function readStringArray(input, names, label, { defaultValue = [], max = 10 } = 
     if (!trimmed) throw new TypeError(`${label}[${index}] must be non-empty`);
     return trimmed;
   });
+}
+
+function readCsvString(input, names, label, { max = 20 } = {}) {
+  const value = firstDefined(input, names);
+  if (value === undefined) return undefined;
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed) throw new TypeError(`${label} must be non-empty`);
+    return trimmed;
+  }
+  if (!Array.isArray(value)) throw new TypeError(`${label} must be a string or array`);
+  if (value.length > max) throw new RangeError(`${label} must include at most ${max} items`);
+  return value
+    .map((item, index) => {
+      if (typeof item !== "string") throw new TypeError(`${label}[${index}] must be a string`);
+      const trimmed = item.trim();
+      if (!trimmed) throw new TypeError(`${label}[${index}] must be non-empty`);
+      return trimmed;
+    })
+    .join(",");
 }
 
 function readStringOrArray(input, names, label, { required = false, max = 50 } = {}) {
@@ -224,6 +283,22 @@ function readHttpsUrlArray(input, names, label, options = {}) {
   });
 }
 
+function readDate(input, names, label, { required = false, defaultValue = undefined } = {}) {
+  const value = readString(input, names, label, { required, defaultValue });
+  if (value === undefined) return undefined;
+  if (!/^\d{4}-\d{2}-\d{2}$/u.test(value)) throw new TypeError(`${label} must use YYYY-MM-DD`);
+  return value;
+}
+
+function readEnum(input, names, label, values, { required = false, defaultValue = undefined } = {}) {
+  const value = readString(input, names, label, { required, defaultValue });
+  if (value === undefined) return undefined;
+  if (!values.includes(value)) {
+    throw new RangeError(`${label} must be one of ${values.join(", ")}`);
+  }
+  return value;
+}
+
 function toUsdString(value) {
   const rounded = Math.round((Number(value) + Number.EPSILON) * 1_000_000) / 1_000_000;
   return String(rounded).replace(/(\.\d*?)0+$/u, "$1").replace(/\.$/u, "");
@@ -275,12 +350,40 @@ export function agentmailPriceUsd(kind) {
   return toUsdString(base + AGENTMAIL_MARKUP_USD);
 }
 
+export function stabletravelPriceUsd(kind) {
+  if (!Object.hasOwn(STABLETRAVEL_PRICES_USD, kind)) {
+    throw new RangeError(`unsupported StableTravel price kind: ${kind}`);
+  }
+  return toUsdString(STABLETRAVEL_PRICES_USD[kind]);
+}
+
+export function stabletravelMaxUsd(kind) {
+  if (!Object.hasOwn(STABLETRAVEL_MAX_USD, kind)) {
+    throw new RangeError(`unsupported StableTravel maxUsd kind: ${kind}`);
+  }
+  return toUsdString(STABLETRAVEL_MAX_USD[kind]);
+}
+
 function providerRequest(endpoint, json, estimatedUsd) {
   return {
     method: endpoint.method,
     url: endpoint.url,
     headers: { ...DEFAULT_HEADERS },
     json,
+    estimatedUsd: toUsdString(estimatedUsd),
+  };
+}
+
+function stabletravelGetRequest(endpoint, query, estimatedUsd, pathSuffix = "") {
+  const url = new URL(`${endpoint.url.replace(/\/$/u, "")}${pathSuffix}`);
+  for (const [key, value] of Object.entries(query)) {
+    if (value !== undefined && value !== null && value !== "") {
+      url.searchParams.set(key, String(value));
+    }
+  }
+  return {
+    method: "GET",
+    url: url.toString(),
     estimatedUsd: toUsdString(estimatedUsd),
   };
 }
@@ -668,5 +771,220 @@ export function buildAgentmailReplyToMessageRequest(input, endpoint) {
       ...(replyAll ? { reply_all: true } : {}),
     },
     Number(agentmailPriceUsd("reply_to_message")),
+  );
+}
+
+export function buildStabletravelLocationsRequest(input, endpoint) {
+  const data = assertInputRecord(input);
+  const keyword = readString(data, ["keyword", "query"], "keyword", { required: true });
+  const subType = readEnum(data, ["subType", "sub_type"], "subType", ["AIRPORT", "CITY", "AIRPORT,CITY"], {
+    defaultValue: "AIRPORT,CITY",
+  });
+  const countryCode = readString(data, ["countryCode", "country_code"], "countryCode", {
+    defaultValue: undefined,
+  });
+  const pageLimit = readInteger(data, ["page_limit", "pageLimit", "limit"], "page_limit", {
+    defaultValue: 5,
+    min: 1,
+    max: 20,
+  });
+  const pageOffset = readOptionalInteger(data, ["page_offset", "pageOffset", "offset"], "page_offset", {
+    min: 0,
+    max: 500,
+  });
+  const sort = readEnum(data, ["sort"], "sort", ["analytics.travelers.score"], { defaultValue: undefined });
+  const view = readEnum(data, ["view"], "view", ["FULL", "LIGHT"], { defaultValue: "LIGHT" });
+  return stabletravelGetRequest(
+    endpoint,
+    {
+      subType,
+      keyword,
+      countryCode,
+      "page[limit]": pageLimit,
+      "page[offset]": pageOffset,
+      sort,
+      view,
+    },
+    Number(stabletravelPriceUsd("locations")),
+  );
+}
+
+export function buildStabletravelGoogleFlightsSearchRequest(input, endpoint) {
+  const data = assertInputRecord(input);
+  const departureId = readString(data, ["departure_id", "departureId"], "departure_id", { required: true });
+  const arrivalId = readString(data, ["arrival_id", "arrivalId"], "arrival_id", { required: true });
+  const outboundDate = readDate(data, ["outbound_date", "outboundDate"], "outbound_date", { required: true });
+  const returnDate = readDate(data, ["return_date", "returnDate"], "return_date");
+  const type = readEnum(data, ["type", "trip_type", "tripType"], "type", ["1", "2", "3"], { defaultValue: "2" });
+  if (type === "1" && !returnDate) throw new TypeError("return_date is required for round trip searches");
+  const travelClass = readEnum(
+    data,
+    ["travel_class", "travelClass"],
+    "travel_class",
+    ["1", "2", "3", "4"],
+    { defaultValue: undefined },
+  );
+  const adults = readInteger(data, ["adults"], "adults", { defaultValue: 1, min: 1, max: 9 });
+  const children = readInteger(data, ["children"], "children", { defaultValue: 0, min: 0, max: 9 });
+  const infantsInSeat = readInteger(data, ["infants_in_seat", "infantsInSeat"], "infants_in_seat", {
+    defaultValue: 0,
+    min: 0,
+    max: 9,
+  });
+  const infantsOnLap = readInteger(data, ["infants_on_lap", "infantsOnLap"], "infants_on_lap", {
+    defaultValue: 0,
+    min: 0,
+    max: 9,
+  });
+  const stops = readEnum(data, ["stops"], "stops", ["0", "1", "2", "3"], { defaultValue: undefined });
+  const maxPrice = readOptionalInteger(data, ["max_price", "maxPrice"], "max_price", {
+    min: 1,
+    max: Number.MAX_SAFE_INTEGER,
+  });
+  const excludeAirlines = readCsvString(data, ["exclude_airlines", "excludeAirlines"], "exclude_airlines");
+  const includeAirlines = readCsvString(data, ["include_airlines", "includeAirlines"], "include_airlines");
+  const currency = readString(data, ["currency"], "currency", { defaultValue: "USD" }).toUpperCase();
+  if (!/^[A-Z]{3}$/u.test(currency)) throw new TypeError("currency must be a 3-letter code");
+  const hl = readString(data, ["hl", "language"], "hl", { defaultValue: "en" });
+  const gl = readString(data, ["gl", "country"], "gl", { defaultValue: undefined });
+  return stabletravelGetRequest(
+    endpoint,
+    {
+      departure_id: departureId,
+      arrival_id: arrivalId,
+      outbound_date: outboundDate,
+      return_date: returnDate,
+      type,
+      travel_class: travelClass,
+      adults,
+      children,
+      infants_in_seat: infantsInSeat,
+      infants_on_lap: infantsOnLap,
+      stops,
+      max_price: maxPrice,
+      exclude_airlines: excludeAirlines,
+      include_airlines: includeAirlines,
+      currency,
+      hl,
+      gl,
+    },
+    Number(stabletravelPriceUsd("google_flights_search")),
+  );
+}
+
+export function buildStabletravelHotelsListRequest(input, endpoint) {
+  const data = assertInputRecord(input);
+  const cityCode = readString(data, ["cityCode", "city_code"], "cityCode", { required: true }).toUpperCase();
+  if (!/^[A-Z]{3}$/u.test(cityCode)) throw new TypeError("cityCode must be a 3-letter IATA city code");
+  const radius = readOptionalNumber(data, ["radius"], "radius", { min: 0, max: 300 });
+  const radiusUnit = readEnum(data, ["radiusUnit", "radius_unit"], "radiusUnit", ["KM", "MILE"], {
+    defaultValue: undefined,
+  });
+  const chainCodes = readCsvString(data, ["chainCodes", "chain_codes"], "chainCodes");
+  const amenities = readCsvString(data, ["amenities"], "amenities");
+  const ratings = readCsvString(data, ["ratings"], "ratings", { max: 5 });
+  const hotelScore = readEnum(data, ["hotelScore", "hotel_score"], "hotelScore", ["BEDBANK", "DIRECTCHAIN", "ALL"], {
+    defaultValue: undefined,
+  });
+  const max = readInteger(data, ["max", "limit"], "max", { defaultValue: 20, min: 1, max: 100 });
+  return stabletravelGetRequest(
+    endpoint,
+    {
+      cityCode,
+      radius,
+      radiusUnit,
+      chainCodes,
+      amenities,
+      ratings,
+      hotelScore,
+      max,
+    },
+    Number(stabletravelPriceUsd("hotels_list")),
+  );
+}
+
+export function buildStabletravelHotelsSearchRequest(input, endpoint) {
+  const data = assertInputRecord(input);
+  const hotelIds = readCsvString(data, ["hotelIds", "hotel_ids"], "hotelIds", { max: 20 });
+  if (!hotelIds) throw new TypeError("hotelIds is required");
+  const adults = readOptionalInteger(data, ["adults"], "adults", { min: 1, max: 9 }) ?? 1;
+  const checkInDate = readDate(data, ["checkInDate", "check_in_date"], "checkInDate");
+  const checkOutDate = readDate(data, ["checkOutDate", "check_out_date"], "checkOutDate");
+  const countryOfResidence = readString(
+    data,
+    ["countryOfResidence", "country_of_residence"],
+    "countryOfResidence",
+    { defaultValue: undefined },
+  );
+  const priceRange = readString(data, ["priceRange", "price_range"], "priceRange", { defaultValue: undefined });
+  const currencyCode = readString(data, ["currencyCode", "currency_code"], "currencyCode", {
+    defaultValue: "USD",
+  }).toUpperCase();
+  if (!/^[A-Z]{3}$/u.test(currencyCode)) throw new TypeError("currencyCode must be a 3-letter code");
+  const paymentPolicy = readEnum(data, ["paymentPolicy", "payment_policy"], "paymentPolicy", [
+    "GUARANTEE",
+    "DEPOSIT",
+    "NONE",
+  ], { defaultValue: undefined });
+  const boardType = readEnum(data, ["boardType", "board_type"], "boardType", [
+    "ROOM_ONLY",
+    "BREAKFAST",
+    "HALF_BOARD",
+    "FULL_BOARD",
+    "ALL_INCLUSIVE",
+  ], { defaultValue: undefined });
+  const includeClosed = readOptionalBoolean(data, ["includeClosed", "include_closed"], "includeClosed");
+  const bestRateOnly = readOptionalBoolean(data, ["bestRateOnly", "best_rate_only"], "bestRateOnly");
+  const lang = readString(data, ["lang", "language"], "lang", { defaultValue: undefined });
+  return stabletravelGetRequest(
+    endpoint,
+    {
+      hotelIds,
+      adults,
+      checkInDate,
+      checkOutDate,
+      countryOfResidence,
+      priceRange,
+      currencyCode,
+      paymentPolicy,
+      boardType,
+      includeClosed,
+      bestRateOnly,
+      lang,
+    },
+    Number(stabletravelPriceUsd("hotels_search")),
+  );
+}
+
+export function buildStabletravelFlightawareFlightsRequest(input, endpoint) {
+  const data = assertInputRecord(input);
+  const ident = readString(data, ["ident", "flight", "flight_number"], "ident", { required: true });
+  if (!/^[A-Za-z0-9._:-]{2,80}$/u.test(ident)) {
+    throw new TypeError("ident must be a flight designator, registration, or fa_flight_id");
+  }
+  const identType = readEnum(data, ["ident_type", "identType"], "ident_type", [
+    "fa_flight_id",
+    "designator",
+    "registration",
+  ], { defaultValue: "designator" });
+  const start = readString(data, ["start"], "start", { defaultValue: undefined });
+  const end = readString(data, ["end"], "end", { defaultValue: undefined });
+  const maxPages = readInteger(data, ["max_pages", "maxPages"], "max_pages", {
+    defaultValue: 1,
+    min: 1,
+    max: 5,
+  });
+  const cursor = readString(data, ["cursor"], "cursor", { defaultValue: undefined });
+  return stabletravelGetRequest(
+    endpoint,
+    {
+      ident_type: identType,
+      start,
+      end,
+      max_pages: maxPages,
+      cursor,
+    },
+    Number(stabletravelPriceUsd("flightaware_flights")),
+    `/${encodeURIComponent(ident)}`,
   );
 }

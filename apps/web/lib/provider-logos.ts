@@ -16,6 +16,7 @@ const PROVIDER_LOGOS: Readonly<Record<string, string>> = Object.freeze({
   exa: "/exa-logomark.svg",
   manus: "/manus-logomark.svg",
   parallel: "/parallel-logomark.svg",
+  stabletravel: "/stabletravel-logomark.svg",
 });
 
 export function providerLogoPath(provider: string | null | undefined): string {

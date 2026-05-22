@@ -30,6 +30,7 @@ const PROVIDER_LOGO_PATHS = Object.freeze({
   manus: "/manus-logomark.svg",
   parallel: "/parallel-logomark.svg",
   agentmail: "/agentmail-logomark.svg",
+  stabletravel: "/stabletravel-logomark.svg",
 });
 
 // Per-endpoint MCP tool wiring. The published package keeps the same tool
@@ -117,6 +118,41 @@ const MCP_TOOL_DEFINITIONS = Object.freeze({
     description: "Reply to an AgentMail message through ToolRouter's server-side x402 AgentMail wrapper.",
     input_kind: "agentmail_reply_to_message",
     default_max_usd: "0.02",
+  }),
+  "stabletravel.locations": Object.freeze({
+    tool_name: "stabletravel_locations",
+    title: "StableTravel locations",
+    description: "Find StableTravel airport and city codes by keyword. Price: $0.0054; default maxUsd cap with buffer: $0.007.",
+    input_kind: "stabletravel_locations",
+    default_max_usd: "0.007",
+  }),
+  "stabletravel.google_flights_search": Object.freeze({
+    tool_name: "stabletravel_google_flights_search",
+    title: "StableTravel Google Flights search",
+    description: "Search Google Flights offers through StableTravel. Price: $0.02; default maxUsd cap with buffer: $0.025.",
+    input_kind: "stabletravel_google_flights_search",
+    default_max_usd: "0.025",
+  }),
+  "stabletravel.hotels_list": Object.freeze({
+    tool_name: "stabletravel_hotels_list",
+    title: "StableTravel hotels list",
+    description: "List StableTravel hotels by city code so agents can discover hotel IDs. Price: $0.0324; default maxUsd cap with buffer: $0.04.",
+    input_kind: "stabletravel_hotels_list",
+    default_max_usd: "0.04",
+  }),
+  "stabletravel.hotels_search": Object.freeze({
+    tool_name: "stabletravel_hotels_search",
+    title: "StableTravel hotels search",
+    description: "Search StableTravel dated hotel offers by hotel ID. Price: $0.0324; default maxUsd cap with buffer: $0.04.",
+    input_kind: "stabletravel_hotels_search",
+    default_max_usd: "0.04",
+  }),
+  "stabletravel.flightaware_flights": Object.freeze({
+    tool_name: "stabletravel_flightaware_flights",
+    title: "StableTravel FlightAware flights",
+    description: "Look up FlightAware flight details through StableTravel by designator, registration, or FlightAware ID. Price: $0.01; default maxUsd cap with buffer: $0.012.",
+    input_kind: "stabletravel_flightaware_flights",
+    default_max_usd: "0.012",
   }),
 });
 
