@@ -1,4 +1,5 @@
 import { createServer } from "node:http";
+import { createHash } from "node:crypto";
 
 import { createCrossmintClient } from "@toolrouter/api/crossmint";
 import { createStore } from "@toolrouter/db";
@@ -8,11 +9,57 @@ const store = createStore();
 const paidIntervalMs = Number(process.env.TOOLROUTER_PAID_HEALTH_INTERVAL_MS || process.env.TOOLROUTER_HEALTH_INTERVAL_MS || 60 * 60 * 1000);
 const agentKitIntervalMs = Number(process.env.TOOLROUTER_AGENTKIT_HEALTH_INTERVAL_MS || 12 * 60 * 60 * 1000);
 
-function crossmintHealthPaymentSigner() {
-  const walletLocator = process.env.CROSSMINT_HEALTH_WALLET_LOCATOR || process.env.CROSSMINT_LIVE_WALLET_LOCATOR;
-  const address = process.env.CROSSMINT_HEALTH_WALLET_ADDRESS || process.env.CROSSMINT_LIVE_WALLET_ADDRESS;
-  if (!walletLocator || !address || !process.env.CROSSMINT_SIGNER_SECRET) return null;
-  if (!process.env.CROSSMINT_SERVER_SIDE_API_KEY && !process.env.CROSSMINT_API_KEY) return null;
+function safeHash(value: string | undefined) {
+  if (!value) return null;
+  return `sha256:${createHash("sha256").update(value.trim().toLowerCase()).digest("hex").slice(0, 16)}`;
+}
+
+function healthPaymentSignerState() {
+  const healthLocator = process.env.CROSSMINT_HEALTH_WALLET_LOCATOR;
+  const liveLocator = process.env.CROSSMINT_LIVE_WALLET_LOCATOR;
+  const healthAddress = process.env.CROSSMINT_HEALTH_WALLET_ADDRESS;
+  const liveAddress = process.env.CROSSMINT_LIVE_WALLET_ADDRESS;
+  const hasCrossmintAuth = Boolean(
+    process.env.CROSSMINT_SIGNER_SECRET &&
+      (process.env.CROSSMINT_SERVER_SIDE_API_KEY || process.env.CROSSMINT_API_KEY),
+  );
+  const selectedWalletLocator = healthLocator || liveLocator || "";
+  const selectedAddress = healthAddress || liveAddress || "";
+  const locatorSource = healthLocator ? "health" : liveLocator ? "live" : null;
+  const addressSource = healthAddress ? "health" : liveAddress ? "live" : null;
+  let source = "unavailable";
+  if (selectedWalletLocator && selectedAddress && hasCrossmintAuth) {
+    if (locatorSource === "health" && addressSource === "health") source = "crossmint_health";
+    else if (locatorSource === "live" && addressSource === "live") source = "crossmint_live_fallback";
+    else source = "crossmint_mixed_fallback";
+  } else if (process.env.AGENT_WALLET_PRIVATE_KEY) {
+    source = "agent_wallet_private_key_fallback";
+  }
+  return {
+    source,
+    selectedWalletLocator,
+    selectedAddress,
+    log: {
+      source,
+      fallback_used: source.endsWith("_fallback"),
+      crossmint_auth_configured: hasCrossmintAuth,
+      private_key_configured: Boolean(process.env.AGENT_WALLET_PRIVATE_KEY),
+      health_locator_configured: Boolean(healthLocator),
+      health_address_configured: Boolean(healthAddress),
+      live_locator_configured: Boolean(liveLocator),
+      live_address_configured: Boolean(liveAddress),
+      selected_locator_source: locatorSource,
+      selected_address_source: addressSource,
+      selected_wallet_locator_hash: safeHash(selectedWalletLocator),
+      selected_address_hash: safeHash(selectedAddress),
+    },
+  };
+}
+
+function crossmintHealthPaymentSigner(state = healthPaymentSignerState()) {
+  const walletLocator = state.selectedWalletLocator;
+  const address = state.selectedAddress;
+  if (!walletLocator || !address || !state.log.crossmint_auth_configured) return null;
   const crossmint = createCrossmintClient();
   return {
     address,
@@ -31,8 +78,27 @@ function crossmintHealthPaymentSigner() {
   };
 }
 
-const paymentSigner = crossmintHealthPaymentSigner();
-const executeHealthEndpoint = (payload: any) => executeEndpoint({ ...payload, paymentSigner });
+const paymentSignerState = healthPaymentSignerState();
+const paymentSigner = crossmintHealthPaymentSigner(paymentSignerState);
+const executeHealthEndpoint = async (payload: any) => {
+  try {
+    const result = await executeEndpoint({ ...payload, paymentSigner });
+    return {
+      ...result,
+      health_payment_signer: paymentSignerState.log,
+    };
+  } catch (error: any) {
+    console.error("health endpoint execution failed", {
+      endpoint_id: payload?.endpointId || payload?.endpoint?.id || null,
+      probe_kind: payload?.probeKind || null,
+      payment_mode: payload?.paymentMode || null,
+      health_payment_signer: paymentSignerState.log,
+      error: error?.message || String(error),
+      code: error?.code || null,
+    });
+    throw error;
+  }
+};
 const paidWorker = createHealthWorker({
   db: store,
   executor: executeHealthEndpoint,
@@ -58,6 +124,9 @@ if (process.argv.includes("--once")) {
   const agentKitResults = await agentKitWorker.runOnce({ force, useRecentRequests: !force });
   console.log(JSON.stringify({ ok: true, checked: paidResults.length + agentKitResults.length, paidResults, agentKitResults }, null, 2));
 } else {
+  console.info("health worker payment signer configured", {
+    health_payment_signer: paymentSignerState.log,
+  });
   await paidWorker.runOnce();
   await agentKitWorker.runOnce();
   paidWorker.start();
@@ -68,6 +137,6 @@ if (process.argv.includes("--once")) {
     res.end(JSON.stringify({ ok: true, service: "toolrouter-worker" }));
   });
   server.listen(port, "0.0.0.0");
-  console.log(JSON.stringify({ service: "toolrouter-worker", paidIntervalMs, agentKitIntervalMs, healthPort: port }));
+  console.log(JSON.stringify({ service: "toolrouter-worker", paidIntervalMs, agentKitIntervalMs, healthPort: port, health_payment_signer: paymentSignerState.log }));
   process.stdin.resume();
 }

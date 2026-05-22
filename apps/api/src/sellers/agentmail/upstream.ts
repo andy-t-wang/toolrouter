@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 import { executeEndpoint } from "@toolrouter/router-core";
 
 import { createCrossmintClient } from "../../services/crossmint.ts";
@@ -69,6 +71,11 @@ function normalizeEvmAddress(value: unknown) {
   return trimmed.toLowerCase();
 }
 
+function safeHash(value: unknown) {
+  if (typeof value !== "string" || !value.trim()) return null;
+  return `sha256:${createHash("sha256").update(value.trim().toLowerCase()).digest("hex").slice(0, 16)}`;
+}
+
 function paymentPayloadFromContext(payment: any) {
   if (payment && typeof payment === "object" && payment.paymentPayload) {
     return payment.paymentPayload;
@@ -109,12 +116,18 @@ function agentmailOwnerUnavailable(reply: any) {
   };
 }
 
-function agentmailInboxNotOwned(reply: any) {
+function agentmailInboxNotOwned(reply: any, diagnostics: any = {}) {
   reply.status(403);
   return {
     ok: false,
     error: "AgentMail inbox is not owned by this payer",
     code: "agentmail_inbox_not_owned",
+    diagnostics: {
+      inbox_found: Boolean(diagnostics.inbox_found),
+      reason: diagnostics.reason || "owner_mismatch",
+      payer_address_hash: safeHash(diagnostics.payer_address),
+      stored_owner_address_hash: safeHash(diagnostics.stored_owner_address),
+    },
   };
 }
 
@@ -239,7 +252,12 @@ async function assertAgentmailInboxOwner({
 }) {
   const inbox = await store.findAgentmailInboxByIdentifier({ identifier: inboxId });
   if (!inbox || normalizeEvmAddress(inbox.owner_address) !== ownerAddress) {
-    return agentmailInboxNotOwned(reply);
+    return agentmailInboxNotOwned(reply, {
+      inbox_found: Boolean(inbox),
+      reason: inbox ? "owner_mismatch" : "missing_inbox_owner_row",
+      payer_address: ownerAddress,
+      stored_owner_address: inbox?.owner_address,
+    });
   }
   return null;
 }
