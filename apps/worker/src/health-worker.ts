@@ -23,17 +23,13 @@ function healthPaymentSignerState() {
     process.env.CROSSMINT_SIGNER_SECRET &&
       (process.env.CROSSMINT_SERVER_SIDE_API_KEY || process.env.CROSSMINT_API_KEY),
   );
-  const selectedWalletLocator = healthLocator || liveLocator || "";
-  const selectedAddress = healthAddress || liveAddress || "";
-  const locatorSource = healthLocator ? "health" : liveLocator ? "live" : null;
-  const addressSource = healthAddress ? "health" : liveAddress ? "live" : null;
+  const selectedWalletLocator = healthLocator || "";
+  const selectedAddress = healthAddress || "";
+  const locatorSource = healthLocator ? "health" : null;
+  const addressSource = healthAddress ? "health" : null;
   let source = "unavailable";
   if (selectedWalletLocator && selectedAddress && hasCrossmintAuth) {
-    if (locatorSource === "health" && addressSource === "health") source = "crossmint_health";
-    else if (locatorSource === "live" && addressSource === "live") source = "crossmint_live_fallback";
-    else source = "crossmint_mixed_fallback";
-  } else if (process.env.AGENT_WALLET_PRIVATE_KEY) {
-    source = "agent_wallet_private_key_fallback";
+    source = "crossmint_health";
   }
   return {
     source,
@@ -82,6 +78,18 @@ const paymentSignerState = healthPaymentSignerState();
 const paymentSigner = crossmintHealthPaymentSigner(paymentSignerState);
 const executeHealthEndpoint = async (payload: any) => {
   try {
+    if (!paymentSigner) {
+      return {
+        ok: false,
+        status_code: null,
+        path: null,
+        charged: false,
+        latency_ms: 0,
+        payment_error: "health payment signer unavailable",
+        error: "health payment signer unavailable",
+        health_payment_signer: paymentSignerState.log,
+      };
+    }
     const result = await executeEndpoint({ ...payload, paymentSigner });
     return {
       ...result,

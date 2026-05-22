@@ -98,6 +98,7 @@ export type ToolRouterStore = {
   listCreditPurchases(input?: { user_id?: string; status?: string; since?: string; limit?: number }): Promise<any[]>;
   insertWalletTransaction(row: any): Promise<any>;
   upsertAgentmailInbox(row: any): Promise<any>;
+  repairAgentmailHealthInboxOwner(row: any): Promise<any>;
   findAgentmailInboxByIdentifier(input: { identifier: string }): Promise<any>;
 };
 
@@ -575,6 +576,27 @@ export class LocalStore implements ToolRouterStore {
         code: "agentmail_inbox_not_owned",
       });
     }
+    const existing = index >= 0 ? data.agentmail_inboxes[index] : null;
+    const next = {
+      ...row,
+      id: existing?.id || row.id || `ami_${randomUUID()}`,
+      created_at: existing?.created_at || row.created_at || now,
+      owner_address: normalizedOwner,
+      updated_at: now,
+    };
+    if (index >= 0) data.agentmail_inboxes[index] = { ...data.agentmail_inboxes[index], ...next };
+    else data.agentmail_inboxes.unshift(next);
+    this.write(data);
+    return data.agentmail_inboxes.find((item: any) => item.inbox_id === next.inbox_id) || next;
+  }
+
+  async repairAgentmailHealthInboxOwner(row: any) {
+    const data = this.read();
+    const now = new Date().toISOString();
+    const normalizedOwner = String(row.owner_address || "").toLowerCase();
+    const index = data.agentmail_inboxes.findIndex(
+      (item: any) => item.inbox_id === row.inbox_id || (row.email && item.email === row.email),
+    );
     const existing = index >= 0 ? data.agentmail_inboxes[index] : null;
     const next = {
       ...row,
@@ -1091,6 +1113,34 @@ export class SupabaseStore implements ToolRouterStore {
       updated_at: now,
     };
     if (existing && existing.inbox_id !== row.inbox_id) {
+      return (await this.request(`/agentmail_inboxes?${qs({ id: `eq.${existing.id}`, select: "*" })}`, {
+        method: "PATCH",
+        body,
+        prefer: "return=representation",
+      }))?.[0] || body;
+    }
+    return (await this.request("/agentmail_inboxes?on_conflict=inbox_id", {
+      method: "POST",
+      body,
+      prefer: "resolution=merge-duplicates,return=representation",
+    }))?.[0] || body;
+  }
+
+  async repairAgentmailHealthInboxOwner(row: any) {
+    const now = new Date().toISOString();
+    const owner_address = String(row.owner_address || "").toLowerCase();
+    let existing = await this.findAgentmailInboxByIdentifier({ identifier: row.inbox_id });
+    if (!existing && row.email) {
+      existing = await this.findAgentmailInboxByIdentifier({ identifier: row.email });
+    }
+    const body = {
+      ...row,
+      id: existing?.id || row.id || `ami_${randomUUID()}`,
+      created_at: existing?.created_at || row.created_at || now,
+      owner_address,
+      updated_at: now,
+    };
+    if (existing) {
       return (await this.request(`/agentmail_inboxes?${qs({ id: `eq.${existing.id}`, select: "*" })}`, {
         method: "PATCH",
         body,
