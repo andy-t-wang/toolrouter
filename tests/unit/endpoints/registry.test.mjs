@@ -532,6 +532,15 @@ describe("endpoint registry", () => {
     assert.equal(flights.estimatedUsd, "0.02");
     assert.equal(stabletravelPriceUsd("google_flights_search"), "0.02");
 
+    const roundTripFlights = buildEndpointRequest("stabletravel.google_flights_search", {
+      departure_id: "SFO",
+      arrival_id: "JFK",
+      outbound_date: "2026-06-15",
+      return_date: "2026-06-20",
+    });
+    assert.ok(roundTripFlights.url.includes("type=1"));
+    assert.ok(roundTripFlights.url.includes("return_date=2026-06-20"));
+
     const hotelsList = buildEndpointRequest("stabletravel.hotels_list", {
       city_code: "par",
       max: 5,
@@ -626,6 +635,7 @@ describe("endpoint registry", () => {
           departure_id: "SFO",
           arrival_id: "JFK",
           outbound_date: "2026-06-15",
+          type: "2",
           include_airlines: Array.from({ length: 21 }, (_, index) => `A${index}`).join(","),
         }),
       /include_airlines must include at most 20 items/u,

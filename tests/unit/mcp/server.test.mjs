@@ -113,10 +113,17 @@ describe("ToolRouter MCP server", () => {
     assert.ok(replyMailTool.inputSchema.properties.replyAll);
     assert.ok(hasRequiredAlternative(replyMailTool.inputSchema, ["inboxId", "messageId", "html"]));
     assert.ok(hasRequiredAlternative(replyMailTool.inputSchema, ["inbox_id", "message_id", "text"]));
+    const stabletravelLocationsTool = tools().find((tool) => tool.name === "stabletravel_locations");
+    assert.ok(stabletravelLocationsTool.inputSchema.properties.pageLimit);
+    assert.ok(stabletravelLocationsTool.inputSchema.properties.pageOffset);
+    assert.ok(stabletravelLocationsTool.inputSchema.properties.offset);
+    assert.ok(stabletravelLocationsTool.inputSchema.properties.sort);
     const stabletravelFlightsTool = tools().find((tool) => tool.name === "stabletravel_google_flights_search");
     assert.ok(hasRequiredAlternative(stabletravelFlightsTool.inputSchema, ["departure_id", "arrival_id", "outbound_date"]));
     assert.ok(hasRequiredAlternative(stabletravelFlightsTool.inputSchema, ["departureId", "arrivalId", "outboundDate"]));
     assert.equal(stabletravelFlightsTool.inputSchema.properties.type.enum.length, 3);
+    assert.ok(stabletravelFlightsTool.inputSchema.properties.trip_type);
+    assert.ok(stabletravelFlightsTool.inputSchema.properties.tripType);
     assert.ok(stabletravelFlightsTool.inputSchema.properties.infants_in_seat);
     assert.ok(stabletravelFlightsTool.inputSchema.properties.infantsInSeat);
     assert.ok(stabletravelFlightsTool.inputSchema.properties.infants_on_lap);
@@ -125,8 +132,17 @@ describe("ToolRouter MCP server", () => {
     assert.ok(stabletravelFlightsTool.inputSchema.properties.maxPrice);
     assert.ok(stabletravelFlightsTool.inputSchema.properties.includeAirlines);
     assert.ok(stabletravelFlightsTool.inputSchema.properties.excludeAirlines);
+    assert.ok(stabletravelFlightsTool.inputSchema.properties.language);
+    assert.ok(stabletravelFlightsTool.inputSchema.properties.country);
     assert.equal(stabletravelFlightsTool.inputSchema.properties.include_airlines.oneOf[1].maxItems, 20);
     assert.equal(stabletravelFlightsTool.inputSchema.properties.includeAirlines.oneOf[1].maxItems, 20);
+    const stabletravelHotelsListTool = tools().find((tool) => tool.name === "stabletravel_hotels_list");
+    assert.ok(stabletravelHotelsListTool.inputSchema.properties.chainCodes);
+    assert.equal(stabletravelHotelsListTool.inputSchema.properties.chain_codes.oneOf[1].maxItems, 20);
+    assert.equal(stabletravelHotelsListTool.inputSchema.properties.chainCodes.oneOf[1].maxItems, 20);
+    assert.equal(stabletravelHotelsListTool.inputSchema.properties.amenities.oneOf[1].maxItems, 20);
+    const stabletravelHotelsSearchTool = tools().find((tool) => tool.name === "stabletravel_hotels_search");
+    assert.ok(stabletravelHotelsSearchTool.inputSchema.properties.language);
   });
 
   it("supports Content-Length framed stdio used by MCP clients", async () => {
