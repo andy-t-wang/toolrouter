@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import {
   createHealthEndpointExecutor,
   healthPaymentSignerState,
+  resolveCrossmintHealthPaymentSigner,
 } from "../../../apps/worker/src/health-worker.ts";
 
 function createLogger() {
@@ -20,6 +21,80 @@ function createLogger() {
 }
 
 describe("health worker runtime logging", () => {
+  it("resolves the health wallet address from the health wallet locator", async () => {
+    const signerState = healthPaymentSignerState({
+      CROSSMINT_HEALTH_WALLET_LOCATOR: "evm:alias:toolrouter-health-base",
+      CROSSMINT_SIGNER_SECRET: "secret",
+      CROSSMINT_SERVER_SIDE_API_KEY: "key",
+    });
+    const calls = [];
+    const crossmint = {
+      async getSignedWallet(walletLocator) {
+        calls.push(["getSignedWallet", walletLocator]);
+        return { address: "0x00000000000000000000000000000000000000AA" };
+      },
+      async signMessage({ walletLocator, message }) {
+        calls.push(["signMessage", walletLocator, message]);
+        return "0xsigned";
+      },
+      async signTypedData({ walletLocator, primaryType }) {
+        calls.push(["signTypedData", walletLocator, primaryType]);
+        return "0xtyped";
+      },
+    };
+
+    const signer = await resolveCrossmintHealthPaymentSigner(signerState, crossmint);
+
+    assert.equal(signerState.source, "crossmint_health");
+    assert.equal(signerState.log.health_address_configured, false);
+    assert.equal(signer.address, "0x00000000000000000000000000000000000000AA");
+    assert.equal(await signer.signMessage({ message: "probe" }), "0xsigned");
+    assert.equal(await signer.signTypedData({ primaryType: "TransferWithAuthorization" }), "0xtyped");
+    assert.deepEqual(calls, [
+      ["getSignedWallet", "evm:alias:toolrouter-health-base"],
+      ["signMessage", "evm:alias:toolrouter-health-base", "probe"],
+      ["signTypedData", "evm:alias:toolrouter-health-base", "TransferWithAuthorization"],
+    ]);
+  });
+
+  it("returns an explicit signer initialization failure when address resolution fails", async () => {
+    const logger = createLogger();
+    const signerState = healthPaymentSignerState({
+      CROSSMINT_HEALTH_WALLET_LOCATOR: "evm:alias:toolrouter-health-base",
+      CROSSMINT_SIGNER_SECRET: "secret",
+      CROSSMINT_SERVER_SIDE_API_KEY: "key",
+    });
+    const executeHealthEndpoint = createHealthEndpointExecutor({
+      paymentSignerState: signerState,
+      paymentSigner: null,
+      paymentSignerFactory: async () => {
+        throw Object.assign(new Error("Crossmint wallet not found"), {
+          code: "crossmint_wallet_missing",
+          statusCode: 404,
+        });
+      },
+      logger,
+      executeEndpointImpl: async () => {
+        throw new Error("must not execute without a signer");
+      },
+    });
+
+    const result = await executeHealthEndpoint({
+      endpointId: "stabletravel.google_flights_search",
+      probeKind: "availability",
+      paymentMode: "x402_only",
+      traceId: "health_trace_init_failure",
+    });
+
+    assert.equal(result.ok, false);
+    assert.equal(result.payment_error, "health payment signer initialization failed");
+    assert.equal(logger.entries[0].message, "health payment signer initialization failed");
+    assert.equal(logger.entries[0].fields.error.message, "Crossmint wallet not found");
+    assert.equal(logger.entries[0].fields.error.code, "crossmint_wallet_missing");
+    assert.equal(logger.entries[0].fields.error.status_code, 404);
+    assert.equal(logger.entries[0].fields.health_payment_signer.source, "crossmint_health");
+  });
+
   it("logs redacted signer context when Crossmint message signing fails", async () => {
     const logger = createLogger();
     const signerState = healthPaymentSignerState({
@@ -76,11 +151,9 @@ describe("health worker runtime logging", () => {
     assert.equal(serialized.includes("00000000000000000000000000000000000000AA"), false, "must not log raw address");
   });
 
-  it("logs an explicit unavailable signer event instead of silently falling back", async () => {
+  it("logs an explicit unavailable signer event when no signer source is configured", async () => {
     const logger = createLogger();
-    const signerState = healthPaymentSignerState({
-      AGENT_WALLET_PRIVATE_KEY: "0xabc",
-    });
+    const signerState = healthPaymentSignerState({});
     const executeHealthEndpoint = createHealthEndpointExecutor({
       paymentSignerState: signerState,
       paymentSigner: null,
@@ -102,6 +175,6 @@ describe("health worker runtime logging", () => {
     assert.equal(logger.entries[0].message, "health payment signer unavailable");
     assert.equal(logger.entries[0].fields.endpoint_id, "agentmail.list_messages");
     assert.equal(logger.entries[0].fields.health_payment_signer.source, "unavailable");
-    assert.equal(logger.entries[0].fields.health_payment_signer.private_key_configured, true);
+    assert.equal(logger.entries[0].fields.health_payment_signer.private_key_configured, false);
   });
 });
