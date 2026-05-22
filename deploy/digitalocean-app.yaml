@@ -340,3 +340,14 @@ workers:
       - key: AGENTMAIL_HEALTH_REPLY_MESSAGE_ID
         value: SET_IN_APP_PLATFORM
         type: SECRET
+      - key: DD_API_KEY
+        value: SET_IN_APP_PLATFORM
+        type: SECRET
+      - key: DD_SITE
+        value: datadoghq.com
+      - key: DD_ENV
+        value: production
+      - key: DD_SERVICE
+        value: toolrouter-worker
+      - key: DD_SOURCE
+        value: toolrouter

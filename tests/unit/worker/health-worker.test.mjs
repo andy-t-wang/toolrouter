@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 
 import {
   createHealthEndpointExecutor,
+  createWorkerLogger,
   healthPaymentSignerState,
   resolveCrossmintHealthPaymentSigner,
 } from "../../../apps/worker/src/health-worker.ts";
@@ -93,6 +94,50 @@ describe("health worker runtime logging", () => {
     assert.equal(logger.entries[0].fields.error.code, "crossmint_wallet_missing");
     assert.equal(logger.entries[0].fields.error.status_code, 404);
     assert.equal(logger.entries[0].fields.health_payment_signer.source, "crossmint_health");
+  });
+
+  it("mirrors worker logs to console and Datadog", async () => {
+    const consoleEntries = [];
+    const datadogEntries = [];
+    const logger = createWorkerLogger({
+      consoleLogger: {
+        error(message, fields) {
+          consoleEntries.push({ level: "error", message, fields });
+        },
+      },
+      datadog: {
+        async log(level, message, fields) {
+          datadogEntries.push({ level, message, fields });
+          return { sent: true };
+        },
+      },
+    });
+
+    logger.error("health payment signer unavailable", {
+      endpoint_id: "agentmail.list_messages",
+      health_payment_signer: { source: "unavailable" },
+    });
+
+    assert.deepEqual(consoleEntries, [
+      {
+        level: "error",
+        message: "health payment signer unavailable",
+        fields: {
+          endpoint_id: "agentmail.list_messages",
+          health_payment_signer: { source: "unavailable" },
+        },
+      },
+    ]);
+    assert.deepEqual(datadogEntries, [
+      {
+        level: "error",
+        message: "health payment signer unavailable",
+        fields: {
+          endpoint_id: "agentmail.list_messages",
+          health_payment_signer: { source: "unavailable" },
+        },
+      },
+    ]);
   });
 
   it("logs redacted signer context when Crossmint message signing fails", async () => {

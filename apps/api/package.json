@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "exports": {
-    "./crossmint": "./src/services/crossmint.ts"
+    "./crossmint": "./src/services/crossmint.ts",
+    "./datadog": "./src/services/datadog.ts"
   },
   "scripts": {
     "dev": "node --env-file-if-exists=../../.env --import tsx src/server.ts",
