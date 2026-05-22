@@ -203,26 +203,17 @@ function readStringArray(input, names, label, { defaultValue = [], max = 10 } = 
 function readCsvString(input, names, label, { max = 20 } = {}) {
   const value = firstDefined(input, names);
   if (value === undefined) return undefined;
-  if (typeof value === "string") {
-    const trimmed = value.trim();
-    if (!trimmed) throw new TypeError(`${label} must be non-empty`);
-    const items = trimmed.split(",").map((item) => item.trim());
-    if (items.length > max) throw new RangeError(`${label} must include at most ${max} items`);
-    items.forEach((item, index) => {
-      if (!item) throw new TypeError(`${label}[${index}] must be non-empty`);
-    });
-    return items.join(",");
-  }
-  if (!Array.isArray(value)) throw new TypeError(`${label} must be a string or array`);
-  if (value.length > max) throw new RangeError(`${label} must include at most ${max} items`);
-  return value
-    .map((item, index) => {
-      if (typeof item !== "string") throw new TypeError(`${label}[${index}] must be a string`);
-      const trimmed = item.trim();
-      if (!trimmed) throw new TypeError(`${label}[${index}] must be non-empty`);
-      return trimmed;
-    })
-    .join(",");
+  const rawItems = typeof value === "string" ? [value] : value;
+  if (!Array.isArray(rawItems)) throw new TypeError(`${label} must be a string or array`);
+  const items = rawItems.flatMap((item, index) => {
+    if (typeof item !== "string") throw new TypeError(`${label}[${index}] must be a string`);
+    return item.split(",").map((part) => part.trim());
+  });
+  if (items.length > max) throw new RangeError(`${label} must include at most ${max} items`);
+  items.forEach((item, index) => {
+    if (!item) throw new TypeError(`${label}[${index}] must be non-empty`);
+  });
+  return items.join(",");
 }
 
 function readStringOrArray(input, names, label, { required = false, max = 50 } = {}) {
@@ -291,6 +282,17 @@ function readHttpsUrlArray(input, names, label, options = {}) {
 function readDate(input, names, label, { required = false, defaultValue = undefined } = {}) {
   const value = readString(input, names, label, { required, defaultValue });
   if (value === undefined) return undefined;
+  const rollingMatch = /^today\+(\d{1,4})d$/u.exec(value);
+  if (rollingMatch) {
+    const offsetDays = Number(rollingMatch[1]);
+    const today = new Date();
+    const date = new Date(Date.UTC(
+      today.getUTCFullYear(),
+      today.getUTCMonth(),
+      today.getUTCDate() + offsetDays,
+    ));
+    return date.toISOString().slice(0, 10);
+  }
   if (!/^\d{4}-\d{2}-\d{2}$/u.test(value)) throw new TypeError(`${label} must use YYYY-MM-DD`);
   const [year, month, day] = value.split("-").map(Number);
   const date = new Date(Date.UTC(year, month - 1, day));
@@ -302,6 +304,14 @@ function readDate(input, names, label, { required = false, defaultValue = undefi
     throw new RangeError(`${label} must be a valid calendar date`);
   }
   return value;
+}
+
+function assertDateOrder(startDate, endDate, { allowSameDay = false, startLabel, endLabel }) {
+  if (!startDate || !endDate) return;
+  const valid = allowSameDay ? endDate >= startDate : endDate > startDate;
+  if (!valid) {
+    throw new RangeError(`${endLabel} must be ${allowSameDay ? "on or after" : "after"} ${startLabel}`);
+  }
 }
 
 function readEnum(input, names, label, values, { required = false, defaultValue = undefined } = {}) {
@@ -831,6 +841,11 @@ export function buildStabletravelGoogleFlightsSearchRequest(input, endpoint) {
   const returnDate = readDate(data, ["return_date", "returnDate"], "return_date");
   const type = readEnum(data, ["type", "trip_type", "tripType"], "type", ["1", "2", "3"], { defaultValue: "1" });
   if (type === "1" && !returnDate) throw new TypeError("return_date is required for round trip searches");
+  assertDateOrder(outboundDate, returnDate, {
+    allowSameDay: true,
+    startLabel: "outbound_date",
+    endLabel: "return_date",
+  });
   const travelClass = readEnum(
     data,
     ["travel_class", "travelClass"],
@@ -924,6 +939,10 @@ export function buildStabletravelHotelsSearchRequest(input, endpoint) {
   const adults = readOptionalInteger(data, ["adults"], "adults", { min: 1, max: 9 }) ?? 1;
   const checkInDate = readDate(data, ["checkInDate", "check_in_date"], "checkInDate");
   const checkOutDate = readDate(data, ["checkOutDate", "check_out_date"], "checkOutDate");
+  assertDateOrder(checkInDate, checkOutDate, {
+    startLabel: "checkInDate",
+    endLabel: "checkOutDate",
+  });
   const countryOfResidence = readString(
     data,
     ["countryOfResidence", "country_of_residence"],

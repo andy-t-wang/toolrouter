@@ -169,7 +169,7 @@ const SNAPSHOT_BASELINE = Object.freeze({
     fixture_input: {
       departure_id: "SFO",
       arrival_id: "JFK",
-      outbound_date: "2026-06-15",
+      outbound_date: "today+30d",
       type: "2",
       adults: 1,
       currency: "USD",
@@ -214,8 +214,8 @@ const SNAPSHOT_BASELINE = Object.freeze({
     fixture_input: {
       hotel_ids: ["HLPAR266"],
       adults: 1,
-      check_in_date: "2026-06-15",
-      check_out_date: "2026-06-16",
+      check_in_date: "today+30d",
+      check_out_date: "today+31d",
       currency_code: "USD",
     },
     field_order: ["hotel_ids", "adults", "check_in_date", "check_out_date", "currency_code"],

@@ -26,6 +26,16 @@ import {
   assertValidEndpointRegistry,
 } from "../../../packages/router-core/src/testing/endpointHarness.ts";
 
+function rollingDate(daysFromToday) {
+  const today = new Date();
+  const date = new Date(Date.UTC(
+    today.getUTCFullYear(),
+    today.getUTCMonth(),
+    today.getUTCDate() + daysFromToday,
+  ));
+  return date.toISOString().slice(0, 10);
+}
+
 describe("endpoint registry", () => {
   it("validates the launch registry", () => {
     assert.equal(validateRegistry(), true);
@@ -541,6 +551,9 @@ describe("endpoint registry", () => {
     assert.ok(roundTripFlights.url.includes("type=1"));
     assert.ok(roundTripFlights.url.includes("return_date=2026-06-20"));
 
+    const rollingFlightProbe = buildEndpointHealthProbeRequest("stabletravel.google_flights_search");
+    assert.ok(rollingFlightProbe.request.url.includes(`outbound_date=${rollingDate(30)}`));
+
     const hotelsList = buildEndpointRequest("stabletravel.hotels_list", {
       city_code: "par",
       max: 5,
@@ -562,6 +575,10 @@ describe("endpoint registry", () => {
       "https://stabletravel.dev/api/hotels/search?hotelIds=HLPAR266%2CHLPAR123&adults=2&checkInDate=2026-06-15&checkOutDate=2026-06-16&currencyCode=USD&bestRateOnly=true",
     );
     assert.equal(hotelsSearch.estimatedUsd, "0.0324");
+
+    const rollingHotelProbe = buildEndpointHealthProbeRequest("stabletravel.hotels_search");
+    assert.ok(rollingHotelProbe.request.url.includes(`checkInDate=${rollingDate(30)}`));
+    assert.ok(rollingHotelProbe.request.url.includes(`checkOutDate=${rollingDate(31)}`));
 
     const flightLookup = buildEndpointRequest("stabletravel.flightaware_flights", {
       ident: "UAL123",
@@ -615,6 +632,16 @@ describe("endpoint registry", () => {
       /return_date is required/u,
     );
     assert.throws(
+      () =>
+        buildEndpointRequest("stabletravel.google_flights_search", {
+          departure_id: "SFO",
+          arrival_id: "JFK",
+          outbound_date: "2026-06-15",
+          return_date: "2026-06-10",
+        }),
+      /return_date must be on or after outbound_date/u,
+    );
+    assert.throws(
       () => buildEndpointRequest("stabletravel.hotels_list", { city_code: "Paris" }),
       /cityCode must be a 3-letter IATA city code/u,
     );
@@ -631,12 +658,32 @@ describe("endpoint registry", () => {
     );
     assert.throws(
       () =>
+        buildEndpointRequest("stabletravel.hotels_search", {
+          hotel_ids: ["HLPAR266"],
+          check_in_date: "2026-06-15",
+          check_out_date: "2026-06-15",
+        }),
+      /checkOutDate must be after checkInDate/u,
+    );
+    assert.throws(
+      () =>
         buildEndpointRequest("stabletravel.google_flights_search", {
           departure_id: "SFO",
           arrival_id: "JFK",
           outbound_date: "2026-06-15",
           type: "2",
           include_airlines: Array.from({ length: 21 }, (_, index) => `A${index}`).join(","),
+        }),
+      /include_airlines must include at most 20 items/u,
+    );
+    assert.throws(
+      () =>
+        buildEndpointRequest("stabletravel.google_flights_search", {
+          departure_id: "SFO",
+          arrival_id: "JFK",
+          outbound_date: "2026-06-15",
+          type: "2",
+          include_airlines: Array.from({ length: 11 }, (_, index) => `A${index},B${index}`),
         }),
       /include_airlines must include at most 20 items/u,
     );

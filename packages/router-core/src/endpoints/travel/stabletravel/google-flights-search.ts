@@ -26,7 +26,7 @@ export const stabletravelGoogleFlightsSearchEndpointDefinition = Object.freeze({
   fixture_input: {
     departure_id: "SFO",
     arrival_id: "JFK",
-    outbound_date: "2026-06-15",
+    outbound_date: "today+30d",
     type: "2",
     adults: 1,
     currency: "USD",
@@ -41,7 +41,7 @@ export const stabletravelGoogleFlightsSearchEndpointDefinition = Object.freeze({
     input: {
       departure_id: "SFO",
       arrival_id: "JFK",
-      outbound_date: "2026-06-15",
+      outbound_date: "today+30d",
       type: "2",
       adults: 1,
       currency: "USD",
@@ -55,7 +55,7 @@ export const stabletravelGoogleFlightsSearchEndpointDefinition = Object.freeze({
       input: {
         departure_id: "SFO",
         arrival_id: "JFK",
-        outbound_date: "2026-06-15",
+        outbound_date: "today+30d",
         type: "2",
         adults: 1,
         currency: "USD",
@@ -68,7 +68,7 @@ export const stabletravelGoogleFlightsSearchEndpointDefinition = Object.freeze({
       input: {
         departure_id: "SFO",
         arrival_id: "JFK",
-        outbound_date: "2026-06-15",
+        outbound_date: "today+30d",
         type: "2",
         adults: 1,
         currency: "USD",

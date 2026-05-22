@@ -22,8 +22,8 @@ export const stabletravelHotelsSearchEndpointDefinition = Object.freeze({
   fixture_input: {
     hotel_ids: ["HLPAR266"],
     adults: 1,
-    check_in_date: "2026-06-15",
-    check_out_date: "2026-06-16",
+    check_in_date: "today+30d",
+    check_out_date: "today+31d",
     currency_code: "USD",
   },
   health_probe: {
@@ -35,8 +35,8 @@ export const stabletravelHotelsSearchEndpointDefinition = Object.freeze({
     input: {
       hotel_ids: ["HLPAR266"],
       adults: 1,
-      check_in_date: "2026-06-15",
-      check_out_date: "2026-06-16",
+      check_in_date: "today+30d",
+      check_out_date: "today+31d",
       currency_code: "USD",
     },
   },
@@ -47,8 +47,8 @@ export const stabletravelHotelsSearchEndpointDefinition = Object.freeze({
       input: {
         hotel_ids: ["HLPAR266"],
         adults: 1,
-        check_in_date: "2026-06-15",
-        check_out_date: "2026-06-16",
+        check_in_date: "today+30d",
+        check_out_date: "today+31d",
         currency_code: "USD",
       },
     },
@@ -58,8 +58,8 @@ export const stabletravelHotelsSearchEndpointDefinition = Object.freeze({
       input: {
         hotel_ids: ["HLPAR266"],
         adults: 1,
-        check_in_date: "2026-06-15",
-        check_out_date: "2026-06-16",
+        check_in_date: "today+30d",
+        check_out_date: "today+31d",
         currency_code: "USD",
       },
     },
