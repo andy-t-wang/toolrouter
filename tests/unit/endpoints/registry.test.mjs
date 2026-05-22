@@ -583,8 +583,17 @@ describe("endpoint registry", () => {
           departure_id: "SFO",
           arrival_id: "JFK",
           outbound_date: "2026/06/15",
-        }),
+      }),
       /outbound_date must use YYYY-MM-DD/u,
+    );
+    assert.throws(
+      () =>
+        buildEndpointRequest("stabletravel.google_flights_search", {
+          departure_id: "SFO",
+          arrival_id: "JFK",
+          outbound_date: "2026-13-40",
+        }),
+      /outbound_date must be a valid calendar date/u,
     );
     assert.throws(
       () =>
@@ -603,6 +612,23 @@ describe("endpoint registry", () => {
     assert.throws(
       () => buildEndpointRequest("stabletravel.hotels_search", { adults: 1 }),
       /hotelIds is required/u,
+    );
+    assert.throws(
+      () =>
+        buildEndpointRequest("stabletravel.hotels_search", {
+          hotel_ids: Array.from({ length: 21 }, (_, index) => `HOTEL${index}`).join(","),
+        }),
+      /hotelIds must include at most 20 items/u,
+    );
+    assert.throws(
+      () =>
+        buildEndpointRequest("stabletravel.google_flights_search", {
+          departure_id: "SFO",
+          arrival_id: "JFK",
+          outbound_date: "2026-06-15",
+          include_airlines: Array.from({ length: 21 }, (_, index) => `A${index}`).join(","),
+        }),
+      /include_airlines must include at most 20 items/u,
     );
     assert.throws(
       () => buildEndpointRequest("stabletravel.flightaware_flights", { ident: "!" }),

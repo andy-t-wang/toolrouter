@@ -117,6 +117,16 @@ describe("ToolRouter MCP server", () => {
     assert.ok(hasRequiredAlternative(stabletravelFlightsTool.inputSchema, ["departure_id", "arrival_id", "outbound_date"]));
     assert.ok(hasRequiredAlternative(stabletravelFlightsTool.inputSchema, ["departureId", "arrivalId", "outboundDate"]));
     assert.equal(stabletravelFlightsTool.inputSchema.properties.type.enum.length, 3);
+    assert.ok(stabletravelFlightsTool.inputSchema.properties.infants_in_seat);
+    assert.ok(stabletravelFlightsTool.inputSchema.properties.infantsInSeat);
+    assert.ok(stabletravelFlightsTool.inputSchema.properties.infants_on_lap);
+    assert.ok(stabletravelFlightsTool.inputSchema.properties.infantsOnLap);
+    assert.ok(stabletravelFlightsTool.inputSchema.properties.travelClass);
+    assert.ok(stabletravelFlightsTool.inputSchema.properties.maxPrice);
+    assert.ok(stabletravelFlightsTool.inputSchema.properties.includeAirlines);
+    assert.ok(stabletravelFlightsTool.inputSchema.properties.excludeAirlines);
+    assert.equal(stabletravelFlightsTool.inputSchema.properties.include_airlines.oneOf[1].maxItems, 20);
+    assert.equal(stabletravelFlightsTool.inputSchema.properties.includeAirlines.oneOf[1].maxItems, 20);
   });
 
   it("supports Content-Length framed stdio used by MCP clients", async () => {

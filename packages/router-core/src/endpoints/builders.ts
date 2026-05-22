@@ -206,7 +206,12 @@ function readCsvString(input, names, label, { max = 20 } = {}) {
   if (typeof value === "string") {
     const trimmed = value.trim();
     if (!trimmed) throw new TypeError(`${label} must be non-empty`);
-    return trimmed;
+    const items = trimmed.split(",").map((item) => item.trim());
+    if (items.length > max) throw new RangeError(`${label} must include at most ${max} items`);
+    items.forEach((item, index) => {
+      if (!item) throw new TypeError(`${label}[${index}] must be non-empty`);
+    });
+    return items.join(",");
   }
   if (!Array.isArray(value)) throw new TypeError(`${label} must be a string or array`);
   if (value.length > max) throw new RangeError(`${label} must include at most ${max} items`);
@@ -287,6 +292,15 @@ function readDate(input, names, label, { required = false, defaultValue = undefi
   const value = readString(input, names, label, { required, defaultValue });
   if (value === undefined) return undefined;
   if (!/^\d{4}-\d{2}-\d{2}$/u.test(value)) throw new TypeError(`${label} must use YYYY-MM-DD`);
+  const [year, month, day] = value.split("-").map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  if (
+    date.getUTCFullYear() !== year ||
+    date.getUTCMonth() !== month - 1 ||
+    date.getUTCDate() !== day
+  ) {
+    throw new RangeError(`${label} must be a valid calendar date`);
+  }
   return value;
 }
 
