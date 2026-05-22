@@ -3,8 +3,12 @@ import { executeEndpoint } from "@toolrouter/router-core";
 import { createCrossmintClient } from "../../services/crossmint.ts";
 import { agentmailProviderPriceUsd } from "./pricing.ts";
 
-const AGENTMAIL_X402_API_BASE = "https://x402.api.agentmail.to";
+const DEFAULT_AGENTMAIL_X402_API_BASE = "https://x402.api.agentmail.to";
 const EVM_ADDRESS_RE = /^0x[0-9a-fA-F]{40}$/u;
+
+function agentmailX402ApiBase() {
+  return (process.env.AGENTMAIL_X402_API_BASE || DEFAULT_AGENTMAIL_X402_API_BASE).replace(/\/$/u, "");
+}
 
 function stripControlFields(body: any) {
   if (!body || typeof body !== "object" || Array.isArray(body)) return {};
@@ -35,6 +39,18 @@ function requireStringField(input: any, field: string) {
 
 function encodedPathPart(value: string) {
   return encodeURIComponent(value).replace(/%40/giu, "@");
+}
+
+function addQueryParams(url: URL, params: Record<string, unknown>) {
+  for (const [key, value] of Object.entries(params)) {
+    if (value === undefined || value === null || value === "") continue;
+    if (Array.isArray(value)) {
+      for (const item of value) url.searchParams.append(key, String(item));
+      continue;
+    }
+    url.searchParams.set(key, String(value));
+  }
+  return url.toString();
 }
 
 function safeAgentmailError(status: number | null) {
@@ -139,16 +155,29 @@ function agentmailPayloadFromResult(result: any) {
   return result?.result ?? result?.body ?? result?.data ?? result;
 }
 
-function agentmailInboxIdentifiersFromResult(result: any) {
+function fallbackInboxIdentifiersFromRequest(body: any) {
+  const username = firstString(body?.username);
+  if (!username) return {};
+  const domain = firstString(body?.domain) || "agentmail.to";
+  const email = `${username}@${domain}`;
+  return {
+    inbox_id: email,
+    email,
+  };
+}
+
+function agentmailInboxIdentifiersFromResult(result: any, fallback: any = {}) {
   const payload = agentmailPayloadFromResult(result);
-  const nested = payload?.inbox ?? payload?.data?.inbox ?? {};
+  const nested = payload?.inbox ?? payload?.data?.inbox ?? payload?.data ?? {};
   const id = firstString(
     payload?.id,
     payload?.inbox_id,
     payload?.inboxId,
+    payload?.inboxID,
     nested?.id,
     nested?.inbox_id,
     nested?.inboxId,
+    nested?.inboxID,
   );
   const email = firstString(
     payload?.email,
@@ -161,8 +190,8 @@ function agentmailInboxIdentifiersFromResult(result: any) {
     nested?.inboxEmail,
   );
   return {
-    inbox_id: id || email,
-    email: email || null,
+    inbox_id: id || email || fallback?.inbox_id || fallback?.email,
+    email: email || fallback?.email || null,
   };
 }
 
@@ -171,13 +200,15 @@ async function recordAgentmailInboxOwner({
   reply,
   ownerAddress,
   result,
+  fallbackIdentifiers,
 }: {
   store: any;
   reply: any;
   ownerAddress: string;
   result: any;
+  fallbackIdentifiers?: any;
 }) {
-  const identifiers = agentmailInboxIdentifiersFromResult(result);
+  const identifiers = agentmailInboxIdentifiersFromResult(result, fallbackIdentifiers);
   if (!identifiers.inbox_id) return agentmailInboxRecordMissing(reply);
   for (const identifier of [identifiers.inbox_id, identifiers.email]) {
     if (!identifier) continue;
@@ -251,6 +282,7 @@ export function createAgentmailUpstreamPaymentSigner() {
 }
 
 async function executeAgentmailUpstream({
+  method = "POST",
   path,
   body,
   maxUsd,
@@ -258,6 +290,7 @@ async function executeAgentmailUpstream({
   fetchImpl,
   paymentSigner,
 }: {
+  method?: "GET" | "POST";
   path: string;
   body: Record<string, unknown>;
   maxUsd: string;
@@ -265,13 +298,14 @@ async function executeAgentmailUpstream({
   fetchImpl: typeof fetch;
   paymentSigner?: any;
 }) {
-  const request = {
-    method: "POST",
-    url: `${AGENTMAIL_X402_API_BASE}${path}`,
-    headers: { "content-type": "application/json" },
-    json: body,
+  const baseUrl = agentmailX402ApiBase();
+  const request: any = {
+    method,
+    url: `${baseUrl}${path}`,
+    headers: method === "POST" ? { "content-type": "application/json" } : {},
     estimatedUsd: maxUsd,
   };
+  if (method === "POST") request.json = body;
   const result = await executeEndpoint({
     endpoint: {
       id: "agentmail.upstream",
@@ -318,13 +352,14 @@ export async function forwardAgentmailCreateInboxUpstream({
   fetchImpl?: typeof fetch;
   paymentSigner?: any;
 }) {
+  const input = stripControlFields(request.body || {});
   const ownershipStore = requireAgentmailOwnershipStore(store, reply);
   if (!ownershipStore || ownershipStore.ok === false) return ownershipStore;
   const ownerAddress = requireAgentmailOwner(payment, reply);
   if (typeof ownerAddress !== "string") return ownerAddress;
   const result = await executeAgentmailUpstream({
     path: "/v0/inboxes",
-    body: stripControlFields(request.body || {}),
+    body: input,
     maxUsd: agentmailProviderPriceUsd("create_inbox"),
     reply,
     fetchImpl,
@@ -336,6 +371,113 @@ export async function forwardAgentmailCreateInboxUpstream({
     reply,
     ownerAddress,
     result,
+    fallbackIdentifiers: fallbackInboxIdentifiersFromRequest(input),
+  });
+}
+
+export async function forwardAgentmailListMessagesUpstream({
+  request,
+  reply,
+  payment,
+  store,
+  fetchImpl = fetch,
+  paymentSigner = createAgentmailUpstreamPaymentSigner(),
+}: {
+  request: any;
+  reply: any;
+  payment?: any;
+  store?: any;
+  fetchImpl?: typeof fetch;
+  paymentSigner?: any;
+}) {
+  const input = stripControlFields(request.body || {});
+  const inboxId = requireStringField(input, "inbox_id");
+  const ownershipStore = requireAgentmailOwnershipStore(store, reply);
+  if (!ownershipStore || ownershipStore.ok === false) return ownershipStore;
+  const ownerAddress = requireAgentmailOwner(payment, reply);
+  if (typeof ownerAddress !== "string") return ownerAddress;
+  const ownershipError = await assertAgentmailInboxOwner({
+    store: ownershipStore,
+    reply,
+    ownerAddress,
+    inboxId,
+  });
+  if (ownershipError) return ownershipError;
+  const {
+    inbox_id: _inboxId,
+    limit,
+    page_token: pageToken,
+    labels,
+    before,
+    after,
+    ascending,
+    include_spam: includeSpam,
+    include_blocked: includeBlocked,
+    include_unauthenticated: includeUnauthenticated,
+    include_trash: includeTrash,
+  } = input;
+  const baseUrl = agentmailX402ApiBase();
+  const url = new URL(`${baseUrl}/v0/inboxes/${encodedPathPart(inboxId)}/messages`);
+  const upstreamUrl = addQueryParams(url, {
+    limit,
+    page_token: pageToken,
+    labels,
+    before,
+    after,
+    ascending,
+    include_spam: includeSpam,
+    include_blocked: includeBlocked,
+    include_unauthenticated: includeUnauthenticated,
+    include_trash: includeTrash,
+  });
+  return executeAgentmailUpstream({
+    method: "GET",
+    path: upstreamUrl.slice(baseUrl.length),
+    body: {},
+    maxUsd: agentmailProviderPriceUsd("list_messages"),
+    reply,
+    fetchImpl,
+    paymentSigner,
+  });
+}
+
+export async function forwardAgentmailGetMessageUpstream({
+  request,
+  reply,
+  payment,
+  store,
+  fetchImpl = fetch,
+  paymentSigner = createAgentmailUpstreamPaymentSigner(),
+}: {
+  request: any;
+  reply: any;
+  payment?: any;
+  store?: any;
+  fetchImpl?: typeof fetch;
+  paymentSigner?: any;
+}) {
+  const input = stripControlFields(request.body || {});
+  const inboxId = requireStringField(input, "inbox_id");
+  const messageId = requireStringField(input, "message_id");
+  const ownershipStore = requireAgentmailOwnershipStore(store, reply);
+  if (!ownershipStore || ownershipStore.ok === false) return ownershipStore;
+  const ownerAddress = requireAgentmailOwner(payment, reply);
+  if (typeof ownerAddress !== "string") return ownerAddress;
+  const ownershipError = await assertAgentmailInboxOwner({
+    store: ownershipStore,
+    reply,
+    ownerAddress,
+    inboxId,
+  });
+  if (ownershipError) return ownershipError;
+  return executeAgentmailUpstream({
+    method: "GET",
+    path: `/v0/inboxes/${encodedPathPart(inboxId)}/messages/${encodedPathPart(messageId)}`,
+    body: {},
+    maxUsd: agentmailProviderPriceUsd("get_message"),
+    reply,
+    fetchImpl,
+    paymentSigner,
   });
 }
 

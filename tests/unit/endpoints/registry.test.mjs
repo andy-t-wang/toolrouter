@@ -369,22 +369,26 @@ describe("endpoint registry", () => {
       labels: ["toolrouter"],
       include_trash: true,
     });
-    assert.equal(list.method, "GET");
-    assert.match(list.url, /^https:\/\/x402\.api\.agentmail\.to\/v0\/inboxes\/agent@agentmail\.to\/messages/u);
-    assert.match(list.url, /limit=5/u);
-    assert.match(list.url, /labels=toolrouter/u);
-    assert.match(list.url, /include_trash=true/u);
+    assert.equal(list.method, "POST");
+    assert.ok(list.url.endsWith("/x402/agentmail/messages/list"));
+    assert.deepEqual(list.json, {
+      inbox_id: "agent@agentmail.to",
+      limit: 5,
+      labels: ["toolrouter"],
+      include_trash: true,
+    });
     assert.equal(list.estimatedUsd, "0");
 
     const get = buildEndpointRequest("agentmail.get_message", {
       inboxId: "agent@agentmail.to",
       messageId: "msg_123",
     });
-    assert.equal(get.method, "GET");
-    assert.equal(
-      get.url,
-      "https://x402.api.agentmail.to/v0/inboxes/agent@agentmail.to/messages/msg_123",
-    );
+    assert.equal(get.method, "POST");
+    assert.ok(get.url.endsWith("/x402/agentmail/messages/get"));
+    assert.deepEqual(get.json, {
+      inbox_id: "agent@agentmail.to",
+      message_id: "msg_123",
+    });
     assert.equal(get.estimatedUsd, "0");
 
     const send = buildEndpointRequest("agentmail.send_message", {

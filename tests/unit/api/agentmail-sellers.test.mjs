@@ -3,20 +3,28 @@ import assert from "node:assert/strict";
 
 import {
   agentmailCreateInboxSellerManifest,
+  agentmailGetMessageSellerManifest,
+  agentmailListMessagesSellerManifest,
   agentmailReplyToMessageSellerManifest,
   agentmailSendMessageSellerManifest,
   AGENTMAIL_CREATE_INBOX_PATH,
+  AGENTMAIL_GET_MESSAGE_PATH,
+  AGENTMAIL_LIST_MESSAGES_PATH,
   AGENTMAIL_REPLY_TO_MESSAGE_PATH,
   AGENTMAIL_SEND_MESSAGE_PATH,
 } from "../../../apps/api/src/sellers/agentmail/index.ts";
 import {
   agentmailCreateInboxPriceUsd,
+  agentmailGetMessagePriceUsd,
+  agentmailListMessagesPriceUsd,
   agentmailReplyToMessagePriceUsd,
   agentmailSendMessagePriceUsd,
   agentmailProviderPriceUsd,
 } from "../../../apps/api/src/sellers/agentmail/pricing.ts";
 import {
   forwardAgentmailCreateInboxUpstream,
+  forwardAgentmailGetMessageUpstream,
+  forwardAgentmailListMessagesUpstream,
   forwardAgentmailReplyToMessageUpstream,
   forwardAgentmailSendMessageUpstream,
 } from "../../../apps/api/src/sellers/agentmail/upstream.ts";
@@ -91,10 +99,14 @@ async function withAllowedHosts(fn) {
 describe("AgentMail seller manifests", () => {
   it("mounts x402-only AgentMail manifests at the documented paths", () => {
     assert.equal(agentmailCreateInboxSellerManifest.route, AGENTMAIL_CREATE_INBOX_PATH);
+    assert.equal(agentmailListMessagesSellerManifest.route, AGENTMAIL_LIST_MESSAGES_PATH);
+    assert.equal(agentmailGetMessageSellerManifest.route, AGENTMAIL_GET_MESSAGE_PATH);
     assert.equal(agentmailSendMessageSellerManifest.route, AGENTMAIL_SEND_MESSAGE_PATH);
     assert.equal(agentmailReplyToMessageSellerManifest.route, AGENTMAIL_REPLY_TO_MESSAGE_PATH);
     for (const manifest of [
       agentmailCreateInboxSellerManifest,
+      agentmailListMessagesSellerManifest,
+      agentmailGetMessageSellerManifest,
       agentmailSendMessageSellerManifest,
       agentmailReplyToMessageSellerManifest,
     ]) {
@@ -108,6 +120,10 @@ describe("AgentMail seller manifests", () => {
   it("prices paid AgentMail operations with a one-cent ToolRouter surcharge", () => {
     assert.equal(agentmailProviderPriceUsd("create_inbox"), "2");
     assert.equal(agentmailCreateInboxPriceUsd(), "2.01");
+    assert.equal(agentmailProviderPriceUsd("list_messages"), "0");
+    assert.equal(agentmailListMessagesPriceUsd(), "0");
+    assert.equal(agentmailProviderPriceUsd("get_message"), "0");
+    assert.equal(agentmailGetMessagePriceUsd(), "0");
     assert.equal(agentmailProviderPriceUsd("send_message"), "0.01");
     assert.equal(agentmailSendMessagePriceUsd(), "0.02");
     assert.equal(agentmailProviderPriceUsd("reply_to_message"), "0.01");
@@ -120,7 +136,7 @@ describe("AgentMail seller manifests", () => {
       const fetchImpl = async (url, init) => {
         const request = url instanceof Request ? url : new Request(url, init);
         const text = await request.clone().text();
-        captured.push({ url: request.url, body: text ? JSON.parse(text) : null });
+        captured.push({ method: request.method, url: request.url, body: text ? JSON.parse(text) : null });
         if (request.url.endsWith("/v0/inboxes")) {
           return new Response('{"id":"inbox_123","email":"agent@agentmail.to"}', {
             status: 200,
@@ -162,6 +178,48 @@ describe("AgentMail seller manifests", () => {
         owner_address: OWNER_A.toLowerCase(),
         metadata: { provider: "agentmail" },
       });
+
+      const listReply = makeReply();
+      await forwardAgentmailListMessagesUpstream({
+        request: {
+          body: {
+            inbox_id: "agent@agentmail.to",
+            limit: 5,
+            labels: ["toolrouter"],
+            include_trash: true,
+          },
+        },
+        reply: listReply,
+        payment: paymentContext(),
+        store,
+        fetchImpl,
+        paymentSigner: paymentSigner(),
+      });
+      assert.equal(captured.at(-1).method, "GET");
+      assert.equal(
+        captured.at(-1).url,
+        "https://x402.api.agentmail.to/v0/inboxes/agent@agentmail.to/messages?limit=5&labels=toolrouter&include_trash=true",
+      );
+
+      const getReply = makeReply();
+      await forwardAgentmailGetMessageUpstream({
+        request: {
+          body: {
+            inbox_id: "agent@agentmail.to",
+            message_id: "msg_123",
+          },
+        },
+        reply: getReply,
+        payment: paymentContext(),
+        store,
+        fetchImpl,
+        paymentSigner: paymentSigner(),
+      });
+      assert.equal(captured.at(-1).method, "GET");
+      assert.equal(
+        captured.at(-1).url,
+        "https://x402.api.agentmail.to/v0/inboxes/agent@agentmail.to/messages/msg_123",
+      );
 
       const sendReply = makeReply();
       await forwardAgentmailSendMessageUpstream({
@@ -214,7 +272,7 @@ describe("AgentMail seller manifests", () => {
     });
   });
 
-  it("rejects AgentMail send/reply when the payer did not create the inbox through ToolRouter", async () => {
+  it("rejects AgentMail inbox operations when the payer did not create the inbox through ToolRouter", async () => {
     await withAllowedHosts(async () => {
       let upstreamCalls = 0;
       const store = makeAgentmailStore();
@@ -230,6 +288,42 @@ describe("AgentMail seller manifests", () => {
           headers: { "content-type": "application/json" },
         });
       };
+
+      const listReply = makeReply();
+      const listResult = await forwardAgentmailListMessagesUpstream({
+        request: {
+          body: {
+            inbox_id: "agent@agentmail.to",
+            limit: 10,
+          },
+        },
+        reply: listReply,
+        payment: paymentContext(OWNER_B),
+        store,
+        fetchImpl,
+        paymentSigner: paymentSigner(),
+      });
+
+      assert.equal(listReply.statusCode, 403);
+      assert.equal(listResult.code, "agentmail_inbox_not_owned");
+
+      const getReply = makeReply();
+      const getResult = await forwardAgentmailGetMessageUpstream({
+        request: {
+          body: {
+            inbox_id: "agent@agentmail.to",
+            message_id: "msg_123",
+          },
+        },
+        reply: getReply,
+        payment: paymentContext(OWNER_B),
+        store,
+        fetchImpl,
+        paymentSigner: paymentSigner(),
+      });
+
+      assert.equal(getReply.statusCode, 403);
+      assert.equal(getResult.code, "agentmail_inbox_not_owned");
 
       const sendReply = makeReply();
       const sendResult = await forwardAgentmailSendMessageUpstream({

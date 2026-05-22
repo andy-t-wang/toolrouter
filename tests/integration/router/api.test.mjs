@@ -498,6 +498,56 @@ describe("router API", () => {
     });
   });
 
+  it("surfaces safe AgentMail ownership health errors and ignores manual-only probe noise", async () => {
+    await withIsolatedApp("toolrouter-public-status-agentmail-", {}, async ({ baseUrl, store }) => {
+      const checkedAt = new Date().toISOString();
+      await store.insertHealthCheck({
+        id: "hc_agentmail_create_manual",
+        endpoint_id: "agentmail.create_inbox",
+        checked_at: checkedAt,
+        status: "unverified",
+        status_code: null,
+        latency_ms: 0,
+        path: null,
+        charged: false,
+        error: "manual health probe",
+      });
+      await store.upsertEndpointStatus({
+        endpoint_id: "agentmail.create_inbox",
+        status: "healthy",
+        last_checked_at: null,
+        status_code: null,
+        latency_ms: 0,
+        path: null,
+        charged: false,
+        last_error: null,
+      });
+      await store.upsertEndpointStatus({
+        endpoint_id: "agentmail.send_message",
+        status: "unverified",
+        last_checked_at: checkedAt,
+        status_code: 403,
+        latency_ms: 120,
+        path: "x402",
+        charged: false,
+        last_error: "AgentMail inbox ownership check failed",
+      });
+
+      const response = await fetch(`${baseUrl}/v1/status`);
+      assert.equal(response.status, 200);
+      const body = await response.json();
+      const createInbox = body.endpoints.find((endpoint) => endpoint.id === "agentmail.create_inbox");
+      assert.equal(createInbox.status, "healthy");
+      assert.equal(createInbox.health_check_count_30d, 0);
+      assert.equal(createInbox.uptime_30d, null);
+      assert.equal(createInbox.last_checked_at, null);
+
+      const send = body.endpoints.find((endpoint) => endpoint.id === "agentmail.send_message");
+      assert.equal(send.status, "unverified");
+      assert.equal(send.last_error, "AgentMail inbox ownership check failed");
+    });
+  });
+
   it("creates dashboard-owned API keys without an admin token", async () => {
     const response = await fetch(`${baseUrl}/v1/api-keys`, {
       method: "POST",

@@ -21,6 +21,8 @@ import { loadAgentBookVerifier } from "../services/agentkit-account.ts";
 import { registerSellerServices, type SellerService } from "../sellers/createSellerService.ts";
 import {
   registerAgentmailCreateInboxSellerService,
+  registerAgentmailGetMessageSellerService,
+  registerAgentmailListMessagesSellerService,
   registerAgentmailReplyToMessageSellerService,
   registerAgentmailSendMessageSellerService,
 } from "../sellers/agentmail/index.ts";
@@ -58,6 +60,8 @@ export interface SellerRoutesOpts {
   registerParallelTaskSeller?: typeof registerParallelTaskSellerService;
   /** Optional AgentMail seller factories — `createApiApp` passes defaults. */
   registerAgentmailCreateInboxSeller?: typeof registerAgentmailCreateInboxSellerService;
+  registerAgentmailListMessagesSeller?: typeof registerAgentmailListMessagesSellerService;
+  registerAgentmailGetMessageSeller?: typeof registerAgentmailGetMessageSellerService;
   registerAgentmailSendMessageSeller?: typeof registerAgentmailSendMessageSellerService;
   registerAgentmailReplyToMessageSeller?: typeof registerAgentmailReplyToMessageSellerService;
   /** Mirror of `manusFetch` for the Parallel sellers' upstream forwarders. */
@@ -168,6 +172,18 @@ async function agentmailSellerServices(
     store,
     fetchImpl,
   });
+  const listMessages = (opts.registerAgentmailListMessagesSeller || registerAgentmailListMessagesSellerService)({
+    cache,
+    agentBook,
+    store,
+    fetchImpl,
+  });
+  const getMessage = (opts.registerAgentmailGetMessageSeller || registerAgentmailGetMessageSellerService)({
+    cache,
+    agentBook,
+    store,
+    fetchImpl,
+  });
   const sendMessage = (opts.registerAgentmailSendMessageSeller || registerAgentmailSendMessageSellerService)({
     cache,
     agentBook,
@@ -180,7 +196,7 @@ async function agentmailSellerServices(
     store,
     fetchImpl,
   });
-  return Promise.all([createInbox, sendMessage, replyToMessage]);
+  return Promise.all([createInbox, listMessages, getMessage, sendMessage, replyToMessage]);
 }
 
 export async function sellersRoutes(app: any, opts: SellerRoutesOpts = {}) {
@@ -287,6 +303,14 @@ function registerLazyAgentmailProxies(app: any, opts: SellerRoutesOpts) {
     {
       path: "/x402/agentmail/inboxes",
       factory: opts.registerAgentmailCreateInboxSeller || registerAgentmailCreateInboxSellerService,
+    },
+    {
+      path: "/x402/agentmail/messages/list",
+      factory: opts.registerAgentmailListMessagesSeller || registerAgentmailListMessagesSellerService,
+    },
+    {
+      path: "/x402/agentmail/messages/get",
+      factory: opts.registerAgentmailGetMessageSeller || registerAgentmailGetMessageSellerService,
     },
     {
       path: "/x402/agentmail/messages/send",

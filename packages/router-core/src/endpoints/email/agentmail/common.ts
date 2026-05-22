@@ -1,11 +1,7 @@
-import {
-  agentmailPriceUsd,
-  AGENTMAIL_X402_API_BASE,
-} from "../../builders.ts";
+import { agentmailPriceUsd } from "../../builders.ts";
 
 export const AGENTMAIL_PROVIDER = "agentmail";
 export const AGENTMAIL_CATEGORY = "email";
-export const AGENTMAIL_READ_URL = `${AGENTMAIL_X402_API_BASE}/v0`;
 
 export function wrapperBaseUrl() {
   return (process.env.TOOLROUTER_X402_PROVIDER_URL || "https://toolrouter.world").replace(/\/$/u, "");

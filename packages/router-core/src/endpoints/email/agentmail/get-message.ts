@@ -3,8 +3,8 @@ import { buildAgentmailGetMessageRequest } from "../../builders.ts";
 import {
   AGENTMAIL_CATEGORY,
   AGENTMAIL_PROVIDER,
-  AGENTMAIL_READ_URL,
   envFixture,
+  wrapperBaseUrl,
 } from "./common.ts";
 
 export const agentmailGetMessageEndpointDefinition = Object.freeze({
@@ -12,9 +12,9 @@ export const agentmailGetMessageEndpointDefinition = Object.freeze({
   provider: AGENTMAIL_PROVIDER,
   category: AGENTMAIL_CATEGORY,
   name: "AgentMail Get Message",
-  description: "Fetch a single AgentMail message through ToolRouter's server-side x402 execution path.",
-  url: `${AGENTMAIL_READ_URL}/inboxes/messages/message`,
-  method: "GET",
+  description: "Fetch a single AgentMail message through ToolRouter's server-side x402 AgentMail wrapper.",
+  url: `${wrapperBaseUrl()}/x402/agentmail/messages/get`,
+  method: "POST",
   agentkit: false,
   x402: true,
   estimated_cost_usd: 0,

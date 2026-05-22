@@ -7,6 +7,14 @@ export function agentmailCreateInboxPriceUsd() {
   return agentmailPriceUsd("create_inbox");
 }
 
+export function agentmailListMessagesPriceUsd() {
+  return agentmailPriceUsd("list_messages");
+}
+
+export function agentmailGetMessagePriceUsd() {
+  return agentmailPriceUsd("get_message");
+}
+
 export function agentmailSendMessagePriceUsd() {
   return agentmailPriceUsd("send_message");
 }
@@ -18,4 +26,3 @@ export function agentmailReplyToMessagePriceUsd() {
 export function agentmailProviderPriceUsd(kind: keyof typeof AGENTMAIL_BASE_PRICES_USD) {
   return String(AGENTMAIL_BASE_PRICES_USD[kind]);
 }
-

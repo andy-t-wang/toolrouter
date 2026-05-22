@@ -816,6 +816,45 @@ describe("endpoint health worker", () => {
     }
   });
 
+  it("marks non-retryable AgentMail ownership failures as unverified, not provider downtime", async () => {
+    const previousInbox = process.env.AGENTMAIL_HEALTH_INBOX_ID;
+    const previousEmail = process.env.AGENTMAIL_HEALTH_INBOX_EMAIL;
+    process.env.AGENTMAIL_HEALTH_INBOX_ID = "agent@agentmail.to";
+    process.env.AGENTMAIL_HEALTH_INBOX_EMAIL = "agent@agentmail.to";
+    const endpoint = getEndpoint("agentmail.send_message");
+    const db = createDb();
+
+    try {
+      const result = await runEndpointHealthCheck({
+        endpoint,
+        db,
+        executor: async () => ({
+          ok: false,
+          status_code: 403,
+          path: "x402",
+          charged: false,
+          latency_ms: 120,
+          body: {
+            error: "AgentMail inbox is not owned by this payer",
+            code: "agentmail_inbox_not_owned",
+          },
+        }),
+        now: () => new Date("2026-05-21T12:00:00.000Z"),
+        useRecentRequests: false,
+      });
+
+      assert.equal(result.status, "unverified");
+      assert.equal(db.insertedHealthChecks[0].error, "AgentMail inbox ownership check failed");
+      assert.equal(db.upsertedStatuses[0].last_error, "AgentMail inbox ownership check failed");
+      assert.equal(db.upsertedStatuses[0].layer_upstream_status, undefined);
+    } finally {
+      if (previousInbox === undefined) delete process.env.AGENTMAIL_HEALTH_INBOX_ID;
+      else process.env.AGENTMAIL_HEALTH_INBOX_ID = previousInbox;
+      if (previousEmail === undefined) delete process.env.AGENTMAIL_HEALTH_INBOX_EMAIL;
+      else process.env.AGENTMAIL_HEALTH_INBOX_EMAIL = previousEmail;
+    }
+  });
+
   it("does not run AgentKit benefit probes for x402-only AgentMail endpoints", async () => {
     const endpoint = getEndpoint("agentmail.send_message");
     const db = createDb();

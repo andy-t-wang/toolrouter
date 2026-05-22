@@ -7,18 +7,24 @@ import {
 } from "../createSellerService.ts";
 import {
   agentmailCreateInboxPriceUsd,
+  agentmailGetMessagePriceUsd,
+  agentmailListMessagesPriceUsd,
   agentmailReplyToMessagePriceUsd,
   agentmailSendMessagePriceUsd,
 } from "./pricing.ts";
 import {
   createAgentmailUpstreamPaymentSigner,
   forwardAgentmailCreateInboxUpstream,
+  forwardAgentmailGetMessageUpstream,
+  forwardAgentmailListMessagesUpstream,
   forwardAgentmailReplyToMessageUpstream,
   forwardAgentmailSendMessageUpstream,
 } from "./upstream.ts";
 import { createParallelFacilitatorConfig } from "../parallel/upstream.ts";
 
 export const AGENTMAIL_CREATE_INBOX_PATH = "/x402/agentmail/inboxes";
+export const AGENTMAIL_LIST_MESSAGES_PATH = "/x402/agentmail/messages/list";
+export const AGENTMAIL_GET_MESSAGE_PATH = "/x402/agentmail/messages/get";
 export const AGENTMAIL_SEND_MESSAGE_PATH = "/x402/agentmail/messages/send";
 export const AGENTMAIL_REPLY_TO_MESSAGE_PATH = "/x402/agentmail/messages/reply";
 
@@ -45,6 +51,42 @@ export const agentmailCreateInboxSellerManifest: SellerManifest = Object.freeze(
   upstream: Object.freeze({
     url: "https://x402.api.agentmail.to/v0/inboxes",
     headers_factory: () => ({ "content-type": "application/json" }),
+    body_factory: (input: any) => input,
+  }),
+  unpaid_response_body: Object.freeze({ error: "x402 payment required" }),
+}) as SellerManifest;
+
+export const agentmailListMessagesSellerManifest: SellerManifest = Object.freeze({
+  id: "agentmail.list_messages",
+  route: AGENTMAIL_LIST_MESSAGES_PATH,
+  method: "POST",
+  description: "AgentMail list messages",
+  mime_type: "application/json",
+  secrets: AGENTMAIL_SECRETS,
+  pricing: () => agentmailListMessagesPriceUsd(),
+  agentkit: null,
+  pay_to_env_order: AGENTMAIL_PAY_TO_ENV_ORDER,
+  upstream: Object.freeze({
+    url: "https://x402.api.agentmail.to/v0/inboxes/{inbox_id}/messages",
+    headers_factory: () => ({}),
+    body_factory: (input: any) => input,
+  }),
+  unpaid_response_body: Object.freeze({ error: "x402 payment required" }),
+}) as SellerManifest;
+
+export const agentmailGetMessageSellerManifest: SellerManifest = Object.freeze({
+  id: "agentmail.get_message",
+  route: AGENTMAIL_GET_MESSAGE_PATH,
+  method: "POST",
+  description: "AgentMail get message",
+  mime_type: "application/json",
+  secrets: AGENTMAIL_SECRETS,
+  pricing: () => agentmailGetMessagePriceUsd(),
+  agentkit: null,
+  pay_to_env_order: AGENTMAIL_PAY_TO_ENV_ORDER,
+  upstream: Object.freeze({
+    url: "https://x402.api.agentmail.to/v0/inboxes/{inbox_id}/messages/{message_id}",
+    headers_factory: () => ({}),
     body_factory: (input: any) => input,
   }),
   unpaid_response_body: Object.freeze({ error: "x402 payment required" }),
@@ -126,6 +168,18 @@ export async function registerAgentmailCreateInboxSellerService(
   deps: RegisterAgentmailSellerDeps,
 ): Promise<SellerService> {
   return buildSeller(agentmailCreateInboxSellerManifest, forwardAgentmailCreateInboxUpstream, deps);
+}
+
+export async function registerAgentmailListMessagesSellerService(
+  deps: RegisterAgentmailSellerDeps,
+): Promise<SellerService> {
+  return buildSeller(agentmailListMessagesSellerManifest, forwardAgentmailListMessagesUpstream, deps);
+}
+
+export async function registerAgentmailGetMessageSellerService(
+  deps: RegisterAgentmailSellerDeps,
+): Promise<SellerService> {
+  return buildSeller(agentmailGetMessageSellerManifest, forwardAgentmailGetMessageUpstream, deps);
 }
 
 export async function registerAgentmailSendMessageSellerService(
