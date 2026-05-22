@@ -283,6 +283,9 @@ function displayEndpointId(provider: LandingEndpoint) {
 }
 
 function isRecommendedEndpoint(provider: LandingEndpoint) {
+  if (provider.provider === "parallel" || provider.id.startsWith("parallel.")) {
+    return false;
+  }
   if (!provider.category) return false;
   return recommendedEndpointIdByCategory.get(provider.category) === provider.id;
 }
