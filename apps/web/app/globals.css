@@ -2645,6 +2645,29 @@ code {
     padding-right: 10px;
   }
 
+  .endpoint-info-popover {
+    left: 0;
+    top: calc(100% + 8px);
+    transform: translateY(-4px) scale(0.98);
+  }
+
+  .endpoint-info-popover::before {
+    border-bottom: 0;
+    border-left: 0;
+    border-right: 1px solid color-mix(in oklab, var(--bone) 18%, transparent);
+    border-top: 1px solid color-mix(in oklab, var(--bone) 18%, transparent);
+    left: 18px;
+    top: -6px;
+    transform: rotate(-45deg);
+  }
+
+  .provider-title-wrap:hover .endpoint-info-popover,
+  .provider-title-wrap:focus-visible .endpoint-info-popover,
+  .provider-title-wrap:focus-within .endpoint-info-popover {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+
   .uptime-grid-head {
     display: none;
   }
