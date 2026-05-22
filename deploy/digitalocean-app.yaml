@@ -117,7 +117,13 @@ services:
       - key: COINBASE_KEY_SECRET
         value: SET_IN_APP_PLATFORM
         type: SECRET
+      - key: X402_PAY_TO_ADDRESS
+        value: SET_IN_APP_PLATFORM
+        type: SECRET
       - key: X402_MANUS_PAY_TO_ADDRESS
+        value: SET_IN_APP_PLATFORM
+        type: SECRET
+      - key: X402_AGENTMAIL_PAY_TO_ADDRESS
         value: SET_IN_APP_PLATFORM
         type: SECRET
       - key: X402_MAX_USD_PER_REQUEST
@@ -184,6 +190,12 @@ services:
         type: SECRET
       - key: CROSSMINT_TREASURY_WALLET_LOCATOR
         value: evm:alias:toolrouter-treasury-base
+      - key: CROSSMINT_HEALTH_WALLET_LOCATOR
+        value: SET_IN_APP_PLATFORM
+        type: SECRET
+      - key: CROSSMINT_HEALTH_WALLET_ADDRESS
+        value: SET_IN_APP_PLATFORM
+        type: SECRET
       - key: TOOLROUTER_RATE_LIMIT_PER_MINUTE
         value: "60"
       - key: TOOLROUTER_IP_RATE_LIMIT_PER_MINUTE

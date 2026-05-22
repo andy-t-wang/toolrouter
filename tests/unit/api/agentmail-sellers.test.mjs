@@ -121,9 +121,9 @@ describe("AgentMail seller manifests", () => {
     assert.equal(agentmailProviderPriceUsd("create_inbox"), "2");
     assert.equal(agentmailCreateInboxPriceUsd(), "2.01");
     assert.equal(agentmailProviderPriceUsd("list_messages"), "0");
-    assert.equal(agentmailListMessagesPriceUsd(), "0");
+    assert.equal(agentmailListMessagesPriceUsd(), "0.01");
     assert.equal(agentmailProviderPriceUsd("get_message"), "0");
-    assert.equal(agentmailGetMessagePriceUsd(), "0");
+    assert.equal(agentmailGetMessagePriceUsd(), "0.01");
     assert.equal(agentmailProviderPriceUsd("send_message"), "0.01");
     assert.equal(agentmailSendMessagePriceUsd(), "0.02");
     assert.equal(agentmailProviderPriceUsd("reply_to_message"), "0.01");

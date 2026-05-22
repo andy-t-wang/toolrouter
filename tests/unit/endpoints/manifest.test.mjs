@@ -160,7 +160,7 @@ const SNAPSHOT_BASELINE = Object.freeze({
     agentkit_value_type: null,
     agentkit_value_label: null,
     agentkit_proof_header: false,
-    estimated_cost_usd: 0,
+    estimated_cost_usd: 0.01,
     default_payment_mode: "x402_only",
     ui_badge: "Email",
     fixture_input: {
@@ -180,7 +180,7 @@ const SNAPSHOT_BASELINE = Object.freeze({
     agentkit_value_type: null,
     agentkit_value_label: null,
     agentkit_proof_header: false,
-    estimated_cost_usd: 0,
+    estimated_cost_usd: 0.01,
     default_payment_mode: "x402_only",
     ui_badge: "Email",
     fixture_input: {

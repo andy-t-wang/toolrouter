@@ -272,7 +272,7 @@ export function agentmailPriceUsd(kind) {
     throw new RangeError(`unsupported AgentMail price kind: ${kind}`);
   }
   const base = AGENTMAIL_BASE_PRICES_USD[kind];
-  return toUsdString(base > 0 ? base + AGENTMAIL_MARKUP_USD : 0);
+  return toUsdString(base + AGENTMAIL_MARKUP_USD);
 }
 
 function providerRequest(endpoint, json, estimatedUsd) {
