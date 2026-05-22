@@ -7,7 +7,6 @@ type DatadogClientConfig = {
 };
 
 type MetricTags = Record<string, string | number | boolean | null | undefined>;
-type LogFields = Record<string, unknown>;
 
 const METRIC_TYPE_COUNT = 1;
 const METRIC_TYPE_GAUGE = 3;
@@ -32,15 +31,6 @@ function datadogBaseUrl(env: DatadogEnv) {
   return `https://api.${trimSlash(site)}`;
 }
 
-function datadogLogsUrl(env: DatadogEnv) {
-  const explicit = env.DD_LOGS_URL || env.DATADOG_LOGS_URL;
-  if (explicit) return trimSlash(explicit);
-  const site = env.DD_LOGS_SITE || env.DATADOG_LOGS_SITE || env.DD_SITE || env.DATADOG_SITE || "datadoghq.com";
-  const siteHost = /^https?:\/\//u.test(site) ? new URL(site).host : site;
-  const normalized = trimSlash(siteHost).replace(/^api\./u, "").replace(/^http-intake\.logs\./u, "");
-  return `https://http-intake.logs.${normalized}/api/v2/logs`;
-}
-
 function tagValue(value: unknown) {
   return String(value ?? "unknown")
     .toLowerCase()
@@ -62,10 +52,6 @@ export function datadogTags(tags: MetricTags = {}, env: DatadogEnv = process.env
       return !BLOCKED_TAG_KEYS.has(tagValue(key));
     })
     .map(([key, value]) => `${tagValue(key)}:${tagValue(value)}`);
-}
-
-function datadogTagString(tags: MetricTags = {}, env: DatadogEnv = process.env) {
-  return datadogTags(tags, env).join(",");
 }
 
 export function createDatadogClient({
@@ -117,37 +103,9 @@ export function createDatadogClient({
     return submit(metric, METRIC_TYPE_GAUGE, tags, value);
   }
 
-  async function log(level: string, message: string, fields: LogFields = {}, tags: MetricTags = {}) {
-    if (!configured) return { sent: false, skipped: true };
-    const response = await fetchImpl(datadogLogsUrl(env), {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "DD-API-KEY": apiKey as string,
-      },
-      body: JSON.stringify({
-        ddsource: env.DD_SOURCE || env.DATADOG_SOURCE || "toolrouter",
-        service: env.DD_SERVICE || env.DATADOG_SERVICE || "toolrouter-api",
-        hostname: env.DD_HOSTNAME || env.DATADOG_HOSTNAME || "toolrouter",
-        status: tagValue(level || "info"),
-        message,
-        ddtags: datadogTagString(tags, env),
-        ...fields,
-      }),
-    });
-    if (!response.ok) {
-      throw Object.assign(new Error(`Datadog log submit failed: ${response.status}`), {
-        statusCode: response.status >= 500 ? 502 : 400,
-        code: "datadog_log_error",
-      });
-    }
-    return { sent: true, skipped: false };
-  }
-
   return {
     configured,
     gauge,
     increment,
-    log,
   };
 }
