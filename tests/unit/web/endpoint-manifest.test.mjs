@@ -51,7 +51,6 @@ describe("apps/web endpoint manifest adapter", () => {
       "exa.search",
       "browserbase.session",
       "manus.research",
-      "parallel.extract",
       "agentmail.send_message",
     ]);
     const ids = sortLandingEndpoints(landingEndpointFallbacks(), (endpoint) =>
@@ -61,9 +60,9 @@ describe("apps/web endpoint manifest adapter", () => {
       "browserbase.session",
       "exa.search",
       "manus.research",
-      "parallel.extract",
       "agentmail.send_message",
       "parallel.search",
+      "parallel.extract",
       "parallel.task",
       "agentmail.create_inbox",
       "agentmail.list_messages",

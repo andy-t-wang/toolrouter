@@ -85,6 +85,17 @@ function hasAgentKitBenefit(provider: LandingEndpoint) {
   return Boolean(provider.agentkit_value_type || provider.agentkit_value_label);
 }
 
+function isRecommendedEndpoint(
+  provider: LandingEndpoint,
+  recommendedEndpointIdByCategory: Map<string, string>,
+) {
+  if (provider.provider === "parallel" || provider.id.startsWith("parallel.")) {
+    return false;
+  }
+  if (!provider.category) return false;
+  return recommendedEndpointIdByCategory.get(provider.category) === provider.id;
+}
+
 function ProviderMark({ provider }: { provider: LandingEndpoint }) {
   const src = providerLogoPath(provider.provider);
   const label = titleCase(provider.provider);
@@ -257,9 +268,10 @@ export function EndpointStatusFilter({
           <div>Last check</div>
         </div>
         {visibleEndpoints.map((provider) => {
-          const recommended =
-            Boolean(provider.category) &&
-            recommendedEndpointIdByCategory.get(provider.category || "") === provider.id;
+          const recommended = isRecommendedEndpoint(
+            provider,
+            recommendedEndpointIdByCategory,
+          );
           return (
             <div className="uptime-row-shell" key={provider.id}>
               <UptimeRow
