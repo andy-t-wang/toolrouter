@@ -1,18 +1,64 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
+import { createCrossmintClient } from "../../../apps/api/src/services/crossmint.ts";
 import { executeEndpoint, getEndpoint } from "../../../packages/router-core/src/index.ts";
 
+const hasCrossmintSigner = Boolean(
+  process.env.CROSSMINT_SERVER_SIDE_API_KEY &&
+    process.env.CROSSMINT_SIGNER_SECRET &&
+    process.env.CROSSMINT_LIVE_WALLET_LOCATOR &&
+    process.env.CROSSMINT_LIVE_WALLET_ADDRESS,
+);
+const hasWallet = Boolean(process.env.AGENT_WALLET_PRIVATE_KEY) || hasCrossmintSigner;
 const runLive = process.env.RUN_LIVE_STABLETRAVEL_TESTS === "true";
 const runPaid = runLive &&
   process.env.RUN_LIVE_STABLETRAVEL_PAID_SMOKE === "true" &&
-  Boolean(process.env.AGENT_WALLET_PRIVATE_KEY);
+  hasWallet;
 
 function configureLiveDefaults() {
   process.env.ROUTER_DEV_MODE = "false";
-  process.env.X402_ALLOWED_HOSTS ||= "stabletravel.dev";
-  process.env.X402_ALLOWED_CHAINS ||= "eip155:8453,base";
-  process.env.X402_MAX_USD_PER_REQUEST ||= "0.04";
+  const allowedHosts = new Set(
+    String(process.env.X402_ALLOWED_HOSTS || "")
+      .split(",")
+      .map((host) => host.trim())
+      .filter(Boolean),
+  );
+  allowedHosts.add("stabletravel.dev");
+  process.env.X402_ALLOWED_HOSTS = [...allowedHosts].join(",");
+  const allowedChains = new Set(
+    String(process.env.X402_ALLOWED_CHAINS || "")
+      .split(",")
+      .map((chain) => chain.trim())
+      .filter(Boolean),
+  );
+  allowedChains.add("eip155:8453");
+  allowedChains.add("base");
+  process.env.X402_ALLOWED_CHAINS = [...allowedChains].join(",");
+  process.env.X402_MAX_USD_PER_REQUEST = "0.04";
+}
+
+function livePaymentSigner() {
+  if (!hasCrossmintSigner) return null;
+  const crossmint = createCrossmintClient();
+  return {
+    address: process.env.CROSSMINT_LIVE_WALLET_ADDRESS,
+    signMessage: async (payload) => {
+      const message = payload && typeof payload === "object" && "message" in payload ? payload.message : payload;
+      return crossmint.signMessage({
+        walletLocator: process.env.CROSSMINT_LIVE_WALLET_LOCATOR,
+        message,
+      });
+    },
+    signTypedData: async (payload) =>
+      crossmint.signTypedData({
+        walletLocator: process.env.CROSSMINT_LIVE_WALLET_LOCATOR,
+        domain: payload.domain,
+        types: payload.types,
+        primaryType: payload.primaryType,
+        message: payload.message,
+      }),
+  };
 }
 
 function decodePaymentRequired(header) {
@@ -63,6 +109,7 @@ describe("stabletravel live x402 handshake", () => {
         maxUsd: smoke.max_usd,
         paymentMode: "x402_only",
         traceId: `live_stabletravel_${endpointId.replace(/\W/gu, "_")}_${Date.now()}`,
+        paymentSigner: livePaymentSigner(),
         timeoutMs: endpoint.healthProbe.timeoutMs || 20_000,
       });
 
