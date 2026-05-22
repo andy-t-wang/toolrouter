@@ -377,7 +377,7 @@ describe("endpoint registry", () => {
       labels: ["toolrouter"],
       include_trash: true,
     });
-    assert.equal(list.estimatedUsd, "0");
+    assert.equal(list.estimatedUsd, "0.01");
 
     const get = buildEndpointRequest("agentmail.get_message", {
       inboxId: "agent@agentmail.to",
@@ -389,7 +389,7 @@ describe("endpoint registry", () => {
       inbox_id: "agent@agentmail.to",
       message_id: "msg_123",
     });
-    assert.equal(get.estimatedUsd, "0");
+    assert.equal(get.estimatedUsd, "0.01");
 
     const send = buildEndpointRequest("agentmail.send_message", {
       inbox_id: "agent@agentmail.to",

@@ -2,6 +2,7 @@ import type { EndpointManifest } from "../../../manifest/endpoint.ts";
 import { buildAgentmailGetMessageRequest } from "../../builders.ts";
 import {
   AGENTMAIL_CATEGORY,
+  AGENTMAIL_GET_PRICE,
   AGENTMAIL_PROVIDER,
   envFixture,
   wrapperBaseUrl,
@@ -17,7 +18,7 @@ export const agentmailGetMessageEndpointDefinition = Object.freeze({
   method: "POST",
   agentkit: false,
   x402: true,
-  estimated_cost_usd: 0,
+  estimated_cost_usd: Number(AGENTMAIL_GET_PRICE),
   agentkit_value_type: null,
   agentkit_value_label: null,
   default_payment_mode: "x402_only",
@@ -30,9 +31,9 @@ export const agentmailGetMessageEndpointDefinition = Object.freeze({
     message_id: "msg_123",
   },
   health_probe: {
-    mode: "free_availability",
+    mode: "paid_availability",
     payment_mode: "x402_only",
-    max_usd: "0",
+    max_usd: AGENTMAIL_GET_PRICE,
     latency_budget_ms: 10000,
     timeout_ms: 10000,
     required_env: ["AGENTMAIL_HEALTH_INBOX_ID", "AGENTMAIL_HEALTH_MESSAGE_ID"],
@@ -44,7 +45,7 @@ export const agentmailGetMessageEndpointDefinition = Object.freeze({
   live_smoke: {
     default_path: {
       payment_mode: "x402_only",
-      max_usd: "0",
+      max_usd: AGENTMAIL_GET_PRICE,
       input: {
         inbox_id: envFixture("AGENTMAIL_HEALTH_INBOX_ID", "agentmail-health-inbox-id"),
         message_id: envFixture("AGENTMAIL_HEALTH_MESSAGE_ID", "agentmail-health-message-id"),
@@ -52,7 +53,7 @@ export const agentmailGetMessageEndpointDefinition = Object.freeze({
     },
     paid_path: {
       payment_mode: "x402_only",
-      max_usd: "0",
+      max_usd: AGENTMAIL_GET_PRICE,
       input: {
         inbox_id: envFixture("AGENTMAIL_HEALTH_INBOX_ID", "agentmail-health-inbox-id"),
         message_id: envFixture("AGENTMAIL_HEALTH_MESSAGE_ID", "agentmail-health-message-id"),
