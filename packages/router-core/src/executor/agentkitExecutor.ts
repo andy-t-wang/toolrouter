@@ -103,10 +103,11 @@ function allowedChains() {
   return chains;
 }
 
-function assertAllowedRequest(request) {
+function assertAllowedRequest(request, endpoint = null) {
   const parsed = new URL(request.url);
   if (parsed.protocol !== "https:") throw new Error("provider URL must use https");
-  if (!allowedHosts().has(parsed.hostname)) {
+  const endpointHost = endpoint?.url ? new URL(endpoint.url).hostname : null;
+  if (parsed.hostname !== endpointHost && !allowedHosts().has(parsed.hostname)) {
     throw new Error(`host is not allowlisted: ${parsed.hostname}`);
   }
 }
@@ -373,7 +374,7 @@ export async function executeEndpoint({ endpoint, request, maxUsd, traceId, paym
   try {
     const paymentMaxUsd = effectivePaymentMaxUsd(maxUsd);
     const selectedPaymentMode = normalizePaymentMode(paymentMode, endpoint);
-    assertAllowedRequest(request);
+    assertAllowedRequest(request, endpoint);
     throwIfTimedOut(timeout.signal);
     const deps = paymentDeps || (await loadPaymentDeps());
     throwIfTimedOut(timeout.signal);

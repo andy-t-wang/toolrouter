@@ -48,12 +48,12 @@ function jsonResponse(body, init = {}) {
   });
 }
 
-function paymentResponse(body = { results: [] }) {
+function paymentResponse(body = { results: [] }, amountUsd = "0.007") {
   const receipt = Buffer.from(
     JSON.stringify({
       transaction: "0xsettled",
       network: "eip155:8453",
-      amount_usd: "0.007",
+      amount_usd: amountUsd,
       currency: "USD",
     }),
   ).toString("base64");
@@ -452,6 +452,42 @@ describe("AgentKit/x402 executor", () => {
       }),
       /host is not allowlisted: unlisted\.example\.test/u,
     );
+  });
+
+  it("allows a registered endpoint host even when the env allowlist is stale", async () => {
+    process.env.X402_ALLOWED_HOSTS = "api.exa.ai,x402.browserbase.com,toolrouter.world";
+    const seen = captures();
+    const result = await executeEndpoint({
+      endpoint: {
+        id: "stabletravel.google_flights_search",
+        url: "https://stabletravel.dev/api/google-flights/search",
+        defaultPaymentMode: "x402_only",
+      },
+      request: {
+        method: "GET",
+        url: "https://stabletravel.dev/api/google-flights/search?departure_id=SFO&arrival_id=JFK&outbound_date=2026-06-21&type=2&adults=1&children=0&infants_in_seat=0&infants_on_lap=0&currency=USD&hl=en",
+        estimatedUsd: "0.02",
+      },
+      maxUsd: "0.025",
+      traceId: "trace_stabletravel_stale_allowlist",
+      paymentMode: "x402_only",
+      paymentDeps: fakePaymentDeps({
+        captures: seen,
+        agentkitResponse: jsonResponse({ shouldNotBeUsed: true }),
+        x402Response: paymentResponse({ best_flights: [] }, "0.02"),
+        selectedRequirements: {
+          network: "eip155:8453",
+          amount: "20000",
+          scheme: "exact",
+        },
+      }),
+    });
+
+    assert.equal(result.path, "x402");
+    assert.equal(result.ok, true);
+    assert.equal(result.amount_usd, "0.02");
+    assert.equal(seen.x402Calls.length, 1);
+    assert.equal(seen.x402Calls[0].url, "https://stabletravel.dev/api/google-flights/search?departure_id=SFO&arrival_id=JFK&outbound_date=2026-06-21&type=2&adults=1&children=0&infants_in_seat=0&infants_on_lap=0&currency=USD&hl=en");
   });
 
   it("sends Browserbase AgentKit proof headers through the x402 payment rail", async () => {
