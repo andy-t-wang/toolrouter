@@ -17,12 +17,24 @@ import {
   parallelExtractPriceUsd,
   parallelSearchPriceUsd,
   parallelTaskPriceForProcessor,
+  stabletravelMaxUsd,
+  stabletravelPriceUsd,
 } from "../../../packages/router-core/src/endpoints/builders.ts";
 import {
   assertEndpointFixtureBuilds,
   assertEndpointHealthProbeBuilds,
   assertValidEndpointRegistry,
 } from "../../../packages/router-core/src/testing/endpointHarness.ts";
+
+function rollingDate(daysFromToday) {
+  const today = new Date();
+  const date = new Date(Date.UTC(
+    today.getUTCFullYear(),
+    today.getUTCMonth(),
+    today.getUTCDate() + daysFromToday,
+  ));
+  return date.toISOString().slice(0, 10);
+}
 
 describe("endpoint registry", () => {
   it("validates the launch registry", () => {
@@ -36,6 +48,11 @@ describe("endpoint registry", () => {
         "parallel.extract",
         "manus.research",
         "parallel.task",
+        "stabletravel.locations",
+        "stabletravel.google_flights_search",
+        "stabletravel.hotels_list",
+        "stabletravel.hotels_search",
+        "stabletravel.flightaware_flights",
         "agentmail.create_inbox",
         "agentmail.list_messages",
         "agentmail.get_message",
@@ -54,7 +71,7 @@ describe("endpoint registry", () => {
     const categories = listCategories();
     assert.deepEqual(
       categories.map((category) => category.id),
-      ["search", "research", "extract", "email", "browser_usage"],
+      ["search", "research", "extract", "email", "browser_usage", "travel"],
     );
 
     const search = categories.find((category) => category.id === "search");
@@ -89,6 +106,22 @@ describe("endpoint registry", () => {
       ],
     );
     assert.equal(recommendEndpoint("email").id, "agentmail.send_message");
+
+    const travel = categories.find((category) => category.id === "travel");
+    assert.equal(travel.name, "Travel");
+    assert.equal(travel.recommended_endpoint_id, "stabletravel.google_flights_search");
+    assert.equal(travel.recommended_endpoint.id, "stabletravel.google_flights_search");
+    assert.deepEqual(
+      travel.endpoints.map((endpoint) => endpoint.id),
+      [
+        "stabletravel.locations",
+        "stabletravel.google_flights_search",
+        "stabletravel.hotels_list",
+        "stabletravel.hotels_search",
+        "stabletravel.flightaware_flights",
+      ],
+    );
+    assert.equal(recommendEndpoint("travel").id, "stabletravel.google_flights_search");
   });
 
   it("builds Parallel Search requests with the per-call markup price", () => {
@@ -479,5 +512,229 @@ describe("endpoint registry", () => {
         }),
       /to must include at most 50 items/u,
     );
+  });
+
+  it("builds StableTravel direct x402 GET requests", () => {
+    const outboundDate = rollingDate(30);
+    const returnDate = rollingDate(35);
+    const checkInDate = rollingDate(30);
+    const checkOutDate = rollingDate(31);
+    const locations = buildEndpointRequest("stabletravel.locations", {
+      query: "Paris",
+      sub_type: "CITY",
+      country_code: "FR",
+      limit: 1,
+    });
+    assert.equal(locations.method, "GET");
+    assert.equal(locations.url, "https://stabletravel.dev/api/reference/locations?subType=CITY&keyword=Paris&countryCode=FR&page%5Blimit%5D=1&view=LIGHT");
+    assert.equal(locations.json, undefined);
+    assert.equal(locations.estimatedUsd, "0.0054");
+    assert.equal(stabletravelPriceUsd("locations"), "0.0054");
+
+    const flights = buildEndpointRequest("stabletravel.google_flights_search", {
+      departure_id: "sfo",
+      arrival_id: "jfk",
+      outbound_date: outboundDate,
+      type: "2",
+      include_airlines: ["UA", "AA"],
+    });
+    assert.equal(flights.method, "GET");
+    assert.equal(
+      flights.url,
+      `https://stabletravel.dev/api/google-flights/search?departure_id=sfo&arrival_id=jfk&outbound_date=${outboundDate}&type=2&adults=1&children=0&infants_in_seat=0&infants_on_lap=0&include_airlines=UA%2CAA&currency=USD&hl=en`,
+    );
+    assert.equal(flights.estimatedUsd, "0.02");
+    assert.equal(stabletravelPriceUsd("google_flights_search"), "0.02");
+
+    const defaultOneWayFlights = buildEndpointRequest("stabletravel.google_flights_search", {
+      departure_id: "SFO",
+      arrival_id: "JFK",
+      outbound_date: outboundDate,
+    });
+    assert.ok(defaultOneWayFlights.url.includes("type=2"));
+
+    const roundTripFlights = buildEndpointRequest("stabletravel.google_flights_search", {
+      departure_id: "SFO",
+      arrival_id: "JFK",
+      outbound_date: outboundDate,
+      return_date: returnDate,
+    });
+    assert.ok(roundTripFlights.url.includes("type=1"));
+    assert.ok(roundTripFlights.url.includes(`return_date=${returnDate}`));
+
+    const rollingFlightProbe = buildEndpointHealthProbeRequest("stabletravel.google_flights_search");
+    assert.ok(rollingFlightProbe.request.url.includes(`outbound_date=${rollingDate(30)}`));
+
+    const hotelsList = buildEndpointRequest("stabletravel.hotels_list", {
+      city_code: "par",
+      max: 5,
+      ratings: ["4", "5"],
+    });
+    assert.equal(hotelsList.url, "https://stabletravel.dev/api/hotels/list?cityCode=PAR&ratings=4%2C5&max=5");
+    assert.equal(hotelsList.estimatedUsd, "0.0324");
+
+    const hotelsSearch = buildEndpointRequest("stabletravel.hotels_search", {
+      hotel_ids: ["HLPAR266", "HLPAR123"],
+      adults: 2,
+      check_in_date: checkInDate,
+      check_out_date: checkOutDate,
+      currency_code: "usd",
+      best_rate_only: true,
+    });
+    assert.equal(
+      hotelsSearch.url,
+      `https://stabletravel.dev/api/hotels/search?hotelIds=HLPAR266%2CHLPAR123&adults=2&checkInDate=${checkInDate}&checkOutDate=${checkOutDate}&currencyCode=USD&bestRateOnly=true`,
+    );
+    assert.equal(hotelsSearch.estimatedUsd, "0.0324");
+
+    const rollingHotelProbe = buildEndpointHealthProbeRequest("stabletravel.hotels_search");
+    assert.ok(rollingHotelProbe.request.url.includes(`checkInDate=${rollingDate(30)}`));
+    assert.ok(rollingHotelProbe.request.url.includes(`checkOutDate=${rollingDate(31)}`));
+
+    const flightLookup = buildEndpointRequest("stabletravel.flightaware_flights", {
+      ident: "UAL123",
+      max_pages: 1,
+    });
+    assert.equal(
+      flightLookup.url,
+      "https://stabletravel.dev/api/flightaware/flights/UAL123?ident_type=designator&max_pages=1",
+    );
+    assert.equal(flightLookup.estimatedUsd, "0.01");
+
+    const endpoint = getEndpoint("stabletravel.google_flights_search");
+    assert.equal(endpoint.agentkit, false);
+    assert.equal(endpoint.agentkit_value_type, null);
+    assert.equal(endpoint.agentkit_value_label, null);
+    assert.equal(endpoint.defaultPaymentMode, "x402_only");
+    assert.equal(endpoint.agentkitHealthProbe, null);
+  });
+
+  it("validates StableTravel inputs before payment", () => {
+    const outboundDate = rollingDate(30);
+    const earlierDate = rollingDate(25);
+
+    assert.throws(
+      () => buildEndpointRequest("stabletravel.locations", { sub_type: "CITY" }),
+      /keyword is required/u,
+    );
+    assert.throws(
+      () =>
+        buildEndpointRequest("stabletravel.google_flights_search", {
+          departure_id: "SFO",
+          arrival_id: "JFK",
+          outbound_date: outboundDate.replaceAll("-", "/"),
+        }),
+      /outbound_date must use YYYY-MM-DD/u,
+    );
+    assert.throws(
+      () =>
+        buildEndpointRequest("stabletravel.google_flights_search", {
+          departure_id: "SFO",
+          arrival_id: "JFK",
+          outbound_date: "2026-13-40",
+        }),
+      /outbound_date must be a valid calendar date/u,
+    );
+    assert.throws(
+      () =>
+        buildEndpointRequest("stabletravel.google_flights_search", {
+          departure_id: "SFO",
+          arrival_id: "JFK",
+          outbound_date: outboundDate,
+          type: "1",
+        }),
+      /return_date is required/u,
+    );
+    assert.throws(
+      () =>
+        buildEndpointRequest("stabletravel.google_flights_search", {
+          departure_id: "SFO",
+          arrival_id: "JFK",
+          outbound_date: outboundDate,
+          return_date: earlierDate,
+        }),
+      /return_date must be on or after outbound_date/u,
+    );
+    assert.throws(
+      () =>
+        buildEndpointRequest("stabletravel.google_flights_search", {
+          departure_id: "SFO",
+          arrival_id: "JFK",
+          outbound_date: outboundDate,
+          type: "3",
+        }),
+      /type must be one of 1, 2/u,
+    );
+    assert.throws(
+      () => buildEndpointRequest("stabletravel.hotels_list", { city_code: "Paris" }),
+      /cityCode must be a 3-letter IATA city code/u,
+    );
+    assert.throws(
+      () => buildEndpointRequest("stabletravel.hotels_search", { adults: 1 }),
+      /hotelIds is required/u,
+    );
+    assert.throws(
+      () =>
+        buildEndpointRequest("stabletravel.hotels_search", {
+          hotel_ids: Array.from({ length: 21 }, (_, index) => `HOTEL${index}`).join(","),
+        }),
+      /hotelIds must include at most 20 items/u,
+    );
+    assert.throws(
+      () =>
+        buildEndpointRequest("stabletravel.hotels_search", {
+          hotel_ids: ["HLPAR266"],
+          check_in_date: outboundDate,
+          check_out_date: outboundDate,
+        }),
+      /checkOutDate must be after checkInDate/u,
+    );
+    assert.throws(
+      () =>
+        buildEndpointRequest("stabletravel.google_flights_search", {
+          departure_id: "SFO",
+          arrival_id: "JFK",
+          outbound_date: outboundDate,
+          type: "2",
+          include_airlines: Array.from({ length: 21 }, (_, index) => `A${index}`).join(","),
+        }),
+      /include_airlines must include at most 20 items/u,
+    );
+    assert.throws(
+      () =>
+        buildEndpointRequest("stabletravel.google_flights_search", {
+          departure_id: "SFO",
+          arrival_id: "JFK",
+          outbound_date: outboundDate,
+          type: "2",
+          include_airlines: Array.from({ length: 11 }, (_, index) => `A${index},B${index}`),
+        }),
+      /include_airlines must include at most 20 items/u,
+    );
+    assert.throws(
+      () => buildEndpointRequest("stabletravel.flightaware_flights", { ident: "!" }),
+      /ident must be a flight designator/u,
+    );
+  });
+
+  it("keeps StableTravel user-visible prices and buffered caps aligned with execution caps", () => {
+    for (const [endpointId, priceKind, maxKind] of [
+      ["stabletravel.locations", "locations", "locations"],
+      ["stabletravel.google_flights_search", "google_flights_search", "google_flights_search"],
+      ["stabletravel.hotels_list", "hotels_list", "hotels_list"],
+      ["stabletravel.hotels_search", "hotels_search", "hotels_search"],
+      ["stabletravel.flightaware_flights", "flightaware_flights", "flightaware_flights"],
+    ]) {
+      const endpoint = getEndpoint(endpointId);
+      const price = stabletravelPriceUsd(priceKind);
+      const cap = stabletravelMaxUsd(maxKind);
+      assert.equal(String(endpoint.estimated_cost_usd), price);
+      assert.equal(endpoint.healthProbe.maxUsd, cap);
+      assert.equal(endpoint.liveSmoke.default_path.max_usd, cap);
+      assert.equal(endpoint.liveSmoke.paid_path.max_usd, cap);
+      assert.ok(Number(cap) > Number(price));
+      assert.match(endpoint.description, new RegExp(`\\$${price.replace(".", "\\.")}`));
+      assert.match(endpoint.description, new RegExp(`\\$${cap.replace(".", "\\.")}`));
+    }
   });
 });

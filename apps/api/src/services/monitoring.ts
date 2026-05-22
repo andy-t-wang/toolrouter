@@ -145,6 +145,7 @@ export function recommendedMcpToolForCategory(categoryId: string) {
   if (categoryId === "search") return "toolrouter_search";
   if (categoryId === "email") return "toolrouter_send_email";
   if (categoryId === "browser_usage") return "toolrouter_browser_use";
+  if (categoryId === "travel") return "stabletravel_google_flights_search";
   return null;
 }
 
@@ -157,6 +158,11 @@ export function recommendedMcpToolForEndpoint(endpointId: string) {
   if (endpointId === "agentmail.get_message") return "agentmail_get_message";
   if (endpointId === "agentmail.send_message") return "agentmail_send_message";
   if (endpointId === "agentmail.reply_to_message") return "agentmail_reply_to_message";
+  if (endpointId === "stabletravel.locations") return "stabletravel_locations";
+  if (endpointId === "stabletravel.google_flights_search") return "stabletravel_google_flights_search";
+  if (endpointId === "stabletravel.hotels_list") return "stabletravel_hotels_list";
+  if (endpointId === "stabletravel.hotels_search") return "stabletravel_hotels_search";
+  if (endpointId === "stabletravel.flightaware_flights") return "stabletravel_flightaware_flights";
   return null;
 }
 
@@ -179,6 +185,12 @@ export function mcpToolsForEndpoint(endpointId: string) {
     return {
       call: agentmailTool,
       ...(endpointId === "agentmail.send_message" ? { category: "toolrouter_send_email" } : {}),
+    };
+  }
+  const stabletravelTool = recommendedMcpToolForEndpoint(endpointId);
+  if (stabletravelTool?.startsWith("stabletravel_")) {
+    return {
+      call: stabletravelTool,
     };
   }
   return null;

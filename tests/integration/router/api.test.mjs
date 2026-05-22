@@ -8,6 +8,16 @@ function tmpStorePath(prefix) {
   return join(mkdtempSync(join(tmpdir(), prefix)), "store.json");
 }
 
+function rollingDate(daysFromToday) {
+  const today = new Date();
+  const date = new Date(Date.UTC(
+    today.getUTCFullYear(),
+    today.getUTCMonth(),
+    today.getUTCDate() + daysFromToday,
+  ));
+  return date.toISOString().slice(0, 10);
+}
+
 process.env.ROUTER_DEV_MODE = "true";
 process.env.AGENTKIT_ROUTER_DEV_API_KEY = "test_dev_key";
 process.env.AGENTKIT_ROUTER_LOCAL_STORE = tmpStorePath("toolrouter-");
@@ -306,6 +316,11 @@ describe("router API", () => {
         "parallel.extract",
         "manus.research",
         "parallel.task",
+        "stabletravel.locations",
+        "stabletravel.google_flights_search",
+        "stabletravel.hotels_list",
+        "stabletravel.hotels_search",
+        "stabletravel.flightaware_flights",
         "agentmail.create_inbox",
         "agentmail.list_messages",
         "agentmail.get_message",
@@ -321,7 +336,7 @@ describe("router API", () => {
     const body = await response.json();
     assert.deepEqual(
       body.categories.map((category) => category.id),
-      ["search", "research", "extract", "email", "browser_usage"],
+      ["search", "research", "extract", "email", "browser_usage", "travel"],
     );
     const search = body.categories.find((category) => category.id === "search");
     assert.equal(search.recommended_endpoint_id, "exa.search");
@@ -338,6 +353,10 @@ describe("router API", () => {
     assert.equal(email.recommended_endpoint_id, "agentmail.send_message");
     assert.equal(email.recommended_endpoint.id, "agentmail.send_message");
     assert.equal(email.recommended_mcp_tool, "toolrouter_send_email");
+    const travel = body.categories.find((category) => category.id === "travel");
+    assert.equal(travel.recommended_endpoint_id, "stabletravel.google_flights_search");
+    assert.equal(travel.recommended_endpoint.id, "stabletravel.google_flights_search");
+    assert.equal(travel.recommended_mcp_tool, "stabletravel_google_flights_search");
     assert.ok(search.endpoints.every((endpoint) => endpoint.status));
 
     const dashboardResponse = await fetch(`${baseUrl}/v1/dashboard/categories?include_empty=true`, { headers: sessionHeaders() });
@@ -390,7 +409,7 @@ describe("router API", () => {
     assert.equal(response.status, 200);
     const body = await response.json();
     assert.equal(body.status, "unverified");
-    assert.equal(body.summary.endpoint_count, 11);
+    assert.equal(body.summary.endpoint_count, 16);
     assert.equal(body.summary.operational_count, 2);
     assert.deepEqual(
       body.endpoints.map((endpoint) => endpoint.id).sort(),
@@ -401,6 +420,11 @@ describe("router API", () => {
         "parallel.extract",
         "parallel.search",
         "parallel.task",
+        "stabletravel.locations",
+        "stabletravel.google_flights_search",
+        "stabletravel.hotels_list",
+        "stabletravel.hotels_search",
+        "stabletravel.flightaware_flights",
         "agentmail.create_inbox",
         "agentmail.list_messages",
         "agentmail.get_message",
@@ -1202,6 +1226,75 @@ describe("router API", () => {
     });
   });
 
+  it("proxies StableTravel direct x402 requests through /v1/requests", async () => {
+    const executorCalls = [];
+    const outboundDate = rollingDate(30);
+    await withIsolatedApp("toolrouter-stabletravel-proxy-", {
+      executor: async (payload) => {
+        executorCalls.push(payload);
+        assert.equal(payload.endpoint.id, "stabletravel.google_flights_search");
+        assert.equal(payload.request.method, "GET");
+        assert.equal(payload.request.json, undefined);
+        assert.equal(
+          payload.request.url,
+          `https://stabletravel.dev/api/google-flights/search?departure_id=SFO&arrival_id=JFK&outbound_date=${outboundDate}&type=2&adults=1&children=0&infants_in_seat=0&infants_on_lap=0&currency=USD&hl=en`,
+        );
+        return executorResult(payload, {
+          path: "x402",
+          charged: true,
+          amount_usd: "0.02",
+          payment_reference: "pay_stabletravel_x402",
+          payment_network: "eip155:8453",
+          latency_ms: 20,
+          body: { data: [] },
+        });
+      },
+    }, async ({ baseUrl, store }) => {
+      await store.upsertCreditAccount({
+        user_id: process.env.TOOLROUTER_DEV_USER_ID,
+        available_usd: "1",
+        pending_usd: "0",
+        reserved_usd: "0",
+        currency: "USD",
+      });
+      const response = await fetch(`${baseUrl}/v1/requests`, {
+        method: "POST",
+        headers: authHeaders(),
+        body: JSON.stringify({
+          endpoint_id: "stabletravel.google_flights_search",
+          input: {
+            departure_id: "SFO",
+            arrival_id: "JFK",
+            outbound_date: outboundDate,
+            type: "2",
+          },
+          maxUsd: "0.025",
+        }),
+      });
+      const responseText = await response.text();
+      assert.equal(response.status, 200, responseText);
+      const created = JSON.parse(responseText);
+      assert.equal(created.endpoint_id, "stabletravel.google_flights_search");
+      assert.equal(created.path, "x402");
+      assert.equal(created.charged, true);
+      assert.equal(created.status_code, 200);
+      assert.equal(created.credit_reserved_usd, "0.025");
+      assert.equal(created.credit_captured_usd, "0.02");
+      assert.equal(created.credit_released_usd, "0.005");
+      assert.equal(executorCalls.length, 1);
+      assert.equal(executorCalls[0].endpoint.defaultPaymentMode, "x402_only");
+      assert.equal(executorCalls[0].paymentMode, undefined);
+      assert.equal(executorCalls[0].maxUsd, "0.025");
+      assert.equal(executorCalls[0].request.estimatedUsd, "0.02");
+
+      const listResponse = await fetch(`${baseUrl}/v1/requests`, { headers: authHeaders() });
+      const listed = await listResponse.json();
+      assert.equal(listed.requests[0].endpoint_id, "stabletravel.google_flights_search");
+      assert.equal(listed.requests[0].agentkit_value_type, null);
+      assert.equal(listed.requests[0].agentkit_value_label, null);
+    });
+  });
+
   it("proxies Manus through /v1/requests with AgentKit preflight and paid x402 fallback", async () => {
     const executorCalls = [];
     await withIsolatedApp("toolrouter-manus-proxy-fallback-", {
@@ -1858,8 +1951,8 @@ describe("router API", () => {
     const body = await response.json();
     assert.ok(body.monitoring.requests_24h.total >= 1);
     assert.equal(body.monitoring.requests_24h.errors, 0);
-    assert.equal(body.monitoring.endpoint_health.total, 11);
-    assert.equal(body.monitoring.endpoint_health.unverified, 9);
+    assert.equal(body.monitoring.endpoint_health.total, 16);
+    assert.equal(body.monitoring.endpoint_health.unverified, 14);
     assert.ok("error_rate" in body.monitoring.requests_24h);
   });
 

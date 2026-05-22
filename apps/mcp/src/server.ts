@@ -419,6 +419,146 @@ function inputPropertiesForKind(kind: string) {
       ),
     };
   }
+  if (kind === "stabletravel_locations") {
+    return {
+      properties: {
+        keyword: { type: "string", description: "City or airport search keyword." },
+        query: { type: "string", description: "Compatibility alias for keyword." },
+        sub_type: { type: "string", enum: ["AIRPORT", "CITY", "AIRPORT,CITY"] },
+        subType: { type: "string", enum: ["AIRPORT", "CITY", "AIRPORT,CITY"] },
+        country_code: { type: "string", description: "ISO 3166-1 country code." },
+        countryCode: { type: "string", description: "Compatibility alias for country_code." },
+        limit: { type: "integer", minimum: 1, maximum: 20 },
+        page_limit: { type: "integer", minimum: 1, maximum: 20 },
+        pageLimit: { type: "integer", minimum: 1, maximum: 20 },
+        page_offset: { type: "integer", minimum: 0, maximum: 500 },
+        pageOffset: { type: "integer", minimum: 0, maximum: 500 },
+        offset: { type: "integer", minimum: 0, maximum: 500 },
+        sort: { type: "string", enum: ["analytics.travelers.score"] },
+        view: { type: "string", enum: ["FULL", "LIGHT"] },
+        ...PAYMENT_PROPERTIES,
+      },
+      required: [] as string[],
+      requiredAlternatives: requiredCombinations(["keyword", "query"]),
+    };
+  }
+  if (kind === "stabletravel_google_flights_search") {
+    return {
+      properties: {
+        departure_id: { type: "string", description: "Departure airport code, city, or kgmid." },
+        departureId: { type: "string", description: "Compatibility alias for departure_id." },
+        arrival_id: { type: "string", description: "Arrival airport code, city, or kgmid." },
+        arrivalId: { type: "string", description: "Compatibility alias for arrival_id." },
+        outbound_date: { type: "string", description: "Departure date, YYYY-MM-DD." },
+        outboundDate: { type: "string", description: "Compatibility alias for outbound_date." },
+        return_date: { type: "string", description: "Return date, YYYY-MM-DD." },
+        returnDate: { type: "string", description: "Compatibility alias for return_date." },
+        type: { type: "string", enum: ["1", "2"], description: "1 round trip, 2 one way." },
+        trip_type: { type: "string", enum: ["1", "2"], description: "Compatibility alias for type." },
+        tripType: { type: "string", enum: ["1", "2"], description: "Compatibility alias for type." },
+        travel_class: { type: "string", enum: ["1", "2", "3", "4"] },
+        travelClass: { type: "string", enum: ["1", "2", "3", "4"] },
+        adults: { type: "integer", minimum: 1, maximum: 9 },
+        children: { type: "integer", minimum: 0, maximum: 9 },
+        infants_in_seat: { type: "integer", minimum: 0, maximum: 9 },
+        infantsInSeat: { type: "integer", minimum: 0, maximum: 9 },
+        infants_on_lap: { type: "integer", minimum: 0, maximum: 9 },
+        infantsOnLap: { type: "integer", minimum: 0, maximum: 9 },
+        stops: { type: "string", enum: ["0", "1", "2", "3"] },
+        max_price: { type: "integer", minimum: 1 },
+        maxPrice: { type: "integer", minimum: 1 },
+        include_airlines: { oneOf: [{ type: "string" }, { type: "array", items: { type: "string" }, maxItems: 20 }] },
+        includeAirlines: { oneOf: [{ type: "string" }, { type: "array", items: { type: "string" }, maxItems: 20 }] },
+        exclude_airlines: { oneOf: [{ type: "string" }, { type: "array", items: { type: "string" }, maxItems: 20 }] },
+        excludeAirlines: { oneOf: [{ type: "string" }, { type: "array", items: { type: "string" }, maxItems: 20 }] },
+        currency: { type: "string", minLength: 3, maxLength: 3 },
+        hl: { type: "string", description: "Language code." },
+        language: { type: "string", description: "Compatibility alias for hl." },
+        gl: { type: "string", description: "Country code for localization." },
+        country: { type: "string", description: "Compatibility alias for gl." },
+        ...PAYMENT_PROPERTIES,
+      },
+      required: [] as string[],
+      requiredAlternatives: requiredCombinations(
+        ["departure_id", "departureId"],
+        ["arrival_id", "arrivalId"],
+        ["outbound_date", "outboundDate"],
+      ),
+    };
+  }
+  if (kind === "stabletravel_hotels_list") {
+    return {
+      properties: {
+        city_code: { type: "string", description: "IATA city code." },
+        cityCode: { type: "string", description: "Compatibility alias for city_code." },
+        radius: { type: "number", minimum: 0, maximum: 300 },
+        radius_unit: { type: "string", enum: ["KM", "MILE"] },
+        radiusUnit: { type: "string", enum: ["KM", "MILE"] },
+        chain_codes: { oneOf: [{ type: "string" }, { type: "array", items: { type: "string" }, maxItems: 20 }] },
+        chainCodes: { oneOf: [{ type: "string" }, { type: "array", items: { type: "string" }, maxItems: 20 }] },
+        amenities: { oneOf: [{ type: "string" }, { type: "array", items: { type: "string" }, maxItems: 20 }] },
+        ratings: { oneOf: [{ type: "string" }, { type: "array", items: { type: "string" }, maxItems: 5 }] },
+        hotel_score: { type: "string", enum: ["BEDBANK", "DIRECTCHAIN", "ALL"] },
+        hotelScore: { type: "string", enum: ["BEDBANK", "DIRECTCHAIN", "ALL"] },
+        max: { type: "integer", minimum: 1, maximum: 100 },
+        limit: { type: "integer", minimum: 1, maximum: 100 },
+        ...PAYMENT_PROPERTIES,
+      },
+      required: [] as string[],
+      requiredAlternatives: requiredCombinations(["city_code", "cityCode"]),
+    };
+  }
+  if (kind === "stabletravel_hotels_search") {
+    return {
+      properties: {
+        hotel_ids: { oneOf: [{ type: "string" }, { type: "array", items: { type: "string" }, maxItems: 20 }] },
+        hotelIds: { oneOf: [{ type: "string" }, { type: "array", items: { type: "string" }, maxItems: 20 }] },
+        adults: { type: "integer", minimum: 1, maximum: 9 },
+        check_in_date: { type: "string", description: "Check-in date, YYYY-MM-DD." },
+        checkInDate: { type: "string", description: "Compatibility alias for check_in_date." },
+        check_out_date: { type: "string", description: "Check-out date, YYYY-MM-DD." },
+        checkOutDate: { type: "string", description: "Compatibility alias for check_out_date." },
+        country_of_residence: { type: "string" },
+        countryOfResidence: { type: "string", description: "Compatibility alias for country_of_residence." },
+        price_range: { type: "string", description: "Price range like 100-300." },
+        priceRange: { type: "string", description: "Compatibility alias for price_range." },
+        currency_code: { type: "string", minLength: 3, maxLength: 3 },
+        currencyCode: { type: "string", minLength: 3, maxLength: 3 },
+        payment_policy: { type: "string", enum: ["GUARANTEE", "DEPOSIT", "NONE"] },
+        paymentPolicy: { type: "string", enum: ["GUARANTEE", "DEPOSIT", "NONE"] },
+        board_type: { type: "string", enum: ["ROOM_ONLY", "BREAKFAST", "HALF_BOARD", "FULL_BOARD", "ALL_INCLUSIVE"] },
+        boardType: { type: "string", enum: ["ROOM_ONLY", "BREAKFAST", "HALF_BOARD", "FULL_BOARD", "ALL_INCLUSIVE"] },
+        include_closed: { type: "boolean" },
+        includeClosed: { type: "boolean" },
+        best_rate_only: { type: "boolean" },
+        bestRateOnly: { type: "boolean" },
+        lang: { type: "string" },
+        language: { type: "string", description: "Compatibility alias for lang." },
+        ...PAYMENT_PROPERTIES,
+      },
+      required: [] as string[],
+      requiredAlternatives: requiredCombinations(["hotel_ids", "hotelIds"]),
+    };
+  }
+  if (kind === "stabletravel_flightaware_flights") {
+    return {
+      properties: {
+        ident: { type: "string", description: "Flight designator, registration, or fa_flight_id." },
+        flight: { type: "string", description: "Compatibility alias for ident." },
+        flight_number: { type: "string", description: "Compatibility alias for ident." },
+        ident_type: { type: "string", enum: ["fa_flight_id", "designator", "registration"] },
+        identType: { type: "string", enum: ["fa_flight_id", "designator", "registration"] },
+        start: { type: "string", description: "ISO 8601 start time." },
+        end: { type: "string", description: "ISO 8601 end time." },
+        max_pages: { type: "integer", minimum: 1, maximum: 5 },
+        maxPages: { type: "integer", minimum: 1, maximum: 5 },
+        cursor: { type: "string" },
+        ...PAYMENT_PROPERTIES,
+      },
+      required: [] as string[],
+      requiredAlternatives: requiredCombinations(["ident", "flight", "flight_number"]),
+    };
+  }
   throw new Error(`unknown MCP input_kind: ${kind}`);
 }
 

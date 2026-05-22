@@ -106,7 +106,7 @@ services:
       - key: X402_ALLOWED_CHAINS
         value: eip155:8453,eip155:480
       - key: X402_ALLOWED_HOSTS
-        value: api.exa.ai,x402.browserbase.com,toolrouter.world,x402.api.agentmail.to,x402.ws.agentmail.to
+        value: api.exa.ai,x402.browserbase.com,toolrouter.world,x402.api.agentmail.to,x402.ws.agentmail.to,stabletravel.dev
       - key: AGENTMAIL_X402_API_BASE
         value: https://x402.ws.agentmail.to
       - key: X402_FACILITATOR_URL
@@ -289,7 +289,7 @@ workers:
       - key: X402_ALLOWED_CHAINS
         value: eip155:8453,eip155:480
       - key: X402_ALLOWED_HOSTS
-        value: api.exa.ai,x402.browserbase.com,toolrouter.world,x402.api.agentmail.to,x402.ws.agentmail.to
+        value: api.exa.ai,x402.browserbase.com,toolrouter.world,x402.api.agentmail.to,x402.ws.agentmail.to,stabletravel.dev
       - key: AGENTMAIL_X402_API_BASE
         value: https://x402.ws.agentmail.to
       - key: X402_MAX_USD_PER_REQUEST

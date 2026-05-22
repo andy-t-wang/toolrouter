@@ -52,6 +52,7 @@ describe("apps/web endpoint manifest adapter", () => {
       "browserbase.session",
       "manus.research",
       "agentmail.send_message",
+      "stabletravel.google_flights_search",
     ]);
     const ids = sortLandingEndpoints(landingEndpointFallbacks(), (endpoint) =>
       recommendedIds.has(endpoint.id),
@@ -60,10 +61,15 @@ describe("apps/web endpoint manifest adapter", () => {
       "browserbase.session",
       "exa.search",
       "manus.research",
+      "stabletravel.google_flights_search",
       "agentmail.send_message",
       "parallel.search",
       "parallel.extract",
       "parallel.task",
+      "stabletravel.locations",
+      "stabletravel.hotels_list",
+      "stabletravel.hotels_search",
+      "stabletravel.flightaware_flights",
       "agentmail.create_inbox",
       "agentmail.list_messages",
       "agentmail.get_message",

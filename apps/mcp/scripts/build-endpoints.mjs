@@ -21,6 +21,8 @@ import {
   MANUS_RESEARCH_DEPTHS,
   PARALLEL_TASK_PROCESSORS,
   endpointRegistry,
+  stabletravelMaxUsd,
+  stabletravelPriceUsd,
 } from "../../../packages/router-core/src/endpoints/index.ts";
 import { endpointSnapshot } from "../../../packages/router-core/src/manifest/schema.ts";
 
@@ -30,7 +32,14 @@ const PROVIDER_LOGO_PATHS = Object.freeze({
   manus: "/manus-logomark.svg",
   parallel: "/parallel-logomark.svg",
   agentmail: "/agentmail-logomark.svg",
+  stabletravel: "/stabletravel-logomark.svg",
 });
+
+function stabletravelMcpDescription(action, kind) {
+  const price = stabletravelPriceUsd(kind);
+  const cap = stabletravelMaxUsd(kind);
+  return `${action} Price: $${price}; default maxUsd cap with buffer: $${cap}.`;
+}
 
 // Per-endpoint MCP tool wiring. The published package keeps the same tool
 // names + input shapes as before; this table is the only U2-managed
@@ -117,6 +126,41 @@ const MCP_TOOL_DEFINITIONS = Object.freeze({
     description: "Reply to an AgentMail message through ToolRouter's server-side x402 AgentMail wrapper.",
     input_kind: "agentmail_reply_to_message",
     default_max_usd: "0.02",
+  }),
+  "stabletravel.locations": Object.freeze({
+    tool_name: "stabletravel_locations",
+    title: "StableTravel locations",
+    description: stabletravelMcpDescription("Find StableTravel airport and city codes by keyword.", "locations"),
+    input_kind: "stabletravel_locations",
+    default_max_usd: stabletravelMaxUsd("locations"),
+  }),
+  "stabletravel.google_flights_search": Object.freeze({
+    tool_name: "stabletravel_google_flights_search",
+    title: "StableTravel Google Flights search",
+    description: stabletravelMcpDescription("Search Google Flights offers through StableTravel.", "google_flights_search"),
+    input_kind: "stabletravel_google_flights_search",
+    default_max_usd: stabletravelMaxUsd("google_flights_search"),
+  }),
+  "stabletravel.hotels_list": Object.freeze({
+    tool_name: "stabletravel_hotels_list",
+    title: "StableTravel hotels list",
+    description: stabletravelMcpDescription("List StableTravel hotels by city code so agents can discover hotel IDs.", "hotels_list"),
+    input_kind: "stabletravel_hotels_list",
+    default_max_usd: stabletravelMaxUsd("hotels_list"),
+  }),
+  "stabletravel.hotels_search": Object.freeze({
+    tool_name: "stabletravel_hotels_search",
+    title: "StableTravel hotels search",
+    description: stabletravelMcpDescription("Search StableTravel dated hotel offers by hotel ID.", "hotels_search"),
+    input_kind: "stabletravel_hotels_search",
+    default_max_usd: stabletravelMaxUsd("hotels_search"),
+  }),
+  "stabletravel.flightaware_flights": Object.freeze({
+    tool_name: "stabletravel_flightaware_flights",
+    title: "StableTravel FlightAware flights",
+    description: stabletravelMcpDescription("Look up FlightAware flight details through StableTravel by designator, registration, or FlightAware ID.", "flightaware_flights"),
+    input_kind: "stabletravel_flightaware_flights",
+    default_max_usd: stabletravelMaxUsd("flightaware_flights"),
   }),
 });
 
