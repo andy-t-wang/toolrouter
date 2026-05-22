@@ -21,6 +21,8 @@ import {
   MANUS_RESEARCH_DEPTHS,
   PARALLEL_TASK_PROCESSORS,
   endpointRegistry,
+  stabletravelMaxUsd,
+  stabletravelPriceUsd,
 } from "../../../packages/router-core/src/endpoints/index.ts";
 import { endpointSnapshot } from "../../../packages/router-core/src/manifest/schema.ts";
 
@@ -32,6 +34,12 @@ const PROVIDER_LOGO_PATHS = Object.freeze({
   agentmail: "/agentmail-logomark.svg",
   stabletravel: "/stabletravel-logomark.svg",
 });
+
+function stabletravelMcpDescription(action, kind) {
+  const price = stabletravelPriceUsd(kind);
+  const cap = stabletravelMaxUsd(kind);
+  return `${action} Price: $${price}; default maxUsd cap with buffer: $${cap}.`;
+}
 
 // Per-endpoint MCP tool wiring. The published package keeps the same tool
 // names + input shapes as before; this table is the only U2-managed
@@ -122,37 +130,37 @@ const MCP_TOOL_DEFINITIONS = Object.freeze({
   "stabletravel.locations": Object.freeze({
     tool_name: "stabletravel_locations",
     title: "StableTravel locations",
-    description: "Find StableTravel airport and city codes by keyword. Price: $0.0054; default maxUsd cap with buffer: $0.007.",
+    description: stabletravelMcpDescription("Find StableTravel airport and city codes by keyword.", "locations"),
     input_kind: "stabletravel_locations",
-    default_max_usd: "0.007",
+    default_max_usd: stabletravelMaxUsd("locations"),
   }),
   "stabletravel.google_flights_search": Object.freeze({
     tool_name: "stabletravel_google_flights_search",
     title: "StableTravel Google Flights search",
-    description: "Search Google Flights offers through StableTravel. Price: $0.02; default maxUsd cap with buffer: $0.025.",
+    description: stabletravelMcpDescription("Search Google Flights offers through StableTravel.", "google_flights_search"),
     input_kind: "stabletravel_google_flights_search",
-    default_max_usd: "0.025",
+    default_max_usd: stabletravelMaxUsd("google_flights_search"),
   }),
   "stabletravel.hotels_list": Object.freeze({
     tool_name: "stabletravel_hotels_list",
     title: "StableTravel hotels list",
-    description: "List StableTravel hotels by city code so agents can discover hotel IDs. Price: $0.0324; default maxUsd cap with buffer: $0.04.",
+    description: stabletravelMcpDescription("List StableTravel hotels by city code so agents can discover hotel IDs.", "hotels_list"),
     input_kind: "stabletravel_hotels_list",
-    default_max_usd: "0.04",
+    default_max_usd: stabletravelMaxUsd("hotels_list"),
   }),
   "stabletravel.hotels_search": Object.freeze({
     tool_name: "stabletravel_hotels_search",
     title: "StableTravel hotels search",
-    description: "Search StableTravel dated hotel offers by hotel ID. Price: $0.0324; default maxUsd cap with buffer: $0.04.",
+    description: stabletravelMcpDescription("Search StableTravel dated hotel offers by hotel ID.", "hotels_search"),
     input_kind: "stabletravel_hotels_search",
-    default_max_usd: "0.04",
+    default_max_usd: stabletravelMaxUsd("hotels_search"),
   }),
   "stabletravel.flightaware_flights": Object.freeze({
     tool_name: "stabletravel_flightaware_flights",
     title: "StableTravel FlightAware flights",
-    description: "Look up FlightAware flight details through StableTravel by designator, registration, or FlightAware ID. Price: $0.01; default maxUsd cap with buffer: $0.012.",
+    description: stabletravelMcpDescription("Look up FlightAware flight details through StableTravel by designator, registration, or FlightAware ID.", "flightaware_flights"),
     input_kind: "stabletravel_flightaware_flights",
-    default_max_usd: "0.012",
+    default_max_usd: stabletravelMaxUsd("flightaware_flights"),
   }),
 });
 

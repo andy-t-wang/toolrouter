@@ -4,7 +4,11 @@ import { existsSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { endpointRegistry } from "../../../packages/router-core/src/endpoints/index.ts";
+import {
+  endpointRegistry,
+  stabletravelMaxUsd,
+  stabletravelPriceUsd,
+} from "../../../packages/router-core/src/endpoints/index.ts";
 import { endpointSnapshot } from "../../../packages/router-core/src/manifest/schema.ts";
 import {
   endpointsManifestSnapshot,
@@ -78,13 +82,15 @@ describe("ToolRouter MCP endpoints codegen", () => {
 
   it("keeps StableTravel MCP default spend caps visible", () => {
     const fresh = endpointsManifestSnapshot();
-    for (const [endpointId, price, maxUsd] of [
-      ["stabletravel.locations", "0.0054", "0.007"],
-      ["stabletravel.google_flights_search", "0.02", "0.025"],
-      ["stabletravel.hotels_list", "0.0324", "0.04"],
-      ["stabletravel.hotels_search", "0.0324", "0.04"],
-      ["stabletravel.flightaware_flights", "0.01", "0.012"],
+    for (const [endpointId, kind] of [
+      ["stabletravel.locations", "locations"],
+      ["stabletravel.google_flights_search", "google_flights_search"],
+      ["stabletravel.hotels_list", "hotels_list"],
+      ["stabletravel.hotels_search", "hotels_search"],
+      ["stabletravel.flightaware_flights", "flightaware_flights"],
     ]) {
+      const price = stabletravelPriceUsd(kind);
+      const maxUsd = stabletravelMaxUsd(kind);
       const entry = fresh.endpoints.find((candidate) => candidate.id === endpointId);
       assert.equal(entry.mcp.default_max_usd, maxUsd);
       assert.match(entry.mcp.description, new RegExp(`\\$${price.replace(".", "\\.")}`));

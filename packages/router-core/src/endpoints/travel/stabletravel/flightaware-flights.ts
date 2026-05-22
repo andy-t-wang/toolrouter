@@ -2,7 +2,9 @@ import type { EndpointManifest } from "../../../manifest/endpoint.ts";
 import {
   STABLETRAVEL_API_BASE,
   buildStabletravelFlightawareFlightsRequest,
+  stabletravelCostLabel,
   stabletravelMaxUsd,
+  stabletravelPriceUsd,
 } from "../../builders.ts";
 
 export const stabletravelFlightawareFlightsEndpointDefinition = Object.freeze({
@@ -10,12 +12,12 @@ export const stabletravelFlightawareFlightsEndpointDefinition = Object.freeze({
   provider: "stabletravel",
   category: "travel",
   name: "StableTravel FlightAware Flights",
-  description: "Look up live FlightAware flight details by designator, registration, or FlightAware ID; costs $0.01 with a $0.012 default cap.",
+  description: `Look up live FlightAware flight details by designator, registration, or FlightAware ID; ${stabletravelCostLabel("flightaware_flights")}.`,
   url: `${STABLETRAVEL_API_BASE}/api/flightaware/flights`,
   method: "GET",
   agentkit: false,
   x402: true,
-  estimated_cost_usd: 0.01,
+  estimated_cost_usd: Number(stabletravelPriceUsd("flightaware_flights")),
   agentkit_value_type: null,
   agentkit_value_label: null,
   default_payment_mode: "x402_only",

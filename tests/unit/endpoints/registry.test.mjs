@@ -515,6 +515,10 @@ describe("endpoint registry", () => {
   });
 
   it("builds StableTravel direct x402 GET requests", () => {
+    const outboundDate = rollingDate(30);
+    const returnDate = rollingDate(35);
+    const checkInDate = rollingDate(30);
+    const checkOutDate = rollingDate(31);
     const locations = buildEndpointRequest("stabletravel.locations", {
       query: "Paris",
       sub_type: "CITY",
@@ -530,14 +534,14 @@ describe("endpoint registry", () => {
     const flights = buildEndpointRequest("stabletravel.google_flights_search", {
       departure_id: "sfo",
       arrival_id: "jfk",
-      outbound_date: "2026-06-15",
+      outbound_date: outboundDate,
       type: "2",
       include_airlines: ["UA", "AA"],
     });
     assert.equal(flights.method, "GET");
     assert.equal(
       flights.url,
-      "https://stabletravel.dev/api/google-flights/search?departure_id=sfo&arrival_id=jfk&outbound_date=2026-06-15&type=2&adults=1&children=0&infants_in_seat=0&infants_on_lap=0&include_airlines=UA%2CAA&currency=USD&hl=en",
+      `https://stabletravel.dev/api/google-flights/search?departure_id=sfo&arrival_id=jfk&outbound_date=${outboundDate}&type=2&adults=1&children=0&infants_in_seat=0&infants_on_lap=0&include_airlines=UA%2CAA&currency=USD&hl=en`,
     );
     assert.equal(flights.estimatedUsd, "0.02");
     assert.equal(stabletravelPriceUsd("google_flights_search"), "0.02");
@@ -545,11 +549,11 @@ describe("endpoint registry", () => {
     const roundTripFlights = buildEndpointRequest("stabletravel.google_flights_search", {
       departure_id: "SFO",
       arrival_id: "JFK",
-      outbound_date: "2026-06-15",
-      return_date: "2026-06-20",
+      outbound_date: outboundDate,
+      return_date: returnDate,
     });
     assert.ok(roundTripFlights.url.includes("type=1"));
-    assert.ok(roundTripFlights.url.includes("return_date=2026-06-20"));
+    assert.ok(roundTripFlights.url.includes(`return_date=${returnDate}`));
 
     const rollingFlightProbe = buildEndpointHealthProbeRequest("stabletravel.google_flights_search");
     assert.ok(rollingFlightProbe.request.url.includes(`outbound_date=${rollingDate(30)}`));
@@ -565,14 +569,14 @@ describe("endpoint registry", () => {
     const hotelsSearch = buildEndpointRequest("stabletravel.hotels_search", {
       hotel_ids: ["HLPAR266", "HLPAR123"],
       adults: 2,
-      check_in_date: "2026-06-15",
-      check_out_date: "2026-06-16",
+      check_in_date: checkInDate,
+      check_out_date: checkOutDate,
       currency_code: "usd",
       best_rate_only: true,
     });
     assert.equal(
       hotelsSearch.url,
-      "https://stabletravel.dev/api/hotels/search?hotelIds=HLPAR266%2CHLPAR123&adults=2&checkInDate=2026-06-15&checkOutDate=2026-06-16&currencyCode=USD&bestRateOnly=true",
+      `https://stabletravel.dev/api/hotels/search?hotelIds=HLPAR266%2CHLPAR123&adults=2&checkInDate=${checkInDate}&checkOutDate=${checkOutDate}&currencyCode=USD&bestRateOnly=true`,
     );
     assert.equal(hotelsSearch.estimatedUsd, "0.0324");
 
@@ -599,6 +603,9 @@ describe("endpoint registry", () => {
   });
 
   it("validates StableTravel inputs before payment", () => {
+    const outboundDate = rollingDate(30);
+    const earlierDate = rollingDate(25);
+
     assert.throws(
       () => buildEndpointRequest("stabletravel.locations", { sub_type: "CITY" }),
       /keyword is required/u,
@@ -608,8 +615,8 @@ describe("endpoint registry", () => {
         buildEndpointRequest("stabletravel.google_flights_search", {
           departure_id: "SFO",
           arrival_id: "JFK",
-          outbound_date: "2026/06/15",
-      }),
+          outbound_date: outboundDate.replaceAll("-", "/"),
+        }),
       /outbound_date must use YYYY-MM-DD/u,
     );
     assert.throws(
@@ -626,7 +633,7 @@ describe("endpoint registry", () => {
         buildEndpointRequest("stabletravel.google_flights_search", {
           departure_id: "SFO",
           arrival_id: "JFK",
-          outbound_date: "2026-06-15",
+          outbound_date: outboundDate,
           type: "1",
         }),
       /return_date is required/u,
@@ -636,8 +643,8 @@ describe("endpoint registry", () => {
         buildEndpointRequest("stabletravel.google_flights_search", {
           departure_id: "SFO",
           arrival_id: "JFK",
-          outbound_date: "2026-06-15",
-          return_date: "2026-06-10",
+          outbound_date: outboundDate,
+          return_date: earlierDate,
         }),
       /return_date must be on or after outbound_date/u,
     );
@@ -660,8 +667,8 @@ describe("endpoint registry", () => {
       () =>
         buildEndpointRequest("stabletravel.hotels_search", {
           hotel_ids: ["HLPAR266"],
-          check_in_date: "2026-06-15",
-          check_out_date: "2026-06-15",
+          check_in_date: outboundDate,
+          check_out_date: outboundDate,
         }),
       /checkOutDate must be after checkInDate/u,
     );
@@ -670,7 +677,7 @@ describe("endpoint registry", () => {
         buildEndpointRequest("stabletravel.google_flights_search", {
           departure_id: "SFO",
           arrival_id: "JFK",
-          outbound_date: "2026-06-15",
+          outbound_date: outboundDate,
           type: "2",
           include_airlines: Array.from({ length: 21 }, (_, index) => `A${index}`).join(","),
         }),
@@ -681,7 +688,7 @@ describe("endpoint registry", () => {
         buildEndpointRequest("stabletravel.google_flights_search", {
           departure_id: "SFO",
           arrival_id: "JFK",
-          outbound_date: "2026-06-15",
+          outbound_date: outboundDate,
           type: "2",
           include_airlines: Array.from({ length: 11 }, (_, index) => `A${index},B${index}`),
         }),

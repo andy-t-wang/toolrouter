@@ -40,6 +40,7 @@ export {
   parallelSearchPriceUsd,
   parallelTaskBasePriceForProcessor,
   parallelTaskPriceForProcessor,
+  stabletravelCostLabel,
   stabletravelMaxUsd,
   stabletravelPriceUsd,
 } from "./builders.ts";

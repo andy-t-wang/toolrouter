@@ -8,6 +8,16 @@ function tmpStorePath(prefix) {
   return join(mkdtempSync(join(tmpdir(), prefix)), "store.json");
 }
 
+function rollingDate(daysFromToday) {
+  const today = new Date();
+  const date = new Date(Date.UTC(
+    today.getUTCFullYear(),
+    today.getUTCMonth(),
+    today.getUTCDate() + daysFromToday,
+  ));
+  return date.toISOString().slice(0, 10);
+}
+
 process.env.ROUTER_DEV_MODE = "true";
 process.env.AGENTKIT_ROUTER_DEV_API_KEY = "test_dev_key";
 process.env.AGENTKIT_ROUTER_LOCAL_STORE = tmpStorePath("toolrouter-");
@@ -1218,6 +1228,7 @@ describe("router API", () => {
 
   it("proxies StableTravel direct x402 requests through /v1/requests", async () => {
     const executorCalls = [];
+    const outboundDate = rollingDate(30);
     await withIsolatedApp("toolrouter-stabletravel-proxy-", {
       executor: async (payload) => {
         executorCalls.push(payload);
@@ -1226,7 +1237,7 @@ describe("router API", () => {
         assert.equal(payload.request.json, undefined);
         assert.equal(
           payload.request.url,
-          "https://stabletravel.dev/api/google-flights/search?departure_id=SFO&arrival_id=JFK&outbound_date=2026-06-15&type=2&adults=1&children=0&infants_in_seat=0&infants_on_lap=0&currency=USD&hl=en",
+          `https://stabletravel.dev/api/google-flights/search?departure_id=SFO&arrival_id=JFK&outbound_date=${outboundDate}&type=2&adults=1&children=0&infants_in_seat=0&infants_on_lap=0&currency=USD&hl=en`,
         );
         return executorResult(payload, {
           path: "x402",
@@ -1254,7 +1265,7 @@ describe("router API", () => {
           input: {
             departure_id: "SFO",
             arrival_id: "JFK",
-            outbound_date: "2026-06-15",
+            outbound_date: outboundDate,
             type: "2",
           },
           maxUsd: "0.025",

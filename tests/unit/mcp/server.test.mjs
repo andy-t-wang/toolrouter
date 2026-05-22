@@ -11,6 +11,16 @@ function response(body, init = {}) {
   });
 }
 
+function rollingDate(daysFromToday) {
+  const today = new Date();
+  const date = new Date(Date.UTC(
+    today.getUTCFullYear(),
+    today.getUTCMonth(),
+    today.getUTCDate() + daysFromToday,
+  ));
+  return date.toISOString().slice(0, 10);
+}
+
 function framed(message) {
   const body = JSON.stringify(message);
   return `Content-Length: ${Buffer.byteLength(body, "utf8")}\r\n\r\n${body}`;
@@ -221,10 +231,11 @@ describe("ToolRouter MCP server", () => {
 
   it("calls StableTravel endpoint tools with direct x402 defaults", async () => {
     const calls = [];
+    const outboundDate = rollingDate(30);
     const result = await callTool("stabletravel_google_flights_search", {
       departure_id: "SFO",
       arrival_id: "JFK",
-      outbound_date: "2026-06-15",
+      outbound_date: outboundDate,
       type: "2",
     }, {
       env: { TOOLROUTER_API_URL: "http://router.test", TOOLROUTER_API_KEY: "tr_test" },
@@ -240,7 +251,7 @@ describe("ToolRouter MCP server", () => {
       input: {
         departure_id: "SFO",
         arrival_id: "JFK",
-        outbound_date: "2026-06-15",
+        outbound_date: outboundDate,
         type: "2",
       },
       maxUsd: "0.025",

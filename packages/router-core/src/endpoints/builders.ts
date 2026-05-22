@@ -388,6 +388,10 @@ export function stabletravelMaxUsd(kind) {
   return toUsdString(STABLETRAVEL_MAX_USD[kind]);
 }
 
+export function stabletravelCostLabel(kind) {
+  return `costs $${stabletravelPriceUsd(kind)} with a $${stabletravelMaxUsd(kind)} default cap`;
+}
+
 function providerRequest(endpoint, json, estimatedUsd) {
   return {
     method: endpoint.method,

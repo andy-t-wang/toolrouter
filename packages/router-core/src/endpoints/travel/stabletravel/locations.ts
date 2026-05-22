@@ -1,17 +1,23 @@
 import type { EndpointManifest } from "../../../manifest/endpoint.ts";
-import { STABLETRAVEL_API_BASE, buildStabletravelLocationsRequest, stabletravelMaxUsd } from "../../builders.ts";
+import {
+  STABLETRAVEL_API_BASE,
+  buildStabletravelLocationsRequest,
+  stabletravelCostLabel,
+  stabletravelMaxUsd,
+  stabletravelPriceUsd,
+} from "../../builders.ts";
 
 export const stabletravelLocationsEndpointDefinition = Object.freeze({
   id: "stabletravel.locations",
   provider: "stabletravel",
   category: "travel",
   name: "StableTravel Locations",
-  description: "Search airports and cities by keyword for travel planning; costs $0.0054 with a $0.007 default cap.",
+  description: `Search airports and cities by keyword for travel planning; ${stabletravelCostLabel("locations")}.`,
   url: `${STABLETRAVEL_API_BASE}/api/reference/locations`,
   method: "GET",
   agentkit: false,
   x402: true,
-  estimated_cost_usd: 0.0054,
+  estimated_cost_usd: Number(stabletravelPriceUsd("locations")),
   agentkit_value_type: null,
   agentkit_value_label: null,
   default_payment_mode: "x402_only",

@@ -2,7 +2,9 @@ import type { EndpointManifest } from "../../../manifest/endpoint.ts";
 import {
   STABLETRAVEL_API_BASE,
   buildStabletravelGoogleFlightsSearchRequest,
+  stabletravelCostLabel,
   stabletravelMaxUsd,
+  stabletravelPriceUsd,
 } from "../../builders.ts";
 
 export const stabletravelGoogleFlightsSearchEndpointDefinition = Object.freeze({
@@ -10,12 +12,12 @@ export const stabletravelGoogleFlightsSearchEndpointDefinition = Object.freeze({
   provider: "stabletravel",
   category: "travel",
   name: "StableTravel Google Flights Search",
-  description: "Search Google Flights for priced flight offers and airport context; costs $0.02 with a $0.025 default cap.",
+  description: `Search Google Flights for priced flight offers and airport context; ${stabletravelCostLabel("google_flights_search")}.`,
   url: `${STABLETRAVEL_API_BASE}/api/google-flights/search`,
   method: "GET",
   agentkit: false,
   x402: true,
-  estimated_cost_usd: 0.02,
+  estimated_cost_usd: Number(stabletravelPriceUsd("google_flights_search")),
   agentkit_value_type: null,
   agentkit_value_label: null,
   default_payment_mode: "x402_only",

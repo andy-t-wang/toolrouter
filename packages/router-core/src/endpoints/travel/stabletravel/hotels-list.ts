@@ -1,17 +1,23 @@
 import type { EndpointManifest } from "../../../manifest/endpoint.ts";
-import { STABLETRAVEL_API_BASE, buildStabletravelHotelsListRequest, stabletravelMaxUsd } from "../../builders.ts";
+import {
+  STABLETRAVEL_API_BASE,
+  buildStabletravelHotelsListRequest,
+  stabletravelCostLabel,
+  stabletravelMaxUsd,
+  stabletravelPriceUsd,
+} from "../../builders.ts";
 
 export const stabletravelHotelsListEndpointDefinition = Object.freeze({
   id: "stabletravel.hotels_list",
   provider: "stabletravel",
   category: "travel",
   name: "StableTravel Hotels List",
-  description: "List hotels by city code so agents can discover hotel IDs; costs $0.0324 with a $0.04 default cap.",
+  description: `List hotels by city code so agents can discover hotel IDs; ${stabletravelCostLabel("hotels_list")}.`,
   url: `${STABLETRAVEL_API_BASE}/api/hotels/list`,
   method: "GET",
   agentkit: false,
   x402: true,
-  estimated_cost_usd: 0.0324,
+  estimated_cost_usd: Number(stabletravelPriceUsd("hotels_list")),
   agentkit_value_type: null,
   agentkit_value_label: null,
   default_payment_mode: "x402_only",
