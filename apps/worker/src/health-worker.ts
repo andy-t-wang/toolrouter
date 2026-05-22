@@ -25,7 +25,7 @@ export function healthPaymentSignerState(env: any = process.env) {
   const locatorSource = healthLocator ? "health" : null;
   const addressSource = healthAddress ? "health" : null;
   let source = "unavailable";
-  if (selectedWalletLocator && selectedAddress && hasCrossmintAuth) {
+  if (selectedWalletLocator && hasCrossmintAuth) {
     source = "crossmint_health";
   }
   return {
@@ -54,6 +54,35 @@ export function crossmintHealthPaymentSigner(state = healthPaymentSignerState())
   const address = state.selectedAddress;
   if (!walletLocator || !address || !state.log.crossmint_auth_configured) return null;
   const crossmint = createCrossmintClient();
+  return {
+    address,
+    signMessage: async (payload: any) => {
+      const message = payload && typeof payload === "object" && "message" in payload ? payload.message : payload;
+      return crossmint.signMessage({ walletLocator, message });
+    },
+    signTypedData: async (payload: any) =>
+      crossmint.signTypedData({
+        walletLocator,
+        domain: payload.domain,
+        types: payload.types,
+        primaryType: payload.primaryType,
+        message: payload.message,
+      }),
+  };
+}
+
+export async function resolveCrossmintHealthPaymentSigner(
+  state = healthPaymentSignerState(),
+  crossmint = createCrossmintClient(),
+) {
+  const walletLocator = state.selectedWalletLocator;
+  if (!walletLocator || !state.log.crossmint_auth_configured) return null;
+  let address = state.selectedAddress;
+  if (!address) {
+    const wallet = await crossmint.getSignedWallet(walletLocator);
+    address = wallet?.address || "";
+  }
+  if (!address) return null;
   return {
     address,
     signMessage: async (payload: any) => {
@@ -132,13 +161,36 @@ export function contextualHealthPaymentSigner({
 export function createHealthEndpointExecutor({
   paymentSignerState = healthPaymentSignerState(),
   paymentSigner = crossmintHealthPaymentSigner(paymentSignerState),
+  paymentSignerFactory = null,
   executeEndpointImpl = executeEndpoint,
   logger = console,
 }: any = {}) {
   return async (payload: any) => {
     const context = healthProbeContext(payload);
     try {
-      if (!paymentSigner) {
+      let resolvedPaymentSigner = paymentSigner;
+      if (!resolvedPaymentSigner && typeof paymentSignerFactory === "function") {
+        try {
+          resolvedPaymentSigner = await paymentSignerFactory();
+        } catch (error: any) {
+          logger.error?.("health payment signer initialization failed", {
+            ...context,
+            health_payment_signer: paymentSignerState.log,
+            error: safeErrorLog(error),
+          });
+          return {
+            ok: false,
+            status_code: null,
+            path: null,
+            charged: false,
+            latency_ms: 0,
+            payment_error: "health payment signer initialization failed",
+            error: "health payment signer initialization failed",
+            health_payment_signer: paymentSignerState.log,
+          };
+        }
+      }
+      if (!resolvedPaymentSigner) {
         logger.error?.("health payment signer unavailable", {
           ...context,
           health_payment_signer: paymentSignerState.log,
@@ -155,7 +207,7 @@ export function createHealthEndpointExecutor({
         };
       }
       const contextualSigner = contextualHealthPaymentSigner({
-        paymentSigner,
+        paymentSigner: resolvedPaymentSigner,
         paymentSignerState,
         payload,
         logger,
@@ -193,7 +245,12 @@ export async function main() {
   const paidIntervalMs = Number(process.env.TOOLROUTER_PAID_HEALTH_INTERVAL_MS || process.env.TOOLROUTER_HEALTH_INTERVAL_MS || 60 * 60 * 1000);
   const agentKitIntervalMs = Number(process.env.TOOLROUTER_AGENTKIT_HEALTH_INTERVAL_MS || 12 * 60 * 60 * 1000);
   const paymentSignerState = healthPaymentSignerState();
-  const executeHealthEndpoint = createHealthEndpointExecutor({ paymentSignerState });
+  const paymentSignerPromise = resolveCrossmintHealthPaymentSigner(paymentSignerState);
+  const executeHealthEndpoint = createHealthEndpointExecutor({
+    paymentSignerState,
+    paymentSigner: null,
+    paymentSignerFactory: () => paymentSignerPromise,
+  });
   const paidWorker = createHealthWorker({
     db: store,
     executor: executeHealthEndpoint,
