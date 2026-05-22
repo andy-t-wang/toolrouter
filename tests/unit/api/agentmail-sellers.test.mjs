@@ -306,6 +306,12 @@ describe("AgentMail seller manifests", () => {
 
       assert.equal(listReply.statusCode, 403);
       assert.equal(listResult.code, "agentmail_inbox_not_owned");
+      assert.equal(listResult.diagnostics.inbox_found, true);
+      assert.equal(listResult.diagnostics.reason, "owner_mismatch");
+      assert.match(listResult.diagnostics.payer_address_hash, /^sha256:[0-9a-f]{16}$/u);
+      assert.match(listResult.diagnostics.stored_owner_address_hash, /^sha256:[0-9a-f]{16}$/u);
+      assert.doesNotMatch(JSON.stringify(listResult), new RegExp(OWNER_A.slice(2), "iu"));
+      assert.doesNotMatch(JSON.stringify(listResult), new RegExp(OWNER_B.slice(2), "iu"));
 
       const getReply = makeReply();
       const getResult = await forwardAgentmailGetMessageUpstream({
@@ -364,6 +370,42 @@ describe("AgentMail seller manifests", () => {
       assert.equal(reply.statusCode, 403);
       assert.equal(replyResult.code, "agentmail_inbox_not_owned");
       assert.equal(upstreamCalls, 0, "must not forward unauthorized AgentMail operations upstream");
+    });
+  });
+
+  it("diagnoses missing AgentMail health ownership rows without exposing addresses", async () => {
+    await withAllowedHosts(async () => {
+      let upstreamCalls = 0;
+      const store = makeAgentmailStore();
+      const reply = makeReply();
+      const result = await forwardAgentmailListMessagesUpstream({
+        request: {
+          body: {
+            inbox_id: "missing@agentmail.to",
+            limit: 10,
+          },
+        },
+        reply,
+        payment: paymentContext(OWNER_A),
+        store,
+        fetchImpl: async () => {
+          upstreamCalls += 1;
+          return new Response('{"ok":true}', { status: 200 });
+        },
+        paymentSigner: paymentSigner(),
+      });
+
+      assert.equal(reply.statusCode, 403);
+      assert.equal(result.code, "agentmail_inbox_not_owned");
+      assert.deepEqual(result.diagnostics, {
+        inbox_found: false,
+        reason: "missing_inbox_owner_row",
+        payer_address_hash: result.diagnostics.payer_address_hash,
+        stored_owner_address_hash: null,
+      });
+      assert.match(result.diagnostics.payer_address_hash, /^sha256:[0-9a-f]{16}$/u);
+      assert.doesNotMatch(JSON.stringify(result), new RegExp(OWNER_A.slice(2), "iu"));
+      assert.equal(upstreamCalls, 0);
     });
   });
 

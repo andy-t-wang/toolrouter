@@ -1,7 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
-import { getEndpoint, runEndpointHealthCheck } from "../../../packages/router-core/src/index.ts";
+import { getEndpoint, runEndpointHealthCheck, runEndpointHealthChecks } from "../../../packages/router-core/src/index.ts";
 
 function createDb(requestRows = []) {
   const insertedHealthChecks = [];
@@ -847,6 +847,72 @@ describe("endpoint health worker", () => {
       assert.equal(db.insertedHealthChecks[0].error, "AgentMail inbox ownership check failed");
       assert.equal(db.upsertedStatuses[0].last_error, "AgentMail inbox ownership check failed");
       assert.equal(db.upsertedStatuses[0].layer_upstream_status, undefined);
+    } finally {
+      if (previousInbox === undefined) delete process.env.AGENTMAIL_HEALTH_INBOX_ID;
+      else process.env.AGENTMAIL_HEALTH_INBOX_ID = previousInbox;
+      if (previousEmail === undefined) delete process.env.AGENTMAIL_HEALTH_INBOX_EMAIL;
+      else process.env.AGENTMAIL_HEALTH_INBOX_EMAIL = previousEmail;
+    }
+  });
+
+  it("logs health signer and provider diagnostics for failed probes", async () => {
+    const previousInbox = process.env.AGENTMAIL_HEALTH_INBOX_ID;
+    const previousEmail = process.env.AGENTMAIL_HEALTH_INBOX_EMAIL;
+    process.env.AGENTMAIL_HEALTH_INBOX_ID = "agent@agentmail.to";
+    process.env.AGENTMAIL_HEALTH_INBOX_EMAIL = "agent@agentmail.to";
+    const endpoint = getEndpoint("agentmail.send_message");
+    const db = createDb();
+    const logs = [];
+
+    try {
+      const results = await runEndpointHealthChecks({
+        endpoints: [endpoint],
+        db,
+        executor: async () => ({
+          ok: false,
+          status_code: 403,
+          path: "x402",
+          charged: false,
+          latency_ms: 120,
+          health_payment_signer: {
+            source: "agent_wallet_private_key_fallback",
+            fallback_used: true,
+            selected_address_hash: null,
+          },
+          body: {
+            error: "AgentMail inbox is not owned by this payer",
+            code: "agentmail_inbox_not_owned",
+            diagnostics: {
+              inbox_found: true,
+              reason: "owner_mismatch",
+              payer_address_hash: "sha256:payer",
+              stored_owner_address_hash: "sha256:owner",
+            },
+          },
+        }),
+        now: () => new Date("2026-05-21T12:00:00.000Z"),
+        useRecentRequests: false,
+        logger: {
+          info(message, fields) {
+            logs.push({ message, fields });
+          },
+        },
+      });
+
+      assert.equal(results[0].status, "unverified");
+      assert.deepEqual(logs[0].fields.diagnostics, {
+        provider: {
+          inbox_found: true,
+          reason: "owner_mismatch",
+          payer_address_hash: "sha256:payer",
+          stored_owner_address_hash: "sha256:owner",
+        },
+        health_payment_signer: {
+          source: "agent_wallet_private_key_fallback",
+          fallback_used: true,
+          selected_address_hash: null,
+        },
+      });
     } finally {
       if (previousInbox === undefined) delete process.env.AGENTMAIL_HEALTH_INBOX_ID;
       else process.env.AGENTMAIL_HEALTH_INBOX_ID = previousInbox;

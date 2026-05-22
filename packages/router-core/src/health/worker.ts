@@ -105,6 +105,8 @@ function normalizeExecutionResult(result, fallbackLatencyMs) {
     payment_error: paymentErrorLabel(attribution),
     error: attribution?.label ?? null,
     attribution,
+    diagnostics: result?.diagnostics ?? result?.body?.diagnostics ?? null,
+    health_payment_signer: result?.health_payment_signer ?? result?.healthPaymentSigner ?? null,
   };
 }
 
@@ -504,6 +506,7 @@ export async function runEndpointHealthCheck({
   let healthCheckRow;
   let attribution = null;
   let probePaymentMode = null;
+  let diagnostics = null;
   if (!endpoint.enabled) {
     healthCheckRow = {
       id: `hc_${randomUUID()}`,
@@ -566,6 +569,10 @@ export async function runEndpointHealthCheck({
             });
             const normalized = normalizeExecutionResult(result, Date.now() - started);
             attribution = normalized.attribution ?? null;
+            diagnostics = {
+              provider: normalized.diagnostics,
+              health_payment_signer: normalized.health_payment_signer,
+            };
             healthCheckRow = {
               id: `hc_${randomUUID()}`,
               endpoint_id: endpoint.id,
@@ -605,6 +612,7 @@ export async function runEndpointHealthCheck({
     status: healthCheckRow.status,
     healthCheck: healthCheckRow,
     endpointStatus: statusRow,
+    diagnostics,
   };
 }
 
@@ -653,6 +661,7 @@ export async function runEndpointHealthChecks({
       skip_reason: result.skip_reason ?? null,
       next_check_after_ms: result.next_check_after_ms ?? null,
       error: result.healthCheck?.error ?? null,
+      diagnostics: result.diagnostics ?? null,
     });
   }
   return results;
