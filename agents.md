@@ -2,6 +2,16 @@
 
 These are durable project decisions for future agents working in this repo.
 
+## Simplicity First
+
+- Minimum code that solves the problem. Nothing speculative.
+- No features beyond what was asked.
+- No abstractions for single-use code.
+- No "flexibility" or "configurability" that wasn't requested.
+- No error handling for impossible scenarios.
+- If you write 200 lines and it could be 50, rewrite it.
+- Ask yourself: "Would a senior engineer say this is overcomplicated?" If yes, simplify.
+
 ## Codex PR Follow-up
 
 - This project has a Codex `PostToolUse` hook in `.codex/config.toml` that detects successful `git push` commands and schedules `.codex/hooks/post_push_pr_comment_fixer.py` to run five minutes later.
