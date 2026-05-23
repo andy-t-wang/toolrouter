@@ -288,7 +288,7 @@ describe("web dashboard static wiring", () => {
     assert.match(docsPage, /Ship endpoints agents can trust\./);
     assert.match(ogRoute, /ImageResponse/);
     assert.match(ogRoute, /routeCards/);
-    assert.match(ogRoute, /Tools your agent can trust/);
+    assert.match(ogRoute, /Tools your agent can actually trust\./);
     assert.doesNotMatch(ogRoute, /AgentKit \+ x402 tool routing/);
     assert.doesNotMatch(ogRoute, /Every endpoint is verified/);
     assert.match(ogRoute, /"\/setup"/);
