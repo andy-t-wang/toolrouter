@@ -49,6 +49,9 @@ type LoadedFont = {
   style: "normal";
 };
 
+// Satori can parse TTF/OTF/WOFF, but not WOFF2 — skip WOFF2 sources.
+const SATORI_FONT_FORMATS = new Set(["truetype", "opentype", "woff"]);
+
 async function loadGoogleFont(
   family: string,
   name: string,
@@ -63,16 +66,34 @@ async function loadGoogleFont(
     });
     if (!cssRes.ok) return null;
     const css = await cssRes.text();
-    const match = css.match(
-      /src:\s*url\((.+?)\)\s*format\('(?:opentype|truetype)'\)/,
-    );
-    if (!match) return null;
-    const fontRes = await fetch(match[1]);
+    // A @font-face src may list several url(...) format('...') sources; pick the
+    // first one Satori can actually parse rather than assuming TTF/OTF is present.
+    const source = [
+      ...css.matchAll(/url\((https?:\/\/[^)]+)\)\s*format\('([^']+)'\)/g),
+    ].find((entry) => SATORI_FONT_FORMATS.has(entry[2]));
+    if (!source) return null;
+    const fontRes = await fetch(source[1]);
     if (!fontRes.ok) return null;
     return { name, data: await fontRes.arrayBuffer(), weight, style: "normal" };
   } catch {
     return null;
   }
+}
+
+// The font set is static, so load it once per runtime instance instead of on
+// every request. A fully-failed load isn't cached, so a later request can retry.
+let fontCache: Promise<LoadedFont[]> | null = null;
+
+function loadFonts(): Promise<LoadedFont[]> {
+  if (!fontCache) {
+    fontCache = Promise.all([
+      loadGoogleFont("Inter+Tight", "Inter Tight", 400),
+      loadGoogleFont("Inter+Tight", "Inter Tight", 600),
+      loadGoogleFont("Inter", "Inter", 400),
+      loadGoogleFont("JetBrains+Mono", "JetBrains Mono", 500),
+    ]).then((fonts) => fonts.filter((font): font is LoadedFont => font !== null));
+  }
+  return fontCache;
 }
 
 function ToolRouterMark() {
@@ -247,14 +268,8 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const card = routeCard(searchParams.get("path"));
 
-  const fonts = (
-    await Promise.all([
-      loadGoogleFont("Inter+Tight", "Inter Tight", 400),
-      loadGoogleFont("Inter+Tight", "Inter Tight", 600),
-      loadGoogleFont("Inter", "Inter", 400),
-      loadGoogleFont("JetBrains+Mono", "JetBrains Mono", 500),
-    ])
-  ).filter((font): font is LoadedFont => font !== null);
+  const fonts = await loadFonts();
+  if (fonts.length === 0) fontCache = null;
 
   return new ImageResponse(
     (
