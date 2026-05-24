@@ -16,6 +16,7 @@ const REQUIRED_TOOL_NAMES = [
   "toolrouter_recommend_endpoint",
   "toolrouter_call_endpoint",
   "toolrouter_get_request",
+  "toolrouter_create_top_up",
   "toolrouter_search",
   "toolrouter_send_email",
   "toolrouter_browser_use",

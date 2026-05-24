@@ -64,6 +64,7 @@ function creditAccountingError(error: any, amount?: bigint) {
     return Object.assign(new Error("insufficient ToolRouter credits"), {
       statusCode: 402,
       code: "insufficient_credits",
+      exposeDetails: true,
       details: amount
         ? {
             required_usd: formatUsd(amount),
@@ -198,6 +199,7 @@ export async function reserveCredits({
     throw Object.assign(new Error("insufficient ToolRouter credits"), {
       statusCode: 402,
       code: "insufficient_credits",
+      exposeDetails: true,
       details: {
         available_usd: formatUsd(balances.available),
         required_usd: formatUsd(amount),

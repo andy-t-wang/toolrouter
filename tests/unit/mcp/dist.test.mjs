@@ -48,6 +48,7 @@ describe("ToolRouter MCP built dist", () => {
       "stabletravel_locations",
       "toolrouter_browser_use",
       "toolrouter_call_endpoint",
+      "toolrouter_create_top_up",
       "toolrouter_get_request",
       "toolrouter_list_categories",
       "toolrouter_list_endpoints",

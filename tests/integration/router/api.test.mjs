@@ -707,6 +707,57 @@ describe("router API", () => {
     assert.equal(settledTopUps.top_ups[0].status, "funded");
   });
 
+  it("creates Stripe top-ups from user-scoped API keys for MCP clients", async () => {
+    await withIsolatedApp("toolrouter-api-key-top-up-", {}, async ({ baseUrl, store }) => {
+      const topUpResponse = await fetch(`${baseUrl}/v1/top-ups`, {
+        method: "POST",
+        headers: authHeaders(),
+        body: JSON.stringify({ amountUsd: "5" }),
+      });
+      assert.equal(topUpResponse.status, 201);
+      const topUp = (await topUpResponse.json()).top_up;
+      assert.equal(topUp.provider, "stripe");
+      assert.match(topUp.checkout_url, /^https:\/\/checkout\.stripe\.local\/session\/cp_/);
+
+      const purchases = await store.listCreditPurchases({
+        user_id: process.env.TOOLROUTER_DEV_USER_ID,
+        limit: 1,
+      });
+      assert.equal(purchases[0].metadata.source, "api_key");
+      assert.equal(purchases[0].metadata.api_key_id, "key_dev");
+    });
+  });
+
+  it("exposes insufficient credit details for API-key request callers", async () => {
+    await withIsolatedApp("toolrouter-insufficient-credit-details-", {}, async ({ baseUrl, store }) => {
+      await store.upsertCreditAccount({
+        user_id: process.env.TOOLROUTER_DEV_USER_ID,
+        available_usd: "0",
+        pending_usd: "0",
+        reserved_usd: "0",
+        currency: "USD",
+      });
+
+      const response = await fetch(`${baseUrl}/v1/requests`, {
+        method: "POST",
+        headers: authHeaders(),
+        body: JSON.stringify({
+          endpoint_id: "parallel.search",
+          input: { search_queries: ["agent payment routers"] },
+          maxUsd: "0.02",
+        }),
+      });
+
+      assert.equal(response.status, 402);
+      const body = await response.json();
+      assert.equal(body.error.code, "insufficient_credits");
+      assert.deepEqual(body.error.details, {
+        available_usd: "0",
+        required_usd: "0.02",
+      });
+    });
+  });
+
   it("rejects top-ups above the configured cap before checkout", async () => {
     const topUpResponse = await fetch(`${baseUrl}/v1/top-ups`, {
       method: "POST",
