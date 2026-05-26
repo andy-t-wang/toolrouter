@@ -65,6 +65,7 @@ describe("ToolRouter MCP server", () => {
     assert.ok(listed.result.tools.some((tool) => tool.name === "toolrouter_search"));
     assert.ok(listed.result.tools.some((tool) => tool.name === "toolrouter_list_categories"));
     assert.ok(listed.result.tools.some((tool) => tool.name === "toolrouter_recommend_endpoint"));
+    assert.ok(listed.result.tools.some((tool) => tool.name === "toolrouter_create_top_up"));
     assert.ok(listed.result.tools.some((tool) => tool.name === "toolrouter_send_email"));
     assert.ok(listed.result.tools.some((tool) => tool.name === "manus_research_start"));
     assert.ok(listed.result.tools.some((tool) => tool.name === "manus_research_status"));
@@ -402,6 +403,67 @@ describe("ToolRouter MCP server", () => {
       },
       maxUsd: "0.01",
     });
+  });
+
+  it("creates Stripe top-up links through the MCP API key", async () => {
+    const calls = [];
+    const result = await callTool("toolrouter_create_top_up", { amountUsd: "5" }, {
+      env: { TOOLROUTER_API_URL: "http://router.test", TOOLROUTER_API_KEY: "tr_test" },
+      fetchImpl: async (url, init) => {
+        calls.push({ url, init });
+        return response({
+          top_up: {
+            id: "cp_123",
+            provider: "stripe",
+            amount_usd: "5",
+            checkout_url: "https://checkout.stripe.test/cs_123",
+            status: "checkout_pending",
+          },
+        }, { status: 201 });
+      },
+    });
+
+    assert.equal(result.isError, false);
+    assert.equal(result.structuredContent.checkout_url, "https://checkout.stripe.test/cs_123");
+    assert.equal(calls[0].url, "http://router.test/v1/top-ups");
+    assert.deepEqual(JSON.parse(calls[0].init.body), { amountUsd: "5" });
+  });
+
+  it("turns insufficient credits errors into inline Stripe top-up links", async () => {
+    const calls = [];
+    const result = await callTool("parallel_search", { search_queries: ["agent payment routers"] }, {
+      env: { TOOLROUTER_API_URL: "http://router.test", TOOLROUTER_API_KEY: "tr_test" },
+      fetchImpl: async (url, init) => {
+        calls.push({ url, init });
+        if (url === "http://router.test/v1/requests") {
+          return response({
+            error: {
+              code: "insufficient_credits",
+              message: "insufficient ToolRouter credits",
+              details: { available_usd: "0", required_usd: "0.02" },
+            },
+            trace_id: "trace_low",
+          }, { status: 402 });
+        }
+        return response({
+          top_up: {
+            id: "cp_low",
+            provider: "stripe",
+            amount_usd: "5",
+            checkout_url: "https://checkout.stripe.test/cs_low",
+            status: "checkout_pending",
+          },
+        }, { status: 201 });
+      },
+    });
+
+    assert.equal(result.isError, true);
+    assert.match(result.content[0].text, /Add credits with Stripe: https:\/\/checkout\.stripe\.test\/cs_low/u);
+    assert.equal(result.structuredContent.error.code, "insufficient_credits");
+    assert.equal(result.structuredContent.checkout_url, "https://checkout.stripe.test/cs_low");
+    assert.equal(calls[0].url, "http://router.test/v1/requests");
+    assert.equal(calls[1].url, "http://router.test/v1/top-ups");
+    assert.deepEqual(JSON.parse(calls[1].init.body), { amountUsd: "5" });
   });
 
   it("sends email through the generic email category wrapper", async () => {

@@ -1,9 +1,10 @@
 // /v1/ledger, /v1/balance, /v1/top-ups — credit account routes.
 //
-// All routes require a Supabase user. `POST /v1/top-ups` creates a Stripe
-// checkout session via `app.stripe`.
+// Dashboard reads require a Supabase user. `POST /v1/top-ups` also accepts a
+// user-scoped API key so MCP clients can create a Stripe Checkout link when a
+// paid endpoint runs out of credits.
 
-import { authenticateSupabaseUser } from "@toolrouter/auth";
+import { authenticateApiKey, authenticateSupabaseUser } from "@toolrouter/auth";
 
 import {
   assertTopUpAmount,
@@ -22,6 +23,26 @@ import { requireObject } from "../services/util.ts";
 
 function topUpLimitUsd() {
   return assertTopUpAmount(process.env.TOOLROUTER_MAX_TOP_UP_USD || "5");
+}
+
+async function authenticateCreditUser(headers: any, store: any) {
+  try {
+    const apiKeyAuth = await authenticateApiKey(headers, store);
+    return {
+      user_id: apiKeyAuth.user_id,
+      email: null,
+      auth_type: "api_key",
+      api_key_id: apiKeyAuth.api_key_id,
+    };
+  } catch (error: any) {
+    if (error?.code !== "unauthorized") throw error;
+  }
+  const session = await authenticateSupabaseUser(headers);
+  return {
+    ...session,
+    auth_type: "session",
+    api_key_id: null,
+  };
 }
 
 export async function ledgerRoutes(app: any) {
@@ -71,7 +92,7 @@ export async function ledgerRoutes(app: any) {
   });
 
   app.post("/v1/top-ups", async (request: any, reply: any) => {
-    const user = await authenticateSupabaseUser(request.headers);
+    const user = await authenticateCreditUser(request.headers, store);
     const body = requireObject(request.body || {}, "request body");
     const amountUsd = assertTopUpAmount(body.amountUsd || body.amount_usd);
     stripe.assertCheckoutAllowed?.();
@@ -81,7 +102,8 @@ export async function ledgerRoutes(app: any) {
       user_id: user.user_id,
       amountUsd,
       metadata: {
-        source: "dashboard",
+        source: user.auth_type === "api_key" ? "api_key" : "dashboard",
+        api_key_id: user.api_key_id || undefined,
       },
     });
     const checkout = await stripe.createCheckoutSession({

@@ -746,6 +746,19 @@ export function tools(): McpTool[] {
         id: { type: "string", description: "ToolRouter request id." },
       }, ["id"]),
     },
+    {
+      name: "toolrouter_create_top_up",
+      title: "Create Stripe top-up",
+      description: "Create a Stripe Checkout link to add ToolRouter credits for this API key's account. Use when a paid endpoint fails with insufficient_credits, then retry the original endpoint after checkout completes.",
+      inputSchema: jsonSchema({
+        amountUsd: { type: "string", description: "USD amount in whole cents. Defaults to 5." },
+        amount_usd: { type: "string", description: "Compatibility alias for amountUsd." },
+      }),
+      outputSchema: jsonSchema({
+        top_up: { type: "object" },
+        checkout_url: { type: ["string", "null"] },
+      }, ["top_up", "checkout_url"]),
+    },
     ...endpointToolSpecs().map(({ name, title, description, inputSchema }) => {
       const tool: McpTool = { name, title, description, inputSchema };
       if (name === "manus_research_start" || name === "parallel_task_start") {
@@ -868,6 +881,50 @@ function textResult(text: string, structuredContent?: any, isError = false) {
     structuredContent,
     isError,
   };
+}
+
+class ToolRouterApiError extends Error {
+  status: number;
+  body: any;
+
+  constructor(message: string, status: number, body: any) {
+    super(message);
+    this.name = "ToolRouterApiError";
+    this.status = status;
+    this.body = body;
+  }
+}
+
+function isInsufficientCreditsResponse(error: any) {
+  return error?.body?.error?.code === "insufficient_credits";
+}
+
+function topUpAmountForError(error: any, env: any) {
+  const configured = String(env.TOOLROUTER_MCP_TOP_UP_AMOUNT_USD || "").trim();
+  if (/^\d+(\.\d{1,2})?$/u.test(configured)) return configured;
+  return "5";
+}
+
+function lowBalanceResult(error: any, topUp: any) {
+  const details = error?.body?.error?.details || {};
+  const topUpData = topUp?.top_up || null;
+  const structuredContent = {
+    error: {
+      code: "insufficient_credits",
+      message: error.message,
+      details,
+    },
+    top_up: topUpData,
+    checkout_url: topUpData?.checkout_url || null,
+    retry_after_top_up: true,
+  };
+  const text = [
+    "ToolRouter needs more credits before this paid endpoint can run.",
+    details.available_usd !== undefined ? `Available: $${details.available_usd}` : null,
+    details.required_usd !== undefined ? `Required hold: $${details.required_usd}` : null,
+    topUpData?.checkout_url ? `Add credits with Stripe: ${topUpData.checkout_url}` : "Create a top-up link with toolrouter_create_top_up, then retry the original call.",
+  ].filter(Boolean).join("\n");
+  return textResult(text, structuredContent, true);
 }
 
 function valueFrom(data: any, key: string) {
@@ -1154,9 +1211,22 @@ async function routerFetch(path: string, { env, fetchImpl, method = "GET", body 
   const text = await response.text();
   const data = text ? JSON.parse(text) : null;
   if (!response.ok) {
-    throw new Error(data?.error?.message || `ToolRouter request failed with ${response.status}`);
+    throw new ToolRouterApiError(
+      data?.error?.message || `ToolRouter request failed with ${response.status}`,
+      response.status,
+      data,
+    );
   }
   return data;
+}
+
+async function createTopUp({ amountUsd, env, fetchImpl }: any) {
+  return routerFetch("/v1/top-ups", {
+    env,
+    fetchImpl,
+    method: "POST",
+    body: { amountUsd },
+  });
 }
 
 async function recommendedEndpointId(categoryId: string, { env, fetchImpl }: any) {
@@ -1258,6 +1328,15 @@ export async function callTool(name: string, args: any = {}, options: any = {}) 
       const data = await routerFetch(`/v1/requests/${encodeURIComponent(args.id)}`, { env, fetchImpl });
       return textResult(JSON.stringify(data, null, 2), data);
     }
+    if (name === "toolrouter_create_top_up") {
+      const amountUsd = args.amountUsd ?? args.amount_usd ?? "5";
+      const data = await createTopUp({ amountUsd, env, fetchImpl });
+      const structuredContent = {
+        ...data,
+        checkout_url: data?.top_up?.checkout_url || null,
+      };
+      return textResult(JSON.stringify(structuredContent, null, 2), structuredContent);
+    }
     if (name === "manus_research_status") {
       const data = await routerFetch(`/v1/manus/tasks/${encodeURIComponent(args.task_id)}/status`, { env, fetchImpl });
       return manusResearchStatusResult(data);
@@ -1290,8 +1369,20 @@ export async function callTool(name: string, args: any = {}, options: any = {}) 
     }
     return textResult(JSON.stringify(data, null, 2), data);
   } catch (error) {
+    if (isInsufficientCreditsResponse(error) && env.TOOLROUTER_MCP_AUTO_TOP_UP_LINK !== "false") {
+      try {
+        const topUp = await createTopUp({
+          amountUsd: topUpAmountForError(error, env),
+          env,
+          fetchImpl,
+        });
+        return lowBalanceResult(error, topUp);
+      } catch {
+        return lowBalanceResult(error, null);
+      }
+    }
     const message = error instanceof Error ? error.message : String(error);
-    return textResult(message, { error: message }, true);
+    return textResult(message, { error: message, details: (error as any)?.body?.error?.details }, true);
   }
 }
 
