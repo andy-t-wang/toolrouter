@@ -1,6 +1,7 @@
 import type { EndpointManifest } from "../../../manifest/endpoint.ts";
 import {
   STABLETRAVEL_API_BASE,
+  STABLETRAVEL_HEALTH_INTERVAL_MS,
   buildStabletravelLocationsRequest,
   stabletravelCostLabel,
   stabletravelMaxUsd,
@@ -36,6 +37,7 @@ export const stabletravelLocationsEndpointDefinition = Object.freeze({
     mode: "paid_availability",
     payment_mode: "x402_only",
     max_usd: stabletravelMaxUsd("locations"),
+    interval_ms: STABLETRAVEL_HEALTH_INTERVAL_MS,
     latency_budget_ms: 10000,
     timeout_ms: 15000,
     input: {

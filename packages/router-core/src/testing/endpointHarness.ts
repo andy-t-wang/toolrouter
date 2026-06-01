@@ -90,6 +90,12 @@ export function validateEndpointConfig(endpoint) {
       errors.push("healthProbe.paymentMode must be x402_only");
     }
     if (
+      endpoint.healthProbe.intervalMs !== undefined &&
+      (!Number.isFinite(endpoint.healthProbe.intervalMs) || endpoint.healthProbe.intervalMs <= 0)
+    ) {
+      errors.push("healthProbe.intervalMs must be a positive number");
+    }
+    if (
       endpoint.healthProbe.latencyBudgetMs !== undefined &&
       (!Number.isFinite(endpoint.healthProbe.latencyBudgetMs) || endpoint.healthProbe.latencyBudgetMs <= 0)
     ) {

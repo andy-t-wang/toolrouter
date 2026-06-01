@@ -1,10 +1,10 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { encodeAbiParameters } from "viem";
-import { generateSignal } from "@worldcoin/idkit-core/hashing";
 
 import {
   AGENT_BOOK_CONTRACT,
+  agentKitSignalDigest,
   buildAgentKitVerificationRequest,
   parseAgentKitRelayResponse,
   registrationPayloadFromBody,
@@ -28,11 +28,11 @@ describe("AgentKit registration helpers", () => {
       values: [agentAddress, "7"],
     });
     assert.equal(
-      generateSignal(request.signal).digest,
-      generateSignal({
+      agentKitSignalDigest(request.signal),
+      agentKitSignalDigest({
         types: ["address", "uint256"],
         values: [agentAddress, 7n],
-      }).digest,
+      }),
     );
   });
 

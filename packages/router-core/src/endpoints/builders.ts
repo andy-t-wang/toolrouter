@@ -94,6 +94,7 @@ export const AGENTMAIL_BASE_PRICES_USD = Object.freeze({
 });
 
 export const STABLETRAVEL_API_BASE = "https://stabletravel.dev";
+export const STABLETRAVEL_HEALTH_INTERVAL_MS = 6 * 60 * 60 * 1000;
 export const STABLETRAVEL_PRICES_USD = Object.freeze({
   locations: 0.0054,
   google_flights_search: 0.02,

@@ -14,6 +14,7 @@ import { computeDashboardMetrics, paidAmount } from "../dashboard-metrics.ts";
 import { McpClientTabs } from "../mcp-client-tabs.tsx";
 import { firstQueryPrompt } from "../mcp-content.ts";
 import { providerLogoPath } from "../../lib/provider-logos.ts";
+import { createLegacyWorldBridgeClient } from "../../lib/legacy-world-bridge.ts";
 
 const apiBase = process.env.NEXT_PUBLIC_TOOLROUTER_API_URL || "";
 const appBase = (process.env.NEXT_PUBLIC_TOOLROUTER_APP_URL || "").replace(/\/$/u, "");
@@ -735,29 +736,26 @@ export default function DashboardPage() {
         method: "POST",
         body: JSON.stringify({}),
       });
-      const { createWorldBridgeStore } = await import("@worldcoin/idkit-core");
-      const worldID = createWorldBridgeStore();
-      await worldID.getState().createClient({
+      const worldID = await createLegacyWorldBridgeClient({
         app_id: prepared.registration.app_id,
         action: prepared.registration.action,
         signal: prepared.registration.signal,
         verification_level: prepared.registration.verification_level || "orb",
       });
-      const connectorURI = worldID.getState().connectorURI || "";
-      setRegistrationUrl(connectorURI);
+      setRegistrationUrl(worldID.connectorURI);
       setRegistrationState("waiting");
 
       const deadline =
         Date.now() + (prepared.registration.expires_in_seconds || 300) * 1000;
       while (Date.now() < deadline) {
+        let state;
         try {
-          await worldID.getState().pollForUpdates();
+          state = await worldID.pollForUpdates();
         } catch {
           throw new Error(
             "World App verification returned an unexpected response. Start the verification again.",
           );
         }
-        const state = worldID.getState();
         if (state.errorCode) {
           throw new Error(`World App verification failed: ${state.errorCode}`);
         }

@@ -131,6 +131,7 @@ function materializeEndpoint(definition) {
       ...definition.health_probe,
       maxUsd,
       paymentMode: definition.health_probe.payment_mode || definition.default_payment_mode || "agentkit_first",
+      intervalMs: definition.health_probe.interval_ms ?? definition.health_probe.intervalMs,
       latencyBudgetMs: definition.health_probe.latency_budget_ms ?? definition.health_probe.latencyBudgetMs,
       timeoutMs: definition.health_probe.timeout_ms ?? definition.health_probe.timeoutMs,
     }),

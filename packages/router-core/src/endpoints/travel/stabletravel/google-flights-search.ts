@@ -1,6 +1,7 @@
 import type { EndpointManifest } from "../../../manifest/endpoint.ts";
 import {
   STABLETRAVEL_API_BASE,
+  STABLETRAVEL_HEALTH_INTERVAL_MS,
   buildStabletravelGoogleFlightsSearchRequest,
   stabletravelCostLabel,
   stabletravelMaxUsd,
@@ -38,6 +39,7 @@ export const stabletravelGoogleFlightsSearchEndpointDefinition = Object.freeze({
     mode: "paid_availability",
     payment_mode: "x402_only",
     max_usd: stabletravelMaxUsd("google_flights_search"),
+    interval_ms: STABLETRAVEL_HEALTH_INTERVAL_MS,
     latency_budget_ms: 15000,
     timeout_ms: 20000,
     input: {

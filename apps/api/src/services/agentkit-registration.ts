@@ -1,10 +1,11 @@
 import {
   createPublicClient,
   decodeAbiParameters,
+  encodePacked,
   http,
+  keccak256,
 } from "viem";
 import { worldchain } from "viem/chains";
-import { solidityEncode } from "@worldcoin/idkit-core/hashing";
 
 export const AGENT_BOOK_CONTRACT = "0xA23aB2712eA7BBa896930544C7d6636a96b944dA";
 export const AGENTKIT_REGISTRATION_APP_ID = "app_a7c3e2b6b83927251a0db5345bd7146a";
@@ -46,6 +47,18 @@ function relayError(message: string, response: any, contentType: string) {
       relay_content_type: contentType || "unknown",
     },
   });
+}
+
+export function solidityEncode(types: string[], values: unknown[]) {
+  if (types.length !== values.length) {
+    throw new Error("Types and values arrays must have the same length.");
+  }
+  return { types, values };
+}
+
+export function agentKitSignalDigest(signal: { types: string[]; values: unknown[] }) {
+  const digest = BigInt(keccak256(encodePacked(signal.types as any, signal.values as any))) >> 8n;
+  return `0x${digest.toString(16).padStart(64, "0")}`;
 }
 
 export async function parseAgentKitRelayResponse(response: any) {
@@ -131,7 +144,7 @@ export function buildAgentKitVerificationRequest({
     action,
     verification_level: "orb",
     // Mirrors `npx @worldcoin/agentkit-cli register <agent-address>`.
-    // The CLI passes IDKit's solidityEncode object, not ABI-encoded hex.
+    // The CLI passes this IDKit-style object, not ABI-encoded hex.
     // We stringify the nonce so this server response remains JSON-safe;
     // IDKit hashes it the same way as the CLI's bigint value.
     signal: solidityEncode(
