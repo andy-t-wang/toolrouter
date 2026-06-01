@@ -483,11 +483,13 @@ export async function runEndpointHealthCheck({
   const started = Date.now();
 
   if (!force && minCheckIntervalMs) {
+    const probe = healthProbeForEndpoint(endpoint, probeKind);
+    const probeIntervalMs = probe?.intervalMs ?? probe?.interval_ms ?? minCheckIntervalMs;
     const currentStatus = await currentEndpointStatus(db, endpoint.id);
     const cadence = endpointProbeCadence({
       statusRow: currentStatus,
       now: checkedAt,
-      intervalMs: minCheckIntervalMs,
+      intervalMs: probeIntervalMs,
       failureRetryIntervalMs,
     });
     if (currentStatus && !cadence.due) {

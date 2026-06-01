@@ -95,6 +95,35 @@ describe("endpoint health worker", () => {
     assert.equal(db.insertedHealthChecks.length, 1);
   });
 
+  it("uses endpoint-level health probe cadence overrides", async () => {
+    const endpoint = getEndpoint("stabletravel.google_flights_search");
+    const db = createDb();
+    db.endpointStatuses.push({
+      endpoint_id: "stabletravel.google_flights_search",
+      status: "healthy",
+      last_checked_at: "2026-05-09T06:00:00.000Z",
+      status_code: 200,
+    });
+    let executed = false;
+
+    const result = await runEndpointHealthCheck({
+      endpoint,
+      db,
+      executor: async () => {
+        executed = true;
+        return { ok: true, status_code: 200, path: "x402", charged: true };
+      },
+      now: () => new Date("2026-05-09T11:00:00.000Z"),
+      minCheckIntervalMs: 60 * 60 * 1000,
+    });
+
+    assert.equal(endpoint.healthProbe.intervalMs, 6 * 60 * 60 * 1000);
+    assert.equal(executed, false);
+    assert.equal(result.skipped, true);
+    assert.equal(result.next_check_after_ms, 6 * 60 * 60 * 1000);
+    assert.equal(db.insertedHealthChecks.length, 0);
+  });
+
   it("retries failing endpoints on the shorter retry interval instead of waiting for the healthy cadence", async () => {
     const endpoint = getEndpoint("browserbase.session");
     const db = createDb();

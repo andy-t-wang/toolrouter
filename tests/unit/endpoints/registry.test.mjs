@@ -730,6 +730,7 @@ describe("endpoint registry", () => {
       const cap = stabletravelMaxUsd(maxKind);
       assert.equal(String(endpoint.estimated_cost_usd), price);
       assert.equal(endpoint.healthProbe.maxUsd, cap);
+      assert.equal(endpoint.healthProbe.intervalMs, 6 * 60 * 60 * 1000);
       assert.equal(endpoint.liveSmoke.default_path.max_usd, cap);
       assert.equal(endpoint.liveSmoke.paid_path.max_usd, cap);
       assert.ok(Number(cap) > Number(price));

@@ -22,6 +22,8 @@ export interface EndpointHealthProbe {
   mode: string;
   payment_mode: string;
   max_usd: string;
+  interval_ms?: number;
+  intervalMs?: number;
   latency_budget_ms?: number;
   timeout_ms?: number;
   required_env?: readonly string[];
@@ -121,6 +123,7 @@ export interface MaterializedEndpoint extends EndpointManifest {
   readonly healthProbe: EndpointHealthProbe & {
     readonly maxUsd: string;
     readonly paymentMode: string;
+    readonly intervalMs?: number;
     readonly latencyBudgetMs?: number;
     readonly timeoutMs?: number;
   };
